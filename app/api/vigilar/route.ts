@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 
 const CONFIG_PATH = path.join(process.cwd(), "data", "vigilar-config.json");
+const USE_KV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 
 type Marca = { nombre: string; slug: string };
 
@@ -31,6 +32,10 @@ type Config = {
 
 const EXCLUIR = ["pack", "set", "kit", "lote", "duo", "dúo", "trio", "trío", "estuche", "bundle", "caja", "cofre", "box", "programa"];
 
+function configVacia(): Config {
+  return { marcas: [], ultimaRevision: null, resultados: [], urlsPrevias: {} };
+}
+
 function normalizarPrevias(raw: unknown): Record<string, number> {
   if (!raw || typeof raw !== "object") return {};
   if (Array.isArray(raw)) return Object.fromEntries((raw as string[]).map(u => [u, -1]));
@@ -38,14 +43,17 @@ function normalizarPrevias(raw: unknown): Record<string, number> {
 }
 
 async function leerConfig(): Promise<Config> {
+  if (USE_KV) {
+    const { kv } = await import("@vercel/kv");
+    const data = await kv.get<Config>("vigilar-config");
+    return data ?? configVacia();
+  }
+
+  // Fallback: archivo local (desarrollo)
   try {
     const parsed = JSON.parse(await fs.readFile(CONFIG_PATH, "utf-8"));
-
-    // Normalizar urlsPrevias — puede venir en varios formatos
     let urlsPrevias: Record<string, Record<string, number>> = {};
     const rawUrls = parsed.urlsPrevias ?? {};
-
-    // Si tiene claves de competidor (formato multi), extraer solo cosmeticos24h
     if (rawUrls.cosmeticos24h) {
       for (const [slug, val] of Object.entries(rawUrls.cosmeticos24h as Record<string, unknown>)) {
         urlsPrevias[slug] = normalizarPrevias(val);
@@ -55,26 +63,27 @@ async function leerConfig(): Promise<Config> {
         urlsPrevias[slug] = normalizarPrevias(val);
       }
     }
-
-    // Normalizar resultados — puede venir del formato multi-competidor
     let resultados: ResultadoMarca[] = parsed.resultados ?? [];
     if (resultados.length > 0 && "porCompetidor" in resultados[0]) {
-      // Migrar: extraer resultados de cosmeticos24h
       resultados = resultados.map((r: { marca: string; slug: string; porCompetidor?: Record<string, { descuentos?: Descuento[]; error?: string }> }) => ({
-        marca: r.marca,
-        slug: r.slug,
+        marca: r.marca, slug: r.slug,
         descuentos: r.porCompetidor?.cosmeticos24h?.descuentos ?? [],
         error: r.porCompetidor?.cosmeticos24h?.error,
       }));
     }
-
     return { marcas: parsed.marcas ?? [], ultimaRevision: parsed.ultimaRevision ?? null, resultados, urlsPrevias };
   } catch {
-    return { marcas: [], ultimaRevision: null, resultados: [], urlsPrevias: {} };
+    return configVacia();
   }
 }
 
 async function guardarConfig(config: Config) {
+  if (USE_KV) {
+    const { kv } = await import("@vercel/kv");
+    await kv.set("vigilar-config", config);
+    return;
+  }
+  // Fallback: archivo local
   await fs.mkdir(path.dirname(CONFIG_PATH), { recursive: true });
   await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
@@ -110,24 +119,19 @@ export async function POST(req: NextRequest) {
 
     for (const marca of config.marcas) {
       const prevSlug = config.urlsPrevias[marca.slug] ?? {};
-
       try {
         const url = `https://cosmeticos24h.com/collections/${marca.slug}/products.json?limit=250`;
         const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
-
         if (!res.ok) {
           resultados.push({ marca: marca.nombre, slug: marca.slug, error: `HTTP ${res.status}`, descuentos: [] });
           nuevasUrlsPrevias[marca.slug] = prevSlug;
           continue;
         }
-
         const data = await res.json();
         const descuentos: Descuento[] = [];
-
         for (const product of data.products ?? []) {
           const titulo = product.title as string;
           if (EXCLUIR.some(p => titulo.toLowerCase().includes(p))) continue;
-
           let mejorPct = 0, mejorPrecio = 0, mejorOriginal = 0;
           for (const variant of product.variants ?? []) {
             const precio = parseFloat(variant.price ?? "0");
@@ -137,7 +141,6 @@ export async function POST(req: NextRequest) {
               if (pct > mejorPct) { mejorPct = pct; mejorPrecio = precio; mejorOriginal = original; }
             }
           }
-
           if (mejorPct > 0) {
             const productUrl = `https://cosmeticos24h.com/products/${product.handle}`;
             const pctAnterior = prevSlug[productUrl];
@@ -148,7 +151,6 @@ export async function POST(req: NextRequest) {
             });
           }
         }
-
         descuentos.sort((a, b) => b.descuento - a.descuento);
         nuevasUrlsPrevias[marca.slug] = Object.fromEntries(descuentos.map(d => [d.url, d.descuento]));
         resultados.push({ marca: marca.nombre, slug: marca.slug, descuentos });

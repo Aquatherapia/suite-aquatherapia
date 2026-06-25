@@ -125,8 +125,10 @@ Los datos se guardan en `data/vigilar-config.json`:
 
 - **Framework**: Next.js 15 (App Router, TypeScript)
 - **IA**: Google Gemini 2.5 Flash (gratis, sin tarjeta)
-- **Clave API Gemini**: `suite-aquatherapia/.env.local`
+- **Clave API Gemini**: `suite-aquatherapia/.env.local` (añadir también en Vercel → Settings → Environment Variables)
 - **Persistencia vigilar**: `data/vigilar-config.json` (generado automáticamente)
+- **Producción**: https://suite-aquatherapia.vercel.app/ — desplegado en Vercel desde GitHub
+- **Repositorio**: GitHub conectado a Vercel (push a main = deploy automático)
 
 ---
 
@@ -217,4 +219,4 @@ Convierte un post de Instagram en un texto e imagen listos para publicar en la s
 2. **Marcas guardadas** — Presets con Nombre/Línea/Marca precargados
 3. **Alt text para imágenes** — Generar texto alternativo para fotos del producto
 4. **Programar revisiones automáticas** — Lanzar la revisión de precios a una hora fija cada día
-5. **Subir a Vercel** — Para acceder desde cualquier sitio sin necesidad del portátil
+5. ~~Subir a Vercel~~ — ✓ Hecho: https://suite-aquatherapia.vercel.app/
