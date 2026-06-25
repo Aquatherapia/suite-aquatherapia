@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Generador de fichas de producto",
-  description: "La Tienda de Cosméticos — generador de fichas de producto con IA",
+  title: "Herramientas IA — La Tienda de Cosméticos",
+  description: "Herramientas con IA para La Tienda de Cosméticos",
 };
 
 export default function RootLayout({

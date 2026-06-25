@@ -1,113 +1,93 @@
-"use client";
+import Link from "next/link";
+import { promises as fs } from "fs";
+import path from "path";
 
-import { useState } from "react";
+export const dynamic = "force-dynamic";
 
-export default function Home() {
-  const [form, setForm] = useState({
-    nombre: "",
-    tamano: "",
-    descripcion: "",
-    ingredientes: "",
-  });
-  const [output, setOutput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
-
-  function update(field: string, value: string) {
-    setForm((f) => ({ ...f, [field]: value }));
+async function getVigilarStats() {
+  try {
+    const raw = await fs.readFile(
+      path.join(process.cwd(), "data", "vigilar-config.json"),
+      "utf-8"
+    );
+    const config = JSON.parse(raw);
+    const resultados: { descuentos?: { nuevo?: boolean }[] }[] =
+      config.resultados ?? [];
+    const total = resultados.reduce(
+      (s, r) => s + (r.descuentos?.length ?? 0), 0
+    );
+    const nuevos = resultados.reduce(
+      (s, r) => s + (r.descuentos?.filter((d) => d.nuevo)?.length ?? 0), 0
+    );
+    return { total, nuevos };
+  } catch {
+    return { total: 0, nuevos: 0 };
   }
+}
 
-  async function generar() {
-    setLoading(true);
-    setError("");
-    setOutput("");
-    setCopied(false);
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al generar la ficha");
-      setOutput(data.ficha);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Error desconocido");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function copiar() {
-    await navigator.clipboard.writeText(output);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  const puedeGenerar = form.nombre.trim() && !loading;
+export default async function Home() {
+  const vigilar = await getVigilarStats();
 
   return (
     <div className="wrap">
-      <header>
-        <h1>Generador de fichas de producto</h1>
-        <p>La Tienda de Cosméticos — rellena los datos y la IA redacta la ficha</p>
+      <header className="home-header">
+        <div className="home-logo">La Tienda de Cosméticos</div>
+        <h1>Herramientas IA</h1>
+        <p>Selecciona una herramienta para empezar</p>
       </header>
 
-      <div className="grid">
-        <div className="card">
-          <label>Nombre del producto *</label>
-          <input
-            value={form.nombre}
-            onChange={(e) => update("nombre", e.target.value)}
-            placeholder="Ej: Melan 130+ pigment control, mesoestetic"
-          />
-
-          <label>Tamaño</label>
-          <input
-            value={form.tamano}
-            onChange={(e) => update("tamano", e.target.value)}
-            placeholder="Ej: 50ml"
-          />
-
-          <label>Descripción</label>
-          <textarea
-            rows={5}
-            value={form.descripcion}
-            onChange={(e) => update("descripcion", e.target.value)}
-            placeholder="Pega aquí la descripción del producto..."
-          />
-
-          <label>Ingredientes (INCI)</label>
-          <textarea
-            rows={5}
-            value={form.ingredientes}
-            onChange={(e) => update("ingredientes", e.target.value)}
-            placeholder="Pega aquí la lista de ingredientes..."
-          />
-
-          <button onClick={generar} disabled={!puedeGenerar}>
-            {loading && <span className="spinner" />}
-            {loading ? "Generando ficha..." : "Generar ficha"}
-          </button>
-
-          {error && <div className="error">{error}</div>}
-        </div>
-
-        <div className="card">
-          {output ? (
-            <>
-              <button className="copy-btn" onClick={copiar}>
-                {copied ? "✓ Copiado" : "Copiar ficha"}
-              </button>
-              <div className="output">{output}</div>
-            </>
-          ) : (
-            <div className="placeholder">
-              La ficha generada aparecerá aquí.
+      <div className="agentes-grid">
+        <Link href="/ficha-producto" className="agente-card">
+          <span className="agente-icono">✦</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Generador de fichas de producto</div>
+            <div className="agente-desc">
+              Rellena los datos del producto y la IA redacta la ficha completa
+              con el formato exacto de la tienda: título, descripción,
+              beneficios, SEO y más.
             </div>
-          )}
-        </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
+
+        <Link href="/vigilar-precios" className="agente-card">
+          <span className="agente-icono">◎</span>
+          <div className="agente-info">
+            <div className="agente-nombre-row">
+              <span className="agente-nombre">
+                Vigilar precios en Cosméticos24h
+              </span>
+              {vigilar.nuevos > 0 && (
+                <span className="agente-badge agente-badge-nuevo">
+                  {vigilar.nuevos} nuevo{vigilar.nuevos !== 1 ? "s" : ""}
+                </span>
+              )}
+              {vigilar.nuevos === 0 && vigilar.total > 0 && (
+                <span className="agente-badge">
+                  {vigilar.total} descuento{vigilar.total !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+            <div className="agente-desc">
+              Comprueba si alguna de tus marcas tiene descuento activo. Añade
+              marcas como Casmara o Atache y revisa con un clic.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
+
+        <Link href="/google-business" className="agente-card">
+          <span className="agente-icono">◈</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Post para Google Business</div>
+            <div className="agente-desc">
+              Indica el tema y la marca o servicio y la IA redacta el texto
+              listo para publicar como actualización en tu ficha de Google
+              Business Profile.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
       </div>
     </div>
   );
