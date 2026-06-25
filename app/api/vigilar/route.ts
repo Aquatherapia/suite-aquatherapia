@@ -31,7 +31,7 @@ type Config = {
   urlsPrevias: Record<string, Record<string, number>>;
 };
 
-const EXCLUIR = ["pack", "set", "kit", "lote", "duo", "dúo", "trio", "trío", "estuche", "bundle", "caja", "cofre", "box", "programa"];
+const EXCLUIR = ["pack", "set", "kit", "lote", "duo", "dúo", "trio", "trío", "estuche", "bundle", "caja", "cofre", "box", "programa", "rutina"];
 
 function configVacia(): Config {
   return { marcas: [], ultimaRevision: null, resultados: [], urlsPrevias: {} };
