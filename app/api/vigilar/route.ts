@@ -14,6 +14,7 @@ type Descuento = {
   descuento: number;
   url: string;
   nuevo: boolean;
+  imagenUrl?: string;
 };
 
 type ResultadoMarca = {
@@ -144,10 +145,12 @@ export async function POST(req: NextRequest) {
           if (mejorPct > 0) {
             const productUrl = `https://cosmeticos24h.com/products/${product.handle}`;
             const pctAnterior = prevSlug[productUrl];
+            const imagenUrl = product.images?.[0]?.src ?? undefined;
             descuentos.push({
               titulo, precio: mejorPrecio, precioOriginal: mejorOriginal,
               descuento: mejorPct, url: productUrl,
               nuevo: pctAnterior === undefined || pctAnterior !== mejorPct,
+              imagenUrl,
             });
           }
         }

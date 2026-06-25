@@ -5,7 +5,7 @@ import Link from "next/link";
 
 type Descuento = {
   titulo: string; precio: number; precioOriginal: number;
-  descuento: number; url: string; nuevo: boolean;
+  descuento: number; url: string; nuevo: boolean; imagenUrl?: string;
 };
 
 type ResultadoMarca = {
@@ -42,13 +42,23 @@ function generarPDF(r: ResultadoMarca, ultimaRevision: string | null) {
     ? new Date(ultimaRevision).toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })
     : new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" });
 
-  const filas = r.descuentos.map(d => `
-    <tr>
-      <td><a href="${d.url}" target="_blank">${d.titulo}</a>${d.nuevo ? ' <span class="nuevo">NUEVO</span>' : ""}</td>
-      <td class="num">${d.precio.toFixed(2)} €</td>
-      <td class="num tachado">${d.precioOriginal.toFixed(2)} €</td>
-      <td class="num descuento">−${d.descuento}%</td>
-    </tr>`).join("");
+  const ahora = new Date();
+  const fechaHora = ahora.toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })
+    + " a las " + ahora.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+
+  const tarjetas = r.descuentos.map(d => `
+    <div class="tarjeta">
+      ${d.imagenUrl ? `<div class="img-wrap"><img src="${d.imagenUrl}" alt="${d.titulo}" /></div>` : ""}
+      <div class="info">
+        <div class="nombre">${d.titulo}${d.nuevo ? ' <span class="nuevo">NUEVO</span>' : ""}</div>
+        <div class="precios">
+          <span class="precio-actual">${d.precio.toFixed(2)} €</span>
+          <span class="precio-original">${d.precioOriginal.toFixed(2)} €</span>
+          <span class="dto">−${d.descuento}%</span>
+        </div>
+        <div class="url-prod">cosmeticos24h.com/products/${d.url.split("/products/")[1] ?? ""}</div>
+      </div>
+    </div>`).join("");
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -57,43 +67,35 @@ function generarPDF(r: ResultadoMarca, ultimaRevision: string | null) {
 <title>Descuentos ${r.marca} — Cosméticos24h</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 12px; color: #1a1a1a; padding: 32px; }
-  .header { border-bottom: 2px solid #1a1a1a; padding-bottom: 16px; margin-bottom: 24px; }
-  .logo { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #777; margin-bottom: 8px; }
-  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
-  .meta { font-size: 11px; color: #666; }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #666; padding: 8px 10px; border-bottom: 1px solid #ddd; }
-  th.num { text-align: right; }
-  td { padding: 9px 10px; border-bottom: 1px solid #eee; vertical-align: top; line-height: 1.4; }
-  td a { color: #1a1a1a; text-decoration: none; }
-  td.num { text-align: right; white-space: nowrap; }
-  td.tachado { color: #999; text-decoration: line-through; }
-  td.descuento { font-weight: 700; color: #b91c1c; }
-  .nuevo { display: inline-block; background: #fee2e2; color: #b91c1c; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle; }
-  .footer { margin-top: 24px; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 12px; }
-  tr:last-child td { border-bottom: none; }
-  @media print { body { padding: 16px; } }
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 12px; color: #1a1a1a; padding: 28px; }
+  .header { border-bottom: 2px solid #1a1a1a; padding-bottom: 14px; margin-bottom: 20px; }
+  .logo { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #777; margin-bottom: 6px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 3px; }
+  .meta { font-size: 11px; color: #555; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .tarjeta { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+  .img-wrap { background: #f5f5f5; display: flex; align-items: center; justify-content: center; height: 160px; }
+  .img-wrap img { max-height: 150px; max-width: 100%; object-fit: contain; }
+  .info { padding: 12px; flex: 1; }
+  .nombre { font-size: 12px; font-weight: 600; line-height: 1.4; margin-bottom: 8px; }
+  .precios { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .precio-actual { font-size: 16px; font-weight: 700; }
+  .precio-original { font-size: 12px; color: #999; text-decoration: line-through; }
+  .dto { font-size: 12px; font-weight: 700; color: #b91c1c; background: #fee2e2; padding: 2px 6px; border-radius: 4px; }
+  .url-prod { font-size: 10px; color: #888; word-break: break-all; }
+  .nuevo { display: inline-block; background: #fee2e2; color: #b91c1c; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+  .footer { margin-top: 20px; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+  @media print { body { padding: 16px; } .tarjeta { break-inside: avoid; } }
 </style>
 </head>
 <body>
 <div class="header">
-  <div class="logo">La Tienda de Cosméticos · Suite Aquatherapia</div>
-  <h1>Descuentos en ${r.marca}</h1>
-  <div class="meta">Cosméticos24h · ${fecha} · ${r.descuentos.length} productos con descuento</div>
+  <div class="logo">La Tienda de Cosméticos · Constancia de precios</div>
+  <h1>${r.marca} en Cosméticos24h</h1>
+  <div class="meta">Capturado el ${fechaHora} · ${r.descuentos.length} productos con descuento</div>
 </div>
-<table>
-  <thead>
-    <tr>
-      <th>Producto</th>
-      <th class="num">Precio</th>
-      <th class="num">Antes</th>
-      <th class="num">Dto.</th>
-    </tr>
-  </thead>
-  <tbody>${filas}</tbody>
-</table>
-<div class="footer">Generado el ${new Date().toLocaleDateString("es-ES")} · suite-aquatherapia.vercel.app</div>
+<div class="grid">${tarjetas}</div>
+<div class="footer">Generado desde suite-aquatherapia.vercel.app · ${fechaHora}</div>
 <script>window.onload = function(){ window.print(); }<\/script>
 </body>
 </html>`;
