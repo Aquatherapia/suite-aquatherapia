@@ -88,6 +88,19 @@ export default async function Home() {
           </div>
           <span className="agente-arrow">→</span>
         </Link>
+
+        <Link href="/vigilar-competidores" className="agente-card">
+          <span className="agente-icono">⊛</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Vigilar competidores</div>
+            <div className="agente-desc">
+              Añade la URL de cualquier marca en tiendas de la competencia
+              (PrestaShop, WooCommerce o Shopify) y comprueba sus descuentos
+              con un clic.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
       </div>
     </div>
   );
