@@ -90,12 +90,12 @@ function generarPDF(r: ResultadoMarca, ultimaRevision: string | null) {
 </head>
 <body>
 <div class="header">
-  <div class="logo">La Tienda de Cosméticos · Constancia de precios</div>
+  <div class="logo">Constancia de precios</div>
   <h1>${r.marca} en Cosméticos24h</h1>
   <div class="meta">Capturado el ${fechaHora} · ${r.descuentos.length} productos con descuento</div>
 </div>
 <div class="grid">${tarjetas}</div>
-<div class="footer">Generado desde suite-aquatherapia.vercel.app · ${fechaHora}</div>
+<div class="footer">Capturado el ${fechaHora}</div>
 <script>window.onload = function(){ window.print(); }<\/script>
 </body>
 </html>`;
