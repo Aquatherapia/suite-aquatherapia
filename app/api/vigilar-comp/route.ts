@@ -5,13 +5,16 @@ const USE_KV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 
 const EXCLUIR = ["pack", "set", "kit", "lote", "duo", "dúo", "trio", "trío", "estuche", "bundle", "caja", "cofre", "box", "programa"];
 
-type Plataforma = "shopify" | "prestashop" | "woocommerce";
-
-type EntradaConfig = {
+type EntradaCompetidor = {
   id: string;
-  competidor: string;
+  nombre: string;
   url: string;
-  plataforma: Plataforma;
+};
+
+type Marca = {
+  id: string;
+  nombre: string;
+  competidores: EntradaCompetidor[];
 };
 
 type Descuento = {
@@ -24,23 +27,29 @@ type Descuento = {
   imagenUrl?: string;
 };
 
-type ResultadoEntrada = {
-  id: string;
-  competidor: string;
+type ResultadoCompetidor = {
+  compId: string;
+  nombre: string;
   url: string;
   descuentos: Descuento[];
   error?: string;
 };
 
+type ResultadoMarca = {
+  marcaId: string;
+  nombre: string;
+  competidores: ResultadoCompetidor[];
+};
+
 type Config = {
-  entradas: EntradaConfig[];
+  marcas: Marca[];
   ultimaRevision: string | null;
-  resultados: ResultadoEntrada[];
+  resultados: ResultadoMarca[];
   previos: Record<string, Record<string, number>>;
 };
 
 function configVacia(): Config {
-  return { entradas: [], ultimaRevision: null, resultados: [], previos: {} };
+  return { marcas: [], ultimaRevision: null, resultados: [], previos: {} };
 }
 
 function parsePrice(str: string): number {
@@ -51,17 +60,13 @@ function parsePrice(str: string): number {
 async function leerConfig(): Promise<Config> {
   if (USE_KV) {
     const { kv } = await import("@vercel/kv");
-    const data = await kv.get<Config>("vigilar-comp-config");
-    return data ?? configVacia();
+    return (await kv.get<Config>("vigilar-comp-config")) ?? configVacia();
   }
   const { promises: fs } = await import("fs");
   const path = await import("path");
-  const CONFIG_PATH = path.join(process.cwd(), "data", "vigilar-comp-config.json");
   try {
-    return JSON.parse(await fs.readFile(CONFIG_PATH, "utf-8"));
-  } catch {
-    return configVacia();
-  }
+    return JSON.parse(await fs.readFile(path.join(process.cwd(), "data", "vigilar-comp-config.json"), "utf-8"));
+  } catch { return configVacia(); }
 }
 
 async function guardarConfig(config: Config) {
@@ -72,9 +77,9 @@ async function guardarConfig(config: Config) {
   }
   const { promises: fs } = await import("fs");
   const path = await import("path");
-  const CONFIG_PATH = path.join(process.cwd(), "data", "vigilar-comp-config.json");
-  await fs.mkdir(path.dirname(CONFIG_PATH), { recursive: true });
-  await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
+  const p = path.join(process.cwd(), "data", "vigilar-comp-config.json");
+  await fs.mkdir(path.dirname(p), { recursive: true });
+  await fs.writeFile(p, JSON.stringify(config, null, 2));
 }
 
 const UA = {
@@ -82,74 +87,13 @@ const UA = {
   "Accept-Language": "es-ES,es;q=0.9",
 };
 
-async function scrapeShopify(url: string): Promise<Descuento[]> {
-  const base = url.replace(/\/products\.json.*$/, "").replace(/\/$/, "");
-  const apiUrl = base + "/products.json?limit=250";
-  const res = await fetch(apiUrl, { cache: "no-store", signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  const origin = new URL(url).origin;
-  const descuentos: Descuento[] = [];
-
-  for (const product of data.products ?? []) {
-    const titulo = product.title as string;
-    if (EXCLUIR.some(e => titulo.toLowerCase().includes(e))) continue;
-    let mejorPct = 0, mejorPrecio = 0, mejorOriginal = 0;
-    for (const variant of product.variants ?? []) {
-      const precio = parseFloat(variant.price ?? "0");
-      const original = parseFloat(variant.compare_at_price ?? "0");
-      if (original > precio && precio > 0) {
-        const pct = Math.round((1 - precio / original) * 100);
-        if (pct > mejorPct) { mejorPct = pct; mejorPrecio = precio; mejorOriginal = original; }
-      }
-    }
-    if (mejorPct > 0) {
-      descuentos.push({
-        titulo, precio: mejorPrecio, precioOriginal: mejorOriginal, descuento: mejorPct,
-        url: `${origin}/products/${product.handle}`, nuevo: false,
-        imagenUrl: product.images?.[0]?.src ?? undefined,
-      });
-    }
-  }
-  return descuentos.sort((a, b) => b.descuento - a.descuento);
+function filtrar(titulo: string) {
+  return EXCLUIR.some(e => titulo.toLowerCase().includes(e));
 }
 
-async function scrapePrestaShop(url: string): Promise<Descuento[]> {
-  const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const root = parse(await res.text());
-  const cards = root.querySelectorAll(".js-product-miniature, article.product-miniature");
-  const descuentos: Descuento[] = [];
-
-  for (const card of cards) {
-    const priceEl = card.querySelector(".product-miniature__price, .price");
-    const regularEl = card.querySelector(".product-miniature__regular-price, .regular-price");
-    if (!priceEl || !regularEl) continue;
-    const precio = parsePrice(priceEl.text);
-    const original = parsePrice(regularEl.text);
-    if (original <= precio || precio <= 0 || original <= 0) continue;
-    const pct = Math.round((1 - precio / original) * 100);
-    if (pct <= 0) continue;
-
-    const titulo = card.querySelector(".product-miniature__name, .product-title, h2, h3")?.text.trim() ?? "";
-    const productUrl = card.querySelector("a.product-miniature__link, a[href]")?.getAttribute("href") ?? "";
-    const imgEl = card.querySelector("img");
-    const imagenUrl = imgEl?.getAttribute("src") || imgEl?.getAttribute("data-src") || undefined;
-
-    if (!titulo || !productUrl) continue;
-    if (EXCLUIR.some(e => titulo.toLowerCase().includes(e))) continue;
-    descuentos.push({ titulo, precio, precioOriginal: original, descuento: pct, url: productUrl, nuevo: false, imagenUrl });
-  }
-  return descuentos.sort((a, b) => b.descuento - a.descuento);
-}
-
-async function scrapeWooCommerce(url: string): Promise<Descuento[]> {
-  const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const root = parse(await res.text());
+function extraerWooCommerce(root: ReturnType<typeof parse>): Descuento[] {
   const cards = root.querySelectorAll("li.product, .type-product");
-  const descuentos: Descuento[] = [];
-
+  const result: Descuento[] = [];
   for (const card of cards) {
     const insEl = card.querySelector("ins bdi, ins .woocommerce-Price-amount");
     const delEl = card.querySelector("del bdi, del .woocommerce-Price-amount");
@@ -159,17 +103,119 @@ async function scrapeWooCommerce(url: string): Promise<Descuento[]> {
     if (original <= precio || precio <= 0) continue;
     const pct = Math.round((1 - precio / original) * 100);
     if (pct <= 0) continue;
-
     const titulo = card.querySelector(".woocommerce-loop-product__title, h2, h3")?.text.trim() ?? "";
     const productUrl = card.querySelector("a.woocommerce-LoopProduct-link, a[href]")?.getAttribute("href") ?? "";
     const imgEl = card.querySelector("img");
     const imagenUrl = imgEl?.getAttribute("src") || imgEl?.getAttribute("data-src") || undefined;
-
-    if (!titulo || !productUrl) continue;
-    if (EXCLUIR.some(e => titulo.toLowerCase().includes(e))) continue;
-    descuentos.push({ titulo, precio, precioOriginal: original, descuento: pct, url: productUrl, nuevo: false, imagenUrl });
+    if (!titulo || !productUrl || filtrar(titulo)) continue;
+    result.push({ titulo, precio, precioOriginal: original, descuento: pct, url: productUrl, nuevo: false, imagenUrl });
   }
-  return descuentos.sort((a, b) => b.descuento - a.descuento);
+  return result;
+}
+
+function extraerPrestaShop(root: ReturnType<typeof parse>): Descuento[] {
+  const cards = root.querySelectorAll(".js-product-miniature, article.product-miniature");
+  const result: Descuento[] = [];
+  for (const card of cards) {
+    const priceEl = card.querySelector(".product-miniature__price, .price");
+    const regularEl = card.querySelector(".product-miniature__regular-price, .regular-price");
+    if (!priceEl || !regularEl) continue;
+    const precio = parsePrice(priceEl.text);
+    const original = parsePrice(regularEl.text);
+    if (original <= precio || precio <= 0 || original <= 0) continue;
+    const pct = Math.round((1 - precio / original) * 100);
+    if (pct <= 0) continue;
+    const titulo = card.querySelector(".product-miniature__name, .product-title, h2, h3")?.text.trim() ?? "";
+    const productUrl = card.querySelector("a.product-miniature__link, a[href]")?.getAttribute("href") ?? "";
+    const imgEl = card.querySelector("img");
+    const imagenUrl = imgEl?.getAttribute("src") || imgEl?.getAttribute("data-src") || undefined;
+    if (!titulo || !productUrl || filtrar(titulo)) continue;
+    result.push({ titulo, precio, precioOriginal: original, descuento: pct, url: productUrl, nuevo: false, imagenUrl });
+  }
+  return result;
+}
+
+function extraerGenerico(root: ReturnType<typeof parse>): Descuento[] {
+  // Tries common sale/regular price patterns used by many e-commerce themes
+  const result: Descuento[] = [];
+  const cards = root.querySelectorAll(
+    ".product-item, .product-card, .product, [class*='product-'], article[class*='product']"
+  );
+  for (const card of cards) {
+    // Try sale+original selector variants
+    const saleEl = card.querySelector(
+      ".sale-price, .price-sale, .special-price, [class*='sale-price'], [class*='price--sale'], ins"
+    );
+    const origEl = card.querySelector(
+      ".regular-price, .old-price, .price-old, .original-price, [class*='old-price'], [class*='price--regular'], del, s, strike"
+    );
+    if (!saleEl || !origEl) continue;
+    const precio = parsePrice(saleEl.text);
+    const original = parsePrice(origEl.text);
+    if (original <= precio || precio <= 0 || original <= 0) continue;
+    const pct = Math.round((1 - precio / original) * 100);
+    if (pct <= 0 || pct > 90) continue;
+    const titulo = card.querySelector("h2, h3, h4, .product-name, .product-title, [class*='title']")?.text.trim() ?? "";
+    const productUrl = card.querySelector("a[href]")?.getAttribute("href") ?? "";
+    const imgEl = card.querySelector("img");
+    const imagenUrl = imgEl?.getAttribute("src") || imgEl?.getAttribute("data-src") || undefined;
+    if (!titulo || !productUrl || filtrar(titulo)) continue;
+    result.push({ titulo, precio, precioOriginal: original, descuento: pct, url: productUrl, nuevo: false, imagenUrl });
+  }
+  return result;
+}
+
+async function scrapeShopify(url: string): Promise<Descuento[]> {
+  const base = url.replace(/\/products\.json.*$/, "").replace(/\/$/, "");
+  const apiUrl = base + "/products.json?limit=250";
+  const res = await fetch(apiUrl, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const origin = new URL(url).origin;
+  const result: Descuento[] = [];
+  for (const product of data.products ?? []) {
+    const titulo = product.title as string;
+    if (filtrar(titulo)) continue;
+    let mejorPct = 0, mejorPrecio = 0, mejorOriginal = 0;
+    for (const v of product.variants ?? []) {
+      const precio = parseFloat(v.price ?? "0");
+      const original = parseFloat(v.compare_at_price ?? "0");
+      if (original > precio && precio > 0) {
+        const pct = Math.round((1 - precio / original) * 100);
+        if (pct > mejorPct) { mejorPct = pct; mejorPrecio = precio; mejorOriginal = original; }
+      }
+    }
+    if (mejorPct > 0) {
+      result.push({
+        titulo, precio: mejorPrecio, precioOriginal: mejorOriginal, descuento: mejorPct,
+        url: `${origin}/products/${product.handle}`, nuevo: false,
+        imagenUrl: product.images?.[0]?.src ?? undefined,
+      });
+    }
+  }
+  return result.sort((a, b) => b.descuento - a.descuento);
+}
+
+async function scrapeUrl(url: string): Promise<Descuento[]> {
+  const res = await fetch(url, { headers: UA, signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const html = await res.text();
+
+  // Detect Shopify and use its JSON API
+  if (html.includes("cdn.shopify.com") || html.includes("Shopify.theme")) {
+    return scrapeShopify(url);
+  }
+
+  const root = parse(html);
+
+  const woo = extraerWooCommerce(root);
+  if (woo.length > 0) return woo.sort((a, b) => b.descuento - a.descuento);
+
+  const ps = extraerPrestaShop(root);
+  if (ps.length > 0) return ps.sort((a, b) => b.descuento - a.descuento);
+
+  const gen = extraerGenerico(root);
+  return gen.sort((a, b) => b.descuento - a.descuento);
 }
 
 export async function GET() {
@@ -180,49 +226,69 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const config = await leerConfig();
 
-  if (body.action === "addEntrada") {
-    const { competidor, url, plataforma } = body;
-    config.entradas.push({ id: Date.now().toString(), competidor, url: url.trim(), plataforma });
+  if (body.action === "addMarca") {
+    config.marcas.push({ id: Date.now().toString(), nombre: body.nombre, competidores: [] });
     await guardarConfig(config);
     return NextResponse.json(config);
   }
 
-  if (body.action === "deleteEntrada") {
-    config.entradas = config.entradas.filter(e => e.id !== body.id);
-    config.resultados = config.resultados.filter(r => r.id !== body.id);
-    delete config.previos[body.id];
+  if (body.action === "deleteMarca") {
+    config.marcas = config.marcas.filter(m => m.id !== body.marcaId);
+    config.resultados = config.resultados.filter(r => r.marcaId !== body.marcaId);
+    for (const key of Object.keys(config.previos)) {
+      if (key.startsWith(body.marcaId + "::")) delete config.previos[key];
+    }
     await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
+  if (body.action === "addCompetidor") {
+    const marca = config.marcas.find(m => m.id === body.marcaId);
+    if (marca) {
+      marca.competidores.push({ id: Date.now().toString(), nombre: body.nombre, url: body.url.trim() });
+      await guardarConfig(config);
+    }
+    return NextResponse.json(config);
+  }
+
+  if (body.action === "deleteCompetidor") {
+    const marca = config.marcas.find(m => m.id === body.marcaId);
+    if (marca) {
+      marca.competidores = marca.competidores.filter(c => c.id !== body.compId);
+      delete config.previos[`${body.marcaId}::${body.compId}`];
+      await guardarConfig(config);
+    }
     return NextResponse.json(config);
   }
 
   if (body.action === "revisar") {
-    const resultados: ResultadoEntrada[] = [];
+    const resultados: ResultadoMarca[] = [];
     const nuevasPrevias: Record<string, Record<string, number>> = {};
 
-    for (const entrada of config.entradas) {
-      const previos = config.previos[entrada.id] ?? {};
-      try {
-        let descuentos: Descuento[] = [];
-        if (entrada.plataforma === "shopify") descuentos = await scrapeShopify(entrada.url);
-        else if (entrada.plataforma === "prestashop") descuentos = await scrapePrestaShop(entrada.url);
-        else if (entrada.plataforma === "woocommerce") descuentos = await scrapeWooCommerce(entrada.url);
-
-        descuentos = descuentos.map(d => ({
-          ...d,
-          nuevo: previos[d.url] === undefined || previos[d.url] !== d.descuento,
-        }));
-
-        nuevasPrevias[entrada.id] = Object.fromEntries(descuentos.map(d => [d.url, d.descuento]));
-        resultados.push({ id: entrada.id, competidor: entrada.competidor, url: entrada.url, descuentos });
-      } catch (e) {
-        resultados.push({ id: entrada.id, competidor: entrada.competidor, url: entrada.url, descuentos: [], error: String(e) });
-        nuevasPrevias[entrada.id] = previos;
+    for (const marca of config.marcas) {
+      const compResultados: ResultadoCompetidor[] = [];
+      for (const comp of marca.competidores) {
+        const key = `${marca.id}::${comp.id}`;
+        const previos = config.previos[key] ?? {};
+        try {
+          let descuentos = await scrapeUrl(comp.url);
+          descuentos = descuentos.map(d => ({
+            ...d,
+            nuevo: previos[d.url] === undefined || previos[d.url] !== d.descuento,
+          }));
+          nuevasPrevias[key] = Object.fromEntries(descuentos.map(d => [d.url, d.descuento]));
+          compResultados.push({ compId: comp.id, nombre: comp.nombre, url: comp.url, descuentos });
+        } catch (e) {
+          compResultados.push({ compId: comp.id, nombre: comp.nombre, url: comp.url, descuentos: [], error: String(e) });
+          nuevasPrevias[key] = previos;
+        }
       }
+      resultados.push({ marcaId: marca.id, nombre: marca.nombre, competidores: compResultados });
     }
 
     config.ultimaRevision = new Date().toISOString();
     config.resultados = resultados;
-    config.previos = nuevasPrevias;
+    config.previos = { ...config.previos, ...nuevasPrevias };
     await guardarConfig(config);
     return NextResponse.json(config);
   }
