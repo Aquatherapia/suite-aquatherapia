@@ -91,7 +91,13 @@ function filtrar(titulo: string) {
   return EXCLUIR.some(e => titulo.toLowerCase().includes(e));
 }
 
-function extraerWooCommerce(root: ReturnType<typeof parse>): Descuento[] {
+// Convierte enlaces e imágenes relativos (/producto/x) en absolutos usando la URL de la página
+function absolutizar(href: string, base: string): string {
+  if (!href) return href;
+  try { return new URL(href, base).href; } catch { return href; }
+}
+
+function extraerWooCommerce(root: ReturnType<typeof parse>, base: string): Descuento[] {
   const cards = root.querySelectorAll("li.product, .type-product");
   const result: Descuento[] = [];
   for (const card of cards) {
@@ -108,12 +114,12 @@ function extraerWooCommerce(root: ReturnType<typeof parse>): Descuento[] {
     const imgEl = card.querySelector("img");
     const imagenUrl = imgEl?.getAttribute("src") || imgEl?.getAttribute("data-src") || undefined;
     if (!titulo || !productUrl || filtrar(titulo)) continue;
-    result.push({ titulo, precio, precioOriginal: original, descuento: pct, url: productUrl, nuevo: false, imagenUrl });
+    result.push({ titulo, precio, precioOriginal: original, descuento: pct, url: absolutizar(productUrl, base), nuevo: false, imagenUrl: imagenUrl ? absolutizar(imagenUrl, base) : undefined });
   }
   return result;
 }
 
-function extraerPrestaShop(root: ReturnType<typeof parse>): Descuento[] {
+function extraerPrestaShop(root: ReturnType<typeof parse>, base: string): Descuento[] {
   const cards = root.querySelectorAll(".js-product-miniature, article.product-miniature");
   const result: Descuento[] = [];
   for (const card of cards) {
@@ -130,12 +136,12 @@ function extraerPrestaShop(root: ReturnType<typeof parse>): Descuento[] {
     const imgEl = card.querySelector("img");
     const imagenUrl = imgEl?.getAttribute("src") || imgEl?.getAttribute("data-src") || undefined;
     if (!titulo || !productUrl || filtrar(titulo)) continue;
-    result.push({ titulo, precio, precioOriginal: original, descuento: pct, url: productUrl, nuevo: false, imagenUrl });
+    result.push({ titulo, precio, precioOriginal: original, descuento: pct, url: absolutizar(productUrl, base), nuevo: false, imagenUrl: imagenUrl ? absolutizar(imagenUrl, base) : undefined });
   }
   return result;
 }
 
-function extraerGenerico(root: ReturnType<typeof parse>): Descuento[] {
+function extraerGenerico(root: ReturnType<typeof parse>, base: string): Descuento[] {
   // Tries common sale/regular price patterns used by many e-commerce themes
   const result: Descuento[] = [];
   const cards = root.querySelectorAll(
@@ -160,7 +166,7 @@ function extraerGenerico(root: ReturnType<typeof parse>): Descuento[] {
     const imgEl = card.querySelector("img");
     const imagenUrl = imgEl?.getAttribute("src") || imgEl?.getAttribute("data-src") || undefined;
     if (!titulo || !productUrl || filtrar(titulo)) continue;
-    result.push({ titulo, precio, precioOriginal: original, descuento: pct, url: productUrl, nuevo: false, imagenUrl });
+    result.push({ titulo, precio, precioOriginal: original, descuento: pct, url: absolutizar(productUrl, base), nuevo: false, imagenUrl: imagenUrl ? absolutizar(imagenUrl, base) : undefined });
   }
   return result;
 }
@@ -208,13 +214,13 @@ async function scrapeUrl(url: string): Promise<Descuento[]> {
 
   const root = parse(html);
 
-  const woo = extraerWooCommerce(root);
+  const woo = extraerWooCommerce(root, url);
   if (woo.length > 0) return woo.sort((a, b) => b.descuento - a.descuento);
 
-  const ps = extraerPrestaShop(root);
+  const ps = extraerPrestaShop(root, url);
   if (ps.length > 0) return ps.sort((a, b) => b.descuento - a.descuento);
 
-  const gen = extraerGenerico(root);
+  const gen = extraerGenerico(root, url);
   return gen.sort((a, b) => b.descuento - a.descuento);
 }
 

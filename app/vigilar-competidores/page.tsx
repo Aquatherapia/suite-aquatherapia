@@ -49,7 +49,7 @@ function generarPDF(rm: ResultadoMarca, ultimaRevision: string | null) {
     .filter(c => c.descuentos.length > 0)
     .map(c => {
       const tarjetas = c.descuentos.map(d => `
-        <div class="tarjeta">
+        <a class="tarjeta" href="${d.url}" target="_blank" rel="noreferrer">
           ${d.imagenUrl ? `<div class="img-wrap"><img src="${d.imagenUrl}" alt="${d.titulo}" /></div>` : ""}
           <div class="info">
             <div class="nombre">${d.titulo}${d.nuevo ? ' <span class="nuevo">NUEVO</span>' : ""}</div>
@@ -58,9 +58,9 @@ function generarPDF(rm: ResultadoMarca, ultimaRevision: string | null) {
               <span class="precio-original">${d.precioOriginal.toFixed(2)} €</span>
               <span class="dto">−${d.descuento}%</span>
             </div>
-            <div class="url-prod">${dominio(c.url)}</div>
+            <div class="url-prod">Ver producto en ${dominio(d.url)} →</div>
           </div>
-        </div>`).join("");
+        </a>`).join("");
       return `<div class="seccion-comp"><div class="comp-titulo">${c.nombre}</div><div class="grid">${tarjetas}</div></div>`;
     }).join("");
 
@@ -79,7 +79,7 @@ function generarPDF(rm: ResultadoMarca, ultimaRevision: string | null) {
   .seccion-comp { margin-bottom: 28px; }
   .comp-titulo { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #555; border-bottom: 1px solid #ddd; padding-bottom: 6px; margin-bottom: 12px; }
   .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .tarjeta { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+  .tarjeta { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; text-decoration: none; color: inherit; }
   .img-wrap { background: #f5f5f5; display: flex; align-items: center; justify-content: center; height: 150px; }
   .img-wrap img { max-height: 140px; max-width: 100%; object-fit: contain; }
   .info { padding: 10px; flex: 1; }
@@ -88,10 +88,10 @@ function generarPDF(rm: ResultadoMarca, ultimaRevision: string | null) {
   .precio-actual { font-size: 15px; font-weight: 700; }
   .precio-original { font-size: 12px; color: #999; text-decoration: line-through; }
   .dto { font-size: 12px; font-weight: 700; color: #b91c1c; background: #fee2e2; padding: 2px 6px; border-radius: 4px; }
-  .url-prod { font-size: 10px; color: #aaa; }
+  .url-prod { font-size: 10px; color: #2563eb; }
   .nuevo { display: inline-block; background: #fee2e2; color: #b91c1c; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
   .footer { margin-top: 20px; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
-  @media print { body { padding: 16px; } .tarjeta { break-inside: avoid; } .seccion-comp { break-inside: avoid; } }
+  @media print { body { padding: 16px; } .tarjeta { break-inside: avoid; } .comp-titulo { break-after: avoid; } }
 </style>
 </head>
 <body>
