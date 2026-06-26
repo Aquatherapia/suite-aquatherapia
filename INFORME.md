@@ -2,12 +2,13 @@
 
 ## Qué es esta app
 
-Una suite de herramientas con IA para latiendadecosmeticos.com, construida con Next.js. Tiene **4 agentes**:
+Una suite de herramientas con IA para latiendadecosmeticos.com, construida con Next.js. Tiene **5 agentes**:
 
 1. **Generador de fichas de producto** — Rellenas los datos y la IA redacta la ficha completa
 2. **Vigilar precios en Cosméticos24h** — Detecta descuentos en tus marcas y avisa si cambian
 3. **Post para Google Business Profile** — Convierte ideas/posts en texto listo para publicar (2 negocios)
 4. **Vigilar competidores** — Detecta descuentos en las webs de competidores que tú elijas
+5. **Informe de marketing mensual** — Subes los CSV de tus herramientas y la IA monta el informe mensual completo (canales, ventas, ROAS, comparativa interanual) en PDF
 
 **En producción:** https://suite-aquatherapia.vercel.app/
 **Repositorio:** GitHub `Aquatherapia/suite-aquatherapia` conectado a Vercel (push a `main` = deploy automático).
@@ -209,6 +210,41 @@ Las webs con **Cloudflare Bot Management** (Notino, Douglas, Sephora…) **NO se
 
 ---
 
+## Agente 5 — Informe de marketing mensual
+
+### URL: `/informes`
+
+Genera un **informe de marketing mensual completo** (12 secciones) a partir de los CSV que el usuario exporta de sus herramientas (Google Analytics, Google Ads, su tienda…). **No se conecta a ninguna API externa**: el usuario **sube los archivos** y la IA los lee, los agrupa por fuente y redacta el informe.
+
+> Por qué se hizo así: se valoró la conexión automática a Google Analytics (cuenta de servicio), pero el usuario la descartó por el lío de configuración. El modo "subir CSV" es 100% gratis, sin claves nuevas y sin trámites.
+
+### Cómo funciona
+1. El usuario indica el **mes** del informe y el periodo de **comparación** (mismo mes del año anterior).
+2. **Sube uno o varios CSV** (arrastrar o clic). Típicos: canales de adquisición, top productos. Los vacíos no pasa nada.
+3. Pulsa **Generar** y Gemini monta el informe con **12 secciones**: resumen ejecutivo, resumen global, rendimiento por canal (agrupado), ventas por marca/categoría, productos destacados, embudo, clientes, campañas, KPIs ecommerce, comparativa interanual y conclusiones/plan de acción.
+4. El informe se ve **maquetado** (encabezados en negrita, viñetas, % en verde/rojo) con botones **Copiar** y **Descargar PDF** (vía impresión del navegador — gratis, sin librerías).
+
+### Agrupación de canales (configurable en el código)
+- **Publicidad de pago (Google Ads)**: Paid Search + Paid Shopping + Cross-network + Display + Paid Video
+- **SEO / Orgánico**: Organic Search · **Redes sociales**: Organic Social + Paid Social
+- **Email** · **Directo** · **Referral** · **Otros** (Unassigned, Organic Shopping, marketplaces…)
+
+### Cifras exactas (clave)
+Cuando detecta el **CSV de canales** de Analytics ("Adquisición de tráfico: Grupo de canales"), la app **parsea y suma los totales con código** (sesiones, pedidos = *eventos clave*, ingresos, ticket medio, conversión; global y por grupo, con su % interanual) y se los pasa a la IA **ya calculados** para que las cifras clave **no tengan errores de cálculo** de la IA. El total global es la **suma de los canales del CSV** (puede diferir un poco del "Total" que muestra la interfaz de Analytics; es una rareza de cómo Analytics agrega su fila Total).
+
+### Decisiones de alcance
+- **Sin margen ni beneficio**: el usuario no aporta costes. El informe trabaja solo con **facturación/ventas y ROAS** (ventas por euro invertido, no beneficio).
+- Productos: top vendidos; el CSV se recorta a las **~200 primeras filas** por tamaño (las más relevantes).
+- Las secciones sin datos salen como **"Sin datos disponibles este mes"** (no se inventa nada).
+
+### Límites (gratis)
+Solo usa **Gemini** (15 informes/min · 1.500/día; gasta 1 por informe) y **Vercel**. **No usa Upstash.** Aviso de privacidad: en el plan gratuito de Gemini, Google puede usar los datos subidos para entrenar → **no subir CSV con datos personales de clientes** (nombres, emails, teléfonos).
+
+### API route
+- `POST /api/informes` con `{ periodo, periodoComparacion, notas?, archivos: [{ name, content }] }` → devuelve `{ informe }`.
+
+---
+
 ## Exclusión de packs (Agentes 2 y 4)
 
 Ambos vigiladores filtran títulos que contengan: `pack, set, kit, lote, duo, dúo, trio, trío, estuche, bundle, caja, cofre, box, programa, rutina`.
@@ -248,13 +284,15 @@ suite-aquatherapia/
 │   ├── vigilar-precios/page.tsx       ← Agente 2: monitor de precios
 │   ├── google-business/page.tsx       ← Agente 3: posts Google Business
 │   ├── vigilar-competidores/page.tsx  ← Agente 4: monitor de competidores
+│   ├── informes/page.tsx              ← Agente 5: informe de marketing mensual
 │   └── api/
 │       ├── gemini.ts                  ← Lógica compartida Gemini
 │       ├── generate/route.ts          ← Generación de ficha completa
 │       ├── regenerate/route.ts        ← Regeneración por sección
 │       ├── google-business/route.ts   ← API posts Google Business
 │       ├── vigilar/route.ts           ← API del monitor de precios
-│       └── vigilar-comp/route.ts      ← API del monitor de competidores
+│       ├── vigilar-comp/route.ts      ← API del monitor de competidores
+│       └── informes/route.ts          ← API del informe mensual (parsea CSV de canales + Gemini)
 ├── data/
 │   └── vigilar-config.json            ← Solo fallback en local (en prod se usa Upstash)
 ├── .env.local                         ← Claves API (no subir a GitHub)
