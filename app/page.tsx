@@ -114,6 +114,18 @@ export default async function Home() {
           </div>
           <span className="agente-arrow">→</span>
         </Link>
+
+        <Link href="/vigilar-novedades" className="agente-card">
+          <span className="agente-icono">✸</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Vigilar novedades de marcas</div>
+            <div className="agente-desc">
+              Añade una marca con la URL de su tienda y detecta cuándo sube
+              productos nuevos a su web, para ser de los primeros en venderlos.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
       </div>
     </div>
   );
