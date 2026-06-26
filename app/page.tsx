@@ -101,6 +101,19 @@ export default async function Home() {
           </div>
           <span className="agente-arrow">→</span>
         </Link>
+
+        <Link href="/informes" className="agente-card">
+          <span className="agente-icono">▣</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Informe de marketing mensual</div>
+            <div className="agente-desc">
+              Pega los datos de cada canal (Analytics, Google Ads, tu tienda…) y
+              la IA te monta el informe mensual completo: canales, ventas, ROAS,
+              embudo, comparativa interanual y conclusiones.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
       </div>
     </div>
   );

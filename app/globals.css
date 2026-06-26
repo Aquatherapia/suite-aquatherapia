@@ -927,3 +927,49 @@ button:disabled {
 .volver-link:hover {
   color: var(--ink);
 }
+
+/* ── Informe de marketing (render con formato) ─────── */
+
+.informe-render {
+  padding: 6px 18px 18px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.inf-h2 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 24px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: -0.01em;
+}
+
+.informe-render > .inf-h2:first-child {
+  margin-top: 6px;
+}
+
+.inf-h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 16px 0 4px;
+  color: var(--ink);
+}
+
+.inf-p {
+  margin: 5px 0;
+}
+
+.inf-li {
+  margin: 4px 0 4px 4px;
+  padding-left: 16px;
+  position: relative;
+  list-style: none;
+}
+
+.inf-li::before {
+  content: "–";
+  position: absolute;
+  left: 0;
+  color: var(--muted);
+}
