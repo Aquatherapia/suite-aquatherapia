@@ -324,6 +324,12 @@ Cosméticos24h **no publica el EAN** en su API (`barcode: null`) y su SKU es int
 ### Ojo con las ofertas del competidor
 El precio que se compara es el **precio de venta actual de cada uno**. Si Cosméticos24h tiene una marca en oferta (p. ej. Atache con −20%), muchos productos saldrán como "tú más caro" simplemente porque ellos están rebajados en ese momento. Es correcto, pero tenlo en cuenta al leerlo.
 
+### Excluir productos a mano
+Cada fila (tanto en la comparación como en "tienen ellos y tú no") tiene un botón **×** para **ocultarla**. Sirve para quitar los matches erróneos (cuando por nombre cruza dos productos distintos). Lo ocultado:
+- Desaparece al instante y **se mantiene oculto aunque vuelvas a revisar**.
+- Se guarda en Upstash (`excluidos`, por marca).
+- Se puede **restaurar** desde la lista desplegable "Ocultos (N)" al final de cada marca (reaparece en la siguiente revisión).
+
 ### Solo PVP (sin margen)
 Compara precio de venta contra precio de venta. El **coste de compra no es público** (vive en tu panel de admin), así que no hay margen/beneficio.
 
@@ -338,7 +344,7 @@ Solo usa **scraping propio + API pública de Cosméticos24h + Upstash + Vercel**
 
 ### API route
 - `GET /api/comparar-precios` → config actual
-- `POST /api/comparar-precios` con `action`: `addMarca` (nombre, slug, miToken?), `deleteMarca` (slug), `revisar` (slug opcional → solo esa marca; sin slug → todas)
+- `POST /api/comparar-precios` con `action`: `addMarca` (nombre, slug, miToken?), `deleteMarca` (slug), `revisar` (slug opcional → solo esa marca; sin slug → todas), `excluir` (slug, suUrl, titulo → oculta un producto), `incluir` (slug, suUrl → lo restaura)
 
 ---
 

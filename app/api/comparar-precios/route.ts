@@ -50,21 +50,26 @@ type ResultadoMarca = {
   susProductos: number;
 };
 
+type Excluido = { suUrl: string; titulo: string };
+
 type Config = {
   marcas: Marca[];
   ultimaRevision: string | null;
   resultados: ResultadoMarca[];
+  // Por marca (slug): productos de Cosméticos24h que el usuario ha ocultado a mano
+  excluidos: Record<string, Excluido[]>;
 };
 
 function configVacia(): Config {
-  return { marcas: [], ultimaRevision: null, resultados: [] };
+  return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {} };
 }
 
 async function leerConfig(): Promise<Config> {
   if (USE_KV) {
     const { kv } = await import("@vercel/kv");
     const data = await kv.get<Config>(KV_KEY);
-    return data ?? configVacia();
+    if (!data) return configVacia();
+    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {} };
   }
   try {
     const parsed = JSON.parse(await fs.readFile(CONFIG_PATH, "utf-8"));
@@ -72,6 +77,7 @@ async function leerConfig(): Promise<Config> {
       marcas: parsed.marcas ?? [],
       ultimaRevision: parsed.ultimaRevision ?? null,
       resultados: parsed.resultados ?? [],
+      excluidos: parsed.excluidos ?? {},
     };
   } catch {
     return configVacia();
@@ -193,6 +199,31 @@ export async function POST(req: NextRequest) {
   if (body.action === "deleteMarca") {
     config.marcas = config.marcas.filter(x => x.slug !== body.slug);
     config.resultados = config.resultados.filter(r => r.slug !== body.slug);
+    delete config.excluidos[body.slug];
+    await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
+  // Ocultar a mano un producto (p. ej. un match erróneo entre productos distintos)
+  if (body.action === "excluir") {
+    const { slug, suUrl, titulo } = body as { slug: string; suUrl: string; titulo: string };
+    const lista = config.excluidos[slug] ?? [];
+    if (!lista.some(e => e.suUrl === suUrl)) lista.push({ suUrl, titulo: titulo ?? suUrl });
+    config.excluidos[slug] = lista;
+    // Quitarlo también del resultado actual para que desaparezca sin re-revisar
+    const r = config.resultados.find(x => x.slug === slug);
+    if (r) {
+      r.comparaciones = r.comparaciones.filter(c => c.suUrl !== suUrl);
+      r.soloEllos = r.soloEllos.filter(s => s.url !== suUrl);
+    }
+    await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
+  // Volver a mostrar un producto oculto (reaparece en la siguiente revisión)
+  if (body.action === "incluir") {
+    const { slug, suUrl } = body as { slug: string; suUrl: string };
+    config.excluidos[slug] = (config.excluidos[slug] ?? []).filter(e => e.suUrl !== suUrl);
     await guardarConfig(config);
     return NextResponse.json(config);
   }
@@ -213,6 +244,7 @@ export async function POST(req: NextRequest) {
     const nuevos: ResultadoMarca[] = [];
     for (const marca of objetivo) {
       try {
+        const ocultos = new Set((config.excluidos[marca.slug] ?? []).map(e => e.suUrl));
         // 1) Sus productos (cosmeticos24h)
         const suUrl = `https://cosmeticos24h.com/collections/${marca.slug}/products.json?limit=250`;
         const suRes = await fetch(suUrl, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
@@ -221,7 +253,9 @@ export async function POST(req: NextRequest) {
           continue;
         }
         const suData = await suRes.json();
-        const suProds = (suData.products ?? []).map((p: {
+        const suProds = (suData.products ?? []).filter((p: { handle: string }) =>
+          !ocultos.has(`https://cosmeticos24h.com/products/${p.handle}`)
+        ).map((p: {
           title: string; handle: string;
           variants?: { price?: string; compare_at_price?: string }[];
         }) => {

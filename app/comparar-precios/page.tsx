@@ -14,7 +14,8 @@ type ResultadoMarca = {
   misProductos: number; susProductos: number;
 };
 type Marca = { nombre: string; slug: string; miToken: string };
-type Config = { marcas: Marca[]; ultimaRevision: string | null; resultados: ResultadoMarca[] };
+type Excluido = { suUrl: string; titulo: string };
+type Config = { marcas: Marca[]; ultimaRevision: string | null; resultados: ResultadoMarca[]; excluidos: Record<string, Excluido[]> };
 
 function toSlug(nombre: string) {
   return nombre.toLowerCase().normalize("NFD")
@@ -41,11 +42,14 @@ function fechaExacta(iso: string) {
 const MOSTRAR_INICIAL = 6;
 
 function MarcaBloque({
-  r, expandido, onToggle, mostrarTodos, onToggleMostrar,
+  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir,
 }: {
-  r: ResultadoMarca; expandido: boolean; onToggle: () => void;
+  r: ResultadoMarca; ocultos: Excluido[]; expandido: boolean; onToggle: () => void;
   mostrarTodos: boolean; onToggleMostrar: () => void;
+  onExcluir: (suUrl: string, titulo: string) => void;
+  onIncluir: (suUrl: string) => void;
 }) {
+  const [verOcultos, setVerOcultos] = useState(false);
   const masCaro = r.comparaciones.filter(c => c.diff > 0.01);
   const soloEllosReal = r.soloEllos.filter(s => !s.esPack);
   const packs = r.soloEllos.filter(s => s.esPack);
@@ -78,6 +82,7 @@ function MarcaBloque({
                 <span className="cp-col-num">Tú</span>
                 <span className="cp-col-num">C24h</span>
                 <span className="cp-col-num">Dif.</span>
+                <span />
               </div>
               {compMostrar.map((c, i) => {
                 const caro = c.diff > 0.01;
@@ -92,6 +97,7 @@ function MarcaBloque({
                     <span className={"cp-col-num " + (caro ? "cp-caro" : c.diff < -0.01 ? "cp-barato" : "")}>
                       {c.diff > 0 ? "+" : ""}{c.diff.toFixed(2)}€
                     </span>
+                    <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir(c.suUrl, c.nombre)}>×</button>
                   </div>
                 );
               })}
@@ -109,16 +115,36 @@ function MarcaBloque({
                 Tienen ellos y tú no ({soloEllosReal.length}) — posibles novedades
               </div>
               {soloEllosReal.map((s, i) => (
-                <a key={i} href={s.url} target="_blank" rel="noreferrer" className="cp-fila cp-solo">
-                  <span className="cp-nombre">{s.titulo}</span>
+                <div key={i} className="cp-fila cp-solo">
+                  <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
                   <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
-                </a>
+                  <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir(s.url, s.titulo)}>×</button>
+                </div>
               ))}
             </>
           )}
 
           {packs.length > 0 && (
             <div className="cp-packs-nota">+ {packs.length} packs/estuches suyos que no tienes (no comparados por ser lotes)</div>
+          )}
+
+          {ocultos.length > 0 && (
+            <div className="cp-ocultos-box">
+              <button className="cp-ocultos-toggle" onClick={() => setVerOcultos(v => !v)}>
+                {verOcultos ? "▲" : "▼"} Ocultos ({ocultos.length})
+              </button>
+              {verOcultos && (
+                <div className="cp-ocultos-lista">
+                  {ocultos.map((o, i) => (
+                    <div key={i} className="cp-oculto-item">
+                      <span className="cp-oculto-nombre">{o.titulo}</span>
+                      <button className="cp-restaurar" onClick={() => onIncluir(o.suUrl)}>Restaurar</button>
+                    </div>
+                  ))}
+                  <div className="cp-packs-nota" style={{ padding: "6px 0 0" }}>Al restaurar, reaparece en la próxima revisión.</div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -174,6 +200,22 @@ export default function CompararPrecios() {
     const res = await fetch("/api/comparar-precios", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "deleteMarca", slug }),
+    });
+    setConfig(await res.json());
+  }
+
+  async function excluir(slug: string, suUrl: string, titulo: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "excluir", slug, suUrl, titulo }),
+    });
+    setConfig(await res.json());
+  }
+
+  async function incluir(slug: string, suUrl: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "incluir", slug, suUrl }),
     });
     setConfig(await res.json());
   }
@@ -297,9 +339,11 @@ export default function CompararPrecios() {
 
           {resultados.map(r => (
             <MarcaBloque
-              key={r.slug} r={r}
+              key={r.slug} r={r} ocultos={config?.excluidos?.[r.slug] ?? []}
               expandido={expandidos.has(r.slug)} onToggle={() => toggle(r.slug)}
               mostrarTodos={mostrarTodos.has(r.slug)} onToggleMostrar={() => toggleMostrar(r.slug)}
+              onExcluir={(suUrl, titulo) => excluir(r.slug, suUrl, titulo)}
+              onIncluir={(suUrl) => incluir(r.slug, suUrl)}
             />
           ))}
         </div>
