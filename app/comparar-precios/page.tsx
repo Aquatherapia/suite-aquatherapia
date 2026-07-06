@@ -157,7 +157,7 @@ export default function CompararPrecios() {
   const [nuevaMarca, setNuevaMarca] = useState("");
   const [nuevoSlug, setNuevoSlug] = useState("");
   const [slugManual, setSlugManual] = useState(false);
-  const [revisando, setRevisando] = useState<string | "todas" | null>(null);
+  const [revisando, setRevisando] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [mostrarTodos, setMostrarTodos] = useState<Set<string>>(new Set());
@@ -220,17 +220,17 @@ export default function CompararPrecios() {
     setConfig(await res.json());
   }
 
-  async function revisar(slug?: string) {
-    setRevisando(slug ?? "todas"); setError("");
+  async function revisar(slug: string) {
+    setRevisando(slug); setError("");
     try {
       const res = await fetch("/api/comparar-precios", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "revisar", ...(slug ? { slug } : {}) }),
+        body: JSON.stringify({ action: "revisar", slug }),
       });
       const data = await res.json();
       if (data.error) { setError(data.error); return; }
       setConfig(data);
-      if (slug) setExpandidos(prev => new Set(prev).add(slug));
+      setExpandidos(prev => new Set(prev).add(slug));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -313,20 +313,10 @@ export default function CompararPrecios() {
                 </>
               ) : "Sin revisar aún"}
             </div>
-            <div className="vp-revision-right">
-              <button
-                className="vp-revisar-btn"
-                onClick={() => revisar()}
-                disabled={revisando !== null || !config || config.marcas.length === 0}
-              >
-                {revisando === "todas" && <span className="spinner" />}
-                {revisando === "todas" ? "Revisando…" : "Revisar todas"}
-              </button>
-            </div>
           </div>
 
           <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-            <span>Consejo: revisa <strong>marca a marca</strong> (botón "Revisar" de cada una). Es más rápido y evita esperas largas.</span>
+            <span>La revisión es <strong>marca a marca</strong>: usa el botón "Revisar" de cada marca (columna izquierda). Así es rápido y no satura tu web.</span>
           </div>
 
           {error && <div className="error">{error}</div>}

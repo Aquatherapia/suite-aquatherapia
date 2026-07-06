@@ -334,7 +334,7 @@ Cada fila (tanto en la comparación como en "tienen ellos y tú no") tiene un bo
 Compara precio de venta contra precio de venta. El **coste de compra no es público** (vive en tu panel de admin), así que no hay margen/beneficio.
 
 ### Rendimiento y límite de Vercel
-Leer tu web es 1 petición por producto (en paralelo, de 10 en 10). La función usa `maxDuration = 60` (Vercel Hobby lo permite **gratis**; el defecto son 10s). Aun así conviene revisar **marca a marca** (cada marca tiene su botón "Revisar"); "Revisar todas" existe pero para muchas marcas grandes puede acercarse al tope.
+Leer tu web es 1 petición por producto (en paralelo, de 10 en 10). La función usa `maxDuration = 60` (Vercel Hobby lo permite **gratis**; el defecto son 10s). La revisión es **siempre marca a marca** (una sola): cada marca tiene su botón "Revisar" en la columna izquierda. No hay "Revisar todas" a propósito, para evitar esperas largas y no saturar la web propia; la API rechaza cualquier revisión sin marca (HTTP 400). Nota: este agente **no usa Gemini/IA**, así que revisar no consume tokens de ningún tipo — el motivo del límite es solo tiempo/carga.
 
 ### Persistencia
 Upstash KV, clave `comparar-precios-config`. En local cae a `data/comparar-precios-config.json`. Guarda `{ marcas: [{nombre, slug, miToken}], ultimaRevision, resultados }`. Al revisar una marca concreta, solo se reemplaza esa (las demás se conservan).

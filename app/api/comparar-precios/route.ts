@@ -229,10 +229,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (body.action === "revisar") {
-    // Si mandan un slug concreto, solo revisamos esa marca (más rápido/seguro)
-    const objetivo: Marca[] = body.slug
-      ? config.marcas.filter(m => m.slug === body.slug)
-      : config.marcas;
+    // La revisión es SIEMPRE marca a marca (una sola): evita esperas largas
+    // y no satura la web propia. Sin slug se rechaza a propósito.
+    if (!body.slug) {
+      return NextResponse.json({ error: "Revisa las marcas de una en una (falta el slug de la marca)." }, { status: 400 });
+    }
+    const objetivo: Marca[] = config.marcas.filter(m => m.slug === body.slug);
 
     let sitemapXml = "";
     try {
