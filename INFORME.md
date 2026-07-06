@@ -330,6 +330,7 @@ Cada fila (tanto en la comparación como en "tienen ellos y tú no") tiene un bo
 - Se guarda en Upstash (`excluidos`, por marca), con **precios y tipo**: si venía de la comparación guarda tu precio, el de C24h y la diferencia; si venía de "tienen ellos y tú no" lo marca como tal.
 - En la lista "Ocultos (N)" cada producto muestra esos precios (o la etiqueta "Tienen ellos y tú no") y un **desplegable "Oculto por:"** para elegir el motivo (Compara productos diferentes · Ya lo tengo, no lo detecta · No me interesa · Otro motivo · Sin especificar). El motivo se guarda.
 - Se puede **restaurar** desde esa misma lista (reaparece en la siguiente revisión).
+- Los ocultos guardados **antes** de esta función no tenían precios; al **revisar** la marca, la app los rellena automáticamente (busca el producto en Cosméticos24h y lo reempareja con tu web).
 
 ### Solo PVP (sin margen)
 Compara precio de venta contra precio de venta. El **coste de compra no es público** (vive en tu panel de admin), así que no hay margen/beneficio.

@@ -276,9 +276,9 @@ export async function POST(req: NextRequest) {
           continue;
         }
         const suData = await suRes.json();
-        const suProds = (suData.products ?? []).filter((p: { handle: string }) =>
-          !ocultos.has(`https://cosmeticos24h.com/products/${p.handle}`)
-        ).map((p: {
+        // Mapeamos TODOS sus productos (incluidos los ocultos, para poder
+        // rellenar precios de los que se ocultaron sin ellos)
+        const suProdsAll = (suData.products ?? []).map((p: {
           title: string; handle: string;
           variants?: { price?: string; compare_at_price?: string }[];
         }) => {
@@ -296,12 +296,31 @@ export async function POST(req: NextRequest) {
         // 2) Mis productos (tienda propia)
         const mis = await leerMisProductos(marca.miToken, sitemapXml);
 
-        // 3) Emparejar cada producto suyo con el mejor mío
+        // 2b) Rellenar datos de los ocultos "antiguos" (sin precio/tipo)
+        for (const ex of config.excluidos[marca.slug] ?? []) {
+          if (ex.suPrecio != null && ex.tipo != null) continue;
+          const sp = suProdsAll.find((p: { url: string }) => p.url === ex.suUrl);
+          if (!sp) continue;
+          ex.suPrecio = sp.precio;
+          let mejor = -1, mejorJ = 0;
+          for (let j = 0; j < mis.length; j++) {
+            const jj = jaccard(sp.tok, mis[j].tok);
+            if (jj > mejorJ) { mejorJ = jj; mejor = j; }
+          }
+          if (mejorJ >= UMBRAL && mejor >= 0 && !sp.esPack) {
+            ex.tipo = "comparacion"; ex.miPrecio = mis[mejor].precio; ex.miUrl = mis[mejor].url;
+          } else {
+            ex.tipo = "soloEllos";
+          }
+        }
+
+        // 3) Emparejar cada producto suyo con el mejor mío (saltando ocultos)
         const comparaciones: Comparacion[] = [];
         const soloEllos: SoloEllos[] = [];
         const misUsados = new Set<number>();
 
-        for (const s of suProds) {
+        for (const s of suProdsAll) {
+          if (ocultos.has(s.url)) continue;
           let mejor = -1, mejorJ = 0;
           for (let j = 0; j < mis.length; j++) {
             const jj = jaccard(s.tok, mis[j].tok);
@@ -332,7 +351,7 @@ export async function POST(req: NextRequest) {
         nuevos.push({
           marca: marca.nombre, slug: marca.slug,
           comparaciones, soloEllos,
-          misProductos: mis.length, susProductos: suProds.length,
+          misProductos: mis.length, susProductos: suProdsAll.length,
         });
       } catch (e) {
         nuevos.push({ marca: marca.nombre, slug: marca.slug, error: String(e), comparaciones: [], soloEllos: [], misProductos: 0, susProductos: 0 });
