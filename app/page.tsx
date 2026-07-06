@@ -115,6 +115,19 @@ export default async function Home() {
           <span className="agente-arrow">→</span>
         </Link>
 
+        <Link href="/responder-resenas" className="agente-card">
+          <span className="agente-icono">✍</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Responder reseñas de Google</div>
+            <div className="agente-desc">
+              Pega la reseña de un cliente, elige el negocio (La Tienda o
+              Aquatherapia) y la IA redacta una respuesta profesional lista para
+              publicar en tu Perfil de Empresa.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
+
         <Link href="/vigilar-novedades" className="agente-card">
           <span className="agente-icono">✸</span>
           <div className="agente-info">
