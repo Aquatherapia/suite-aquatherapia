@@ -15,10 +15,7 @@ export default function ResponderResenasPage() {
   const [texto, setTexto] = useState("");
   const [copiado, setCopiado] = useState(false);
 
-  const puedeGenerar = resena.trim().length > 0;
-
   async function generar() {
-    if (!puedeGenerar) return;
     setCargando(true);
     setError("");
     setTexto("");
@@ -132,15 +129,20 @@ export default function ResponderResenasPage() {
             {estrellas} de 5 — ayuda a ajustar el tono de la respuesta.
           </div>
 
-          <label>Texto de la reseña *</label>
+          <label>
+            Texto de la reseña{" "}
+            <span style={{ fontWeight: 400, color: "var(--muted)" }}>
+              (opcional)
+            </span>
+          </label>
           <textarea
             rows={7}
-            placeholder="Pega aquí lo que ha escrito el cliente en Google…"
+            placeholder="Pega aquí lo que ha escrito el cliente en Google… Déjalo vacío si solo puso estrellas."
             value={resena}
             onChange={(e) => setResena(e.target.value)}
           />
 
-          <button onClick={generar} disabled={cargando || !puedeGenerar}>
+          <button onClick={generar} disabled={cargando}>
             {cargando ? (
               <>
                 <span className="spinner" />
