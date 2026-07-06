@@ -35,6 +35,12 @@ function tiempoDesde(iso: string) {
   return `hace ${d} día${d > 1 ? "s" : ""}`;
 }
 
+function fechaExacta(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })
+    + " a las " + d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+}
+
 const MOSTRAR_INICIAL = 5;
 
 function generarPDF(r: ResultadoMarca, ultimaRevision: string | null) {
@@ -312,7 +318,14 @@ export default function VigilarPrecios() {
         <div className="right-col">
           <div className="vp-revision-header">
             <div className="vp-revision-time">
-              {config?.ultimaRevision ? tiempoDesde(config.ultimaRevision) : "Sin revisar aún"}
+              {config?.ultimaRevision ? (
+                <>
+                  Análisis actualizado el {fechaExacta(config.ultimaRevision)}
+                  <span style={{ display: "block", fontSize: 11, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>
+                    {tiempoDesde(config.ultimaRevision)}
+                  </span>
+                </>
+              ) : "Sin revisar aún"}
             </div>
             <div className="vp-revision-right">
               {totalNuevos > 0 && (
