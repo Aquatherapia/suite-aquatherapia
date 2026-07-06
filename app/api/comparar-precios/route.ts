@@ -50,7 +50,15 @@ type ResultadoMarca = {
   susProductos: number;
 };
 
-type Excluido = { suUrl: string; titulo: string };
+type Excluido = {
+  suUrl: string;
+  titulo: string;
+  tipo?: "comparacion" | "soloEllos"; // de dónde se ocultó
+  miPrecio?: number;                   // si era comparación
+  suPrecio?: number;                   // precio en Cosméticos24h
+  miUrl?: string;                      // si era comparación
+  motivo?: string;                     // por qué se ocultó (elegido por el usuario)
+};
 
 type Config = {
   marcas: Marca[];
@@ -206,17 +214,30 @@ export async function POST(req: NextRequest) {
 
   // Ocultar a mano un producto (p. ej. un match erróneo entre productos distintos)
   if (body.action === "excluir") {
-    const { slug, suUrl, titulo } = body as { slug: string; suUrl: string; titulo: string };
+    const { slug, item } = body as { slug: string; item: Excluido };
+    if (!slug || !item?.suUrl) {
+      return NextResponse.json({ error: "Faltan datos para ocultar el producto." }, { status: 400 });
+    }
     const lista = config.excluidos[slug] ?? [];
-    if (!lista.some(e => e.suUrl === suUrl)) lista.push({ suUrl, titulo: titulo ?? suUrl });
+    if (!lista.some(e => e.suUrl === item.suUrl)) {
+      lista.push({ ...item, titulo: item.titulo ?? item.suUrl });
+    }
     config.excluidos[slug] = lista;
     // Quitarlo también del resultado actual para que desaparezca sin re-revisar
     const r = config.resultados.find(x => x.slug === slug);
     if (r) {
-      r.comparaciones = r.comparaciones.filter(c => c.suUrl !== suUrl);
-      r.soloEllos = r.soloEllos.filter(s => s.url !== suUrl);
+      r.comparaciones = r.comparaciones.filter(c => c.suUrl !== item.suUrl);
+      r.soloEllos = r.soloEllos.filter(s => s.url !== item.suUrl);
     }
     await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
+  // Cambiar el motivo por el que un producto está oculto
+  if (body.action === "motivo") {
+    const { slug, suUrl, motivo } = body as { slug: string; suUrl: string; motivo: string };
+    const e = (config.excluidos[slug] ?? []).find(x => x.suUrl === suUrl);
+    if (e) { e.motivo = motivo; await guardarConfig(config); }
     return NextResponse.json(config);
   }
 

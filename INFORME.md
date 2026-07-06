@@ -327,8 +327,9 @@ El precio que se compara es el **precio de venta actual de cada uno**. Si Cosmé
 ### Excluir productos a mano
 Cada fila (tanto en la comparación como en "tienen ellos y tú no") tiene un botón **×** para **ocultarla**. Sirve para quitar los matches erróneos (cuando por nombre cruza dos productos distintos). Lo ocultado:
 - Desaparece al instante y **se mantiene oculto aunque vuelvas a revisar**.
-- Se guarda en Upstash (`excluidos`, por marca).
-- Se puede **restaurar** desde la lista desplegable "Ocultos (N)" al final de cada marca (reaparece en la siguiente revisión).
+- Se guarda en Upstash (`excluidos`, por marca), con **precios y tipo**: si venía de la comparación guarda tu precio, el de C24h y la diferencia; si venía de "tienen ellos y tú no" lo marca como tal.
+- En la lista "Ocultos (N)" cada producto muestra esos precios (o la etiqueta "Tienen ellos y tú no") y un **desplegable "Oculto por:"** para elegir el motivo (Compara productos diferentes · Ya lo tengo, no lo detecta · No me interesa · Otro motivo · Sin especificar). El motivo se guarda.
+- Se puede **restaurar** desde esa misma lista (reaparece en la siguiente revisión).
 
 ### Solo PVP (sin margen)
 Compara precio de venta contra precio de venta. El **coste de compra no es público** (vive en tu panel de admin), así que no hay margen/beneficio.
@@ -344,7 +345,7 @@ Solo usa **scraping propio + API pública de Cosméticos24h + Upstash + Vercel**
 
 ### API route
 - `GET /api/comparar-precios` → config actual
-- `POST /api/comparar-precios` con `action`: `addMarca` (nombre, slug, miToken?), `deleteMarca` (slug), `revisar` (slug opcional → solo esa marca; sin slug → todas), `excluir` (slug, suUrl, titulo → oculta un producto), `incluir` (slug, suUrl → lo restaura)
+- `POST /api/comparar-precios` con `action`: `addMarca` (nombre, slug, miToken?), `deleteMarca` (slug), `revisar` (requiere slug; sin slug → HTTP 400), `excluir` (slug, item{suUrl,titulo,tipo,miPrecio?,suPrecio?,miUrl?} → oculta un producto guardando sus precios), `motivo` (slug, suUrl, motivo → fija el motivo de ocultación), `incluir` (slug, suUrl → lo restaura)
 
 ---
 

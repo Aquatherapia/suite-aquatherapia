@@ -14,8 +14,19 @@ type ResultadoMarca = {
   misProductos: number; susProductos: number;
 };
 type Marca = { nombre: string; slug: string; miToken: string };
-type Excluido = { suUrl: string; titulo: string };
+type Excluido = {
+  suUrl: string; titulo: string;
+  tipo?: "comparacion" | "soloEllos";
+  miPrecio?: number; suPrecio?: number; miUrl?: string; motivo?: string;
+};
 type Config = { marcas: Marca[]; ultimaRevision: string | null; resultados: ResultadoMarca[]; excluidos: Record<string, Excluido[]> };
+
+const MOTIVOS = [
+  "Compara productos diferentes",
+  "Ya lo tengo (no lo detecta)",
+  "No me interesa",
+  "Otro motivo",
+];
 
 function toSlug(nombre: string) {
   return nombre.toLowerCase().normalize("NFD")
@@ -42,12 +53,13 @@ function fechaExacta(iso: string) {
 const MOSTRAR_INICIAL = 6;
 
 function MarcaBloque({
-  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir,
+  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo,
 }: {
   r: ResultadoMarca; ocultos: Excluido[]; expandido: boolean; onToggle: () => void;
   mostrarTodos: boolean; onToggleMostrar: () => void;
-  onExcluir: (suUrl: string, titulo: string) => void;
+  onExcluir: (item: Excluido) => void;
   onIncluir: (suUrl: string) => void;
+  onMotivo: (suUrl: string, motivo: string) => void;
 }) {
   const [verOcultos, setVerOcultos] = useState(false);
   const masCaro = r.comparaciones.filter(c => c.diff > 0.01);
@@ -97,7 +109,7 @@ function MarcaBloque({
                     <span className={"cp-col-num " + (caro ? "cp-caro" : c.diff < -0.01 ? "cp-barato" : "")}>
                       {c.diff > 0 ? "+" : ""}{c.diff.toFixed(2)}€
                     </span>
-                    <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir(c.suUrl, c.nombre)}>×</button>
+                    <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecio, miUrl: c.miUrl })}>×</button>
                   </div>
                 );
               })}
@@ -118,7 +130,7 @@ function MarcaBloque({
                 <div key={i} className="cp-fila cp-solo">
                   <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
                   <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
-                  <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir(s.url, s.titulo)}>×</button>
+                  <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
                 </div>
               ))}
             </>
@@ -137,7 +149,34 @@ function MarcaBloque({
                 <div className="cp-ocultos-lista">
                   {ocultos.map((o, i) => (
                     <div key={i} className="cp-oculto-item">
-                      <span className="cp-oculto-nombre">{o.titulo}</span>
+                      <div className="cp-oculto-info">
+                        <a href={o.miUrl ?? o.suUrl} target="_blank" rel="noreferrer" className="cp-oculto-nombre">{o.titulo}</a>
+                        <div className="cp-oculto-precios">
+                          {o.tipo === "soloEllos" ? (
+                            <span className="cp-oculto-tag">Tienen ellos y tú no · C24h {o.suPrecio?.toFixed(2)}€</span>
+                          ) : o.tipo === "comparacion" ? (
+                            <span>
+                              Tú <strong>{o.miPrecio?.toFixed(2)}€</strong> · C24h <strong>{o.suPrecio?.toFixed(2)}€</strong>
+                              {o.miPrecio != null && o.suPrecio != null && (
+                                <span className={o.miPrecio - o.suPrecio > 0.01 ? "cp-caro" : o.miPrecio - o.suPrecio < -0.01 ? "cp-barato" : ""}>
+                                  {" "}({o.miPrecio - o.suPrecio > 0 ? "+" : ""}{(o.miPrecio - o.suPrecio).toFixed(2)}€)
+                                </span>
+                              )}
+                            </span>
+                          ) : null}
+                        </div>
+                        <label className="cp-motivo-row">
+                          Oculto por:
+                          <select
+                            className="cp-motivo-select"
+                            value={o.motivo ?? ""}
+                            onChange={e => onMotivo(o.suUrl, e.target.value)}
+                          >
+                            <option value="">— Sin especificar —</option>
+                            {MOTIVOS.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </label>
+                      </div>
                       <button className="cp-restaurar" onClick={() => onIncluir(o.suUrl)}>Restaurar</button>
                     </div>
                   ))}
@@ -204,10 +243,18 @@ export default function CompararPrecios() {
     setConfig(await res.json());
   }
 
-  async function excluir(slug: string, suUrl: string, titulo: string) {
+  async function excluir(slug: string, item: Excluido) {
     const res = await fetch("/api/comparar-precios", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "excluir", slug, suUrl, titulo }),
+      body: JSON.stringify({ action: "excluir", slug, item }),
+    });
+    setConfig(await res.json());
+  }
+
+  async function cambiarMotivo(slug: string, suUrl: string, motivo: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "motivo", slug, suUrl, motivo }),
     });
     setConfig(await res.json());
   }
@@ -332,8 +379,9 @@ export default function CompararPrecios() {
               key={r.slug} r={r} ocultos={config?.excluidos?.[r.slug] ?? []}
               expandido={expandidos.has(r.slug)} onToggle={() => toggle(r.slug)}
               mostrarTodos={mostrarTodos.has(r.slug)} onToggleMostrar={() => toggleMostrar(r.slug)}
-              onExcluir={(suUrl, titulo) => excluir(r.slug, suUrl, titulo)}
+              onExcluir={(item) => excluir(r.slug, item)}
               onIncluir={(suUrl) => incluir(r.slug, suUrl)}
+              onMotivo={(suUrl, motivo) => cambiarMotivo(r.slug, suUrl, motivo)}
             />
           ))}
         </div>
