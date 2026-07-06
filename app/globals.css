@@ -973,3 +973,48 @@ button:disabled {
   left: 0;
   color: var(--muted);
 }
+
+/* ── Comparar precios (Agente 8) ── */
+.cp-subtit {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 4px 0 8px;
+}
+.cp-tabla-head {
+  display: grid;
+  grid-template-columns: 1fr 68px 68px 74px;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border, #e5e5e5);
+}
+.cp-fila {
+  display: grid;
+  grid-template-columns: 1fr 68px 68px 74px;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border, #eee);
+  font-size: 13px;
+  text-decoration: none;
+  color: inherit;
+}
+.cp-fila:hover { background: var(--card-bg, #f7f7f8); }
+.cp-nombre { font-weight: 500; line-height: 1.35; text-decoration: none; color: inherit; }
+.cp-nombre:hover { text-decoration: underline; }
+.cp-col-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cp-c24 { color: var(--muted); text-decoration: none; }
+.cp-c24:hover { text-decoration: underline; }
+.cp-caro { color: #b91c1c; font-weight: 700; }
+.cp-barato { color: #15803d; font-weight: 600; }
+.cp-baja {
+  display: inline-block; margin-left: 5px; color: #b45309;
+  font-weight: 700; cursor: help;
+}
+.cp-solo { grid-template-columns: 1fr 74px; }
+.cp-packs-nota { font-size: 11px; color: var(--muted); padding: 10px 8px 2px; font-style: italic; }

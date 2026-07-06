@@ -139,6 +139,18 @@ export default async function Home() {
           </div>
           <span className="agente-arrow">→</span>
         </Link>
+
+        <Link href="/comparar-precios" className="agente-card">
+          <span className="agente-icono">⇄</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Comparar mis precios con Cosméticos24h</div>
+            <div className="agente-desc">
+              Cruza tus precios con los de Cosméticos24h marca a marca: te marca
+              dónde vas más caro y qué productos tienen ellos que tú aún no.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
       </div>
     </div>
   );

@@ -2,13 +2,16 @@
 
 ## Qué es esta app
 
-Una suite de herramientas con IA para latiendadecosmeticos.com, construida con Next.js. Tiene **5 agentes**:
+Una suite de herramientas con IA para latiendadecosmeticos.com, construida con Next.js. Tiene **8 agentes**:
 
 1. **Generador de fichas de producto** — Rellenas los datos y la IA redacta la ficha completa
 2. **Vigilar precios en Cosméticos24h** — Detecta descuentos en tus marcas y avisa si cambian
 3. **Post para Google Business Profile** — Convierte ideas/posts en texto listo para publicar (2 negocios)
 4. **Vigilar competidores** — Detecta descuentos en las webs de competidores que tú elijas
 5. **Informe de marketing mensual** — Subes los CSV de tus herramientas y la IA monta el informe mensual completo (canales, ventas, ROAS, comparativa interanual) en PDF
+6. **Vigilar novedades de marcas** — Detecta cuándo una marca sube productos nuevos a su web, para ser de los primeros en venderlos
+7. **Responder reseñas de Google** — Pegas la reseña de un cliente y la IA redacta una respuesta profesional lista para publicar (2 negocios)
+8. **Comparar mis precios con Cosméticos24h** — Cruza TUS precios (latiendadecosmeticos.com) con los de Cosméticos24h por marca: marca dónde vas más caro y qué productos tienen ellos que tú no
 
 **En producción:** https://suite-aquatherapia.vercel.app/
 **Repositorio:** GitHub `Aquatherapia/suite-aquatherapia` conectado a Vercel (push a `main` = deploy automático).
@@ -115,6 +118,8 @@ Cada marca es un acordeón desplegable con todos sus productos con descuento, pr
 
 **Botón PDF por marca** — Genera una "Constancia de precios" descargable con foto, precio y fecha/hora exacta de cada producto. No incluye datos internos de la app.
 
+La cabecera muestra **"Análisis actualizado el [fecha] a las [hora]"** además del tiempo relativo ("hace X").
+
 ### Notificaciones
 
 Si el usuario activa los permisos, el navegador lanza una notificación de escritorio automáticamente al terminar la revisión cuando hay productos nuevos o con cambio de %.
@@ -196,7 +201,10 @@ Detecta automáticamente la plataforma de la web del competidor y extrae los des
 
 ### PDF
 
-Botón PDF **a nivel de marca**: todos los competidores de esa marca en un único documento.
+Botón PDF **a nivel de marca**: todos los competidores de esa marca en un único documento. Cada tarjeta del PDF **enlaza al producto** del competidor. (El scraper convierte las URLs e imágenes relativas en absolutas para que los enlaces funcionen; si vigilabas marcas de antes de este arreglo, vuelve a pulsar "Revisar ahora" para reescribir las URLs viejas.)
+
+### Fecha del análisis
+La cabecera muestra **"Análisis actualizado el [fecha] a las [hora]"** además del tiempo relativo ("hace X").
 
 ### Persistencia
 Upstash KV, clave `vigilar-comp-config`. Mismo formato de detección de cambios (`previos`).
@@ -245,7 +253,96 @@ Solo usa **Gemini** (15 informes/min · 1.500/día; gasta 1 por informe) y **Ver
 
 ---
 
-## Exclusión de packs (Agentes 2 y 4)
+## Agente 6 — Vigilar novedades de marcas
+
+### URL: `/vigilar-novedades`
+
+Detecta cuándo una marca **sube productos nuevos** a su web, para ser de los primeros en tenerlos/venderlos.
+
+### Cómo funciona
+- Añades una marca con la **URL de su tienda** (o de una colección/listado).
+- Al pulsar **Revisar ahora**, la app lee los productos de esa web (mismo scraper que competidores: detecta WooCommerce, PrestaShop y Shopify).
+- Compara las URLs de producto contra las **ya vistas** en revisiones anteriores; las que no había antes se marcan como **nuevas**. En Shopify además usa la fecha de alta del producto.
+- Muestra solo los productos nuevos de cada marca.
+
+### Persistencia
+Upstash KV, clave `vigilar-novedades-config`. `previos` guarda `{ marcaId → [URLs vistas alguna vez] }`.
+
+### API route
+- `GET /api/vigilar-novedades` → config actual
+- `POST /api/vigilar-novedades` con `action`: `addMarca`, `deleteMarca`, `revisar`
+
+### ⚠️ Misma limitación que competidores
+Las webs con Cloudflare Bot Management (Notino, Douglas, Sephora…) no se pueden leer sin navegador headless de pago.
+
+---
+
+## Agente 7 — Responder reseñas de Google
+
+### URL: `/responder-resenas`
+
+Pegas la reseña de un cliente y la IA redacta la **respuesta pública** lista para publicar en tu Perfil de Empresa (Google Business).
+
+### Entradas
+- **Negocio**: La Tienda de Cosméticos o Aquatherapia (da el contexto correcto a la respuesta).
+- **Nombre del cliente** (opcional) — para saludarlo por su nombre.
+- **Valoración 1-5 estrellas** — ajusta el tono (positiva → agradecimiento; negativa → empatía y disculpa).
+- **Texto de la reseña** (opcional) — si el cliente solo dejó estrellas, funciona igual.
+
+### Estilo de la respuesta
+Corta (1-2 frases), muy familiar y cálida, con 1-2 emojis. **No repite ni parafrasea** lo que dice la reseña y **varía** el saludo y la despedida en cada respuesta. No firma con "El equipo de…".
+
+### Resultado
+Texto con botones **Copiar** y **"Redactar otra versión"**, más una guía de cómo publicarlo en Google.
+
+### Límites (gratis)
+Solo usa **Gemini** (1 petición por respuesta). No usa Upstash.
+
+### API route
+- `POST /api/responder-resenas` con `{ negocio, autor?, estrellas, resena? }` → devuelve `{ texto }`.
+
+---
+
+## Agente 8 — Comparar mis precios con Cosméticos24h
+
+### URL: `/comparar-precios`
+
+Cruza **tus precios** (latiendadecosmeticos.com) con los de **Cosméticos24h**, marca a marca. Dos salidas por marca:
+1. **Comparación de precios** — producto | tu precio | su precio | diferencia. En **rojo** dónde tú vas más caro; en verde dónde vas más barato.
+2. **Tienen ellos y tú no** — productos de esa marca que Cosméticos24h vende y tú aún no tienes (posibles novedades / huecos de catálogo). Los packs/estuches salen aparte.
+
+### Cómo funciona (dos fuentes, sin API de pago)
+- **Tu web**: lee tu `sitemap.xml`, filtra los productos cuyo slug contiene el nombre de la marca, y de cada ficha extrae el precio del **JSON-LD (schema.org)**. Tu web es a medida (nginx+PHP, sin Cloudflare) y expone JSON-LD en cada producto → scraping fiable.
+- **Cosméticos24h**: API pública de Shopify `/collections/{slug}/products.json` (igual que el Agente 2).
+
+### Emparejamiento por NOMBRE (limitación clave)
+Cosméticos24h **no publica el EAN** en su API (`barcode: null`) y su SKU es interno suyo → **no hay código común**. Se empareja por **marca + nombre + ml** (similitud de tokens, Jaccard, umbral 0.34). Consecuencias:
+- No es 100% perfecto: algún producto puede quedar sin emparejar o con match de baja confianza (se marca con `≈` para que lo revises).
+- Los **packs** suyos se excluyen de la comparación (evita falsos positivos contra tus productos sueltos) y aparecen listados aparte.
+- En la prueba con Atache: 95 productos tuyos, 120 suyos → 77 comparados + 17 novedades reales + 26 packs.
+
+### Ojo con las ofertas del competidor
+El precio que se compara es el **precio de venta actual de cada uno**. Si Cosméticos24h tiene una marca en oferta (p. ej. Atache con −20%), muchos productos saldrán como "tú más caro" simplemente porque ellos están rebajados en ese momento. Es correcto, pero tenlo en cuenta al leerlo.
+
+### Solo PVP (sin margen)
+Compara precio de venta contra precio de venta. El **coste de compra no es público** (vive en tu panel de admin), así que no hay margen/beneficio.
+
+### Rendimiento y límite de Vercel
+Leer tu web es 1 petición por producto (en paralelo, de 10 en 10). La función usa `maxDuration = 60` (Vercel Hobby lo permite **gratis**; el defecto son 10s). Aun así conviene revisar **marca a marca** (cada marca tiene su botón "Revisar"); "Revisar todas" existe pero para muchas marcas grandes puede acercarse al tope.
+
+### Persistencia
+Upstash KV, clave `comparar-precios-config`. En local cae a `data/comparar-precios-config.json`. Guarda `{ marcas: [{nombre, slug, miToken}], ultimaRevision, resultados }`. Al revisar una marca concreta, solo se reemplaza esa (las demás se conservan).
+
+### Límites (gratis)
+Solo usa **scraping propio + API pública de Cosméticos24h + Upstash + Vercel**. **No usa Gemini.** Solo cubre marcas que Cosméticos24h también venda.
+
+### API route
+- `GET /api/comparar-precios` → config actual
+- `POST /api/comparar-precios` con `action`: `addMarca` (nombre, slug, miToken?), `deleteMarca` (slug), `revisar` (slug opcional → solo esa marca; sin slug → todas)
+
+---
+
+## Exclusión de packs (Agentes 2, 4 y 6)
 
 Ambos vigiladores filtran títulos que contengan: `pack, set, kit, lote, duo, dúo, trio, trío, estuche, bundle, caja, cofre, box, programa, rutina`.
 
@@ -264,7 +361,7 @@ Ambos vigiladores filtran títulos que contengan: `pack, set, kit, lote, duo, d�
 - **Framework**: Next.js 15.5 (App Router, TypeScript 5.8), React 19 — software libre, gratis siempre
 - **IA**: Google Gemini 2.5 Flash (gratis, sin tarjeta)
 - **Scraping**: node-html-parser 8.0 (software libre)
-- **Persistencia**: Upstash KV (Redis) — claves `vigilar-config` y `vigilar-comp-config`
+- **Persistencia**: Upstash KV (Redis) — claves `vigilar-config`, `vigilar-comp-config` y `vigilar-novedades-config`
 - **Hosting**: Vercel (Hobby, gratis), deploy automático desde GitHub
 - **Claves API** (`.env.local` en local + Vercel → Settings → Environment Variables):
   - `GEMINI_API_KEY`
@@ -285,6 +382,9 @@ suite-aquatherapia/
 │   ├── google-business/page.tsx       ← Agente 3: posts Google Business
 │   ├── vigilar-competidores/page.tsx  ← Agente 4: monitor de competidores
 │   ├── informes/page.tsx              ← Agente 5: informe de marketing mensual
+│   ├── vigilar-novedades/page.tsx     ← Agente 6: novedades de marcas
+│   ├── responder-resenas/page.tsx     ← Agente 7: respuestas a reseñas
+│   ├── comparar-precios/page.tsx      ← Agente 8: comparar mis precios vs Cosméticos24h
 │   └── api/
 │       ├── gemini.ts                  ← Lógica compartida Gemini
 │       ├── generate/route.ts          ← Generación de ficha completa
@@ -292,7 +392,10 @@ suite-aquatherapia/
 │       ├── google-business/route.ts   ← API posts Google Business
 │       ├── vigilar/route.ts           ← API del monitor de precios
 │       ├── vigilar-comp/route.ts      ← API del monitor de competidores
-│       └── informes/route.ts          ← API del informe mensual (parsea CSV de canales + Gemini)
+│       ├── informes/route.ts          ← API del informe mensual (parsea CSV de canales + Gemini)
+│       ├── vigilar-novedades/route.ts ← API de novedades de marcas
+│       ├── responder-resenas/route.ts ← API de respuestas a reseñas
+│       └── comparar-precios/route.ts  ← API comparar mis precios vs Cosméticos24h
 ├── data/
 │   └── vigilar-config.json            ← Solo fallback en local (en prod se usa Upstash)
 ├── .env.local                         ← Claves API (no subir a GitHub)
