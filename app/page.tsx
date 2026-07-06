@@ -151,6 +151,19 @@ export default async function Home() {
           </div>
           <span className="agente-arrow">→</span>
         </Link>
+
+        <Link href="/margenes" className="agente-card">
+          <span className="agente-icono">％</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Control de márgenes</div>
+            <div className="agente-desc">
+              Sube el CSV de control de stocks y detecta los productos con menos
+              del 30% de margen. Te dice si el problema es un descuento excesivo
+              o un precio/coste mal puesto.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
       </div>
     </div>
   );

@@ -1,0 +1,271 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+
+type Fila = {
+  margen: number;
+  id: string;
+  producto: string;
+  propiedad: string;
+  precio: number;
+  coste: number;
+  causa: "DESCUENTO" | "PRECIO/COSTE";
+  detalle: string;
+  perdidas: boolean;
+};
+
+type Resultado = {
+  marca: string;
+  analizados: number;
+  sinCoste: number;
+  filas: Fila[];
+};
+
+function num(s: string): number {
+  const t = (s || "").trim();
+  if (!t) return 0;
+  const n = parseFloat(t.replace(/\./g, "").replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+
+function margen(precio: number, coste: number, iva: number): number | null {
+  if (precio <= 0) return null;
+  const psiva = precio / (1 + iva / 100);
+  return ((psiva - coste) / psiva) * 100;
+}
+
+function analizar(texto: string, umbral: number, iva: number): Resultado {
+  const lineas = texto.split(/\r?\n/).filter((l) => l.trim());
+  lineas.shift(); // cabecera
+  const filas: Fila[] = [];
+  let analizados = 0;
+  let sinCoste = 0;
+  let marca = "";
+
+  for (const linea of lineas) {
+    const c = linea.split(";");
+    if (c.length < 12 || !c[0].trim()) continue;
+    const id = c[0].trim();
+    const mar = (c[4] || "").trim();
+    const producto = (c[5] || "").trim();
+    const propiedad = (c[6] || "").trim();
+    const precio = num(c[8]); // PRECIO (con IVA, con descuento aplicado)
+    const pant = num(c[9]); // P. ANT (tarifa sin descuento)
+    const desc = num(c[10]); // DESC %
+    const coste = num(c[11]); // P.COSTE REAL (sin IVA)
+
+    if (mar && !marca) marca = mar;
+    if (precio <= 0) continue;
+    if (coste <= 0) {
+      sinCoste++;
+      continue;
+    }
+    analizados++;
+    const mActual = margen(precio, coste, iva);
+    if (mActual === null || mActual >= umbral) continue;
+
+    const mTarifa = margen(pant > 0 ? pant : precio, coste, iva);
+    let causa: "DESCUENTO" | "PRECIO/COSTE";
+    let detalle: string;
+    if (mTarifa !== null && mTarifa >= umbral) {
+      causa = "DESCUENTO";
+      detalle = `Dto ${desc.toFixed(0)}% → a tarifa daría ${mTarifa.toFixed(0)}%`;
+    } else {
+      causa = "PRECIO/COSTE";
+      detalle = `Aun sin descuento sería ${mTarifa !== null ? mTarifa.toFixed(0) : "?"}%`;
+    }
+    filas.push({
+      margen: mActual,
+      id,
+      producto,
+      propiedad,
+      precio,
+      coste,
+      causa,
+      detalle,
+      perdidas: mActual < 0,
+    });
+  }
+
+  filas.sort((a, b) => a.margen - b.margen);
+  return { marca, analizados, sinCoste, filas };
+}
+
+export default function Margenes() {
+  const [umbral, setUmbral] = useState(30);
+  const [iva, setIva] = useState(21);
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [nombreArchivo, setNombreArchivo] = useState("");
+  const [error, setError] = useState("");
+
+  function procesar(texto: string) {
+    setError("");
+    try {
+      const res = analizar(texto, umbral, iva);
+      if (res.analizados === 0) {
+        setError(
+          "No se han encontrado productos con coste válido. ¿Seguro que es el CSV de control de stocks (separado por ;)?"
+        );
+        setResultado(null);
+        return;
+      }
+      setResultado(res);
+    } catch {
+      setError("No se ha podido leer el archivo. Comprueba que es el CSV de control de stocks.");
+      setResultado(null);
+    }
+  }
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setNombreArchivo(file.name);
+    const reader = new FileReader();
+    reader.onload = () => procesar(String(reader.result));
+    reader.readAsText(file, "utf-8");
+  }
+
+  return (
+    <div className="wrap">
+      <Link href="/" className="volver-link">← Herramientas IA</Link>
+      <h1>Control de márgenes</h1>
+      <p className="subtitle">
+        Sube el CSV de control de stocks y te marca los productos con menos del{" "}
+        {umbral}% de margen entre el PRECIO (con IVA) y el P.COSTE REAL (sin IVA).
+        Para cada uno te dice si es por un descuento excesivo o por el precio/coste.
+      </p>
+
+      <div className="mg-controls">
+        <label className="mg-field">
+          Margen mínimo deseado
+          <div className="mg-input-suffix">
+            <input
+              type="number"
+              value={umbral}
+              min={0}
+              max={99}
+              onChange={(e) => setUmbral(Number(e.target.value))}
+            />
+            <span>%</span>
+          </div>
+        </label>
+        <label className="mg-field">
+          IVA del precio
+          <div className="mg-input-suffix">
+            <input
+              type="number"
+              value={iva}
+              min={0}
+              max={30}
+              onChange={(e) => setIva(Number(e.target.value))}
+            />
+            <span>%</span>
+          </div>
+        </label>
+        <label className="mg-upload">
+          <input type="file" accept=".csv,text/csv" onChange={onFile} />
+          <span className="mg-upload-btn">📄 Subir CSV</span>
+          <span className="mg-upload-name">{nombreArchivo || "Ningún archivo"}</span>
+        </label>
+      </div>
+
+      <p className="mg-hint">
+        Descarga el CSV desde PrestaShop (Control de stocks) y súbelo. Si cambias
+        el margen o el IVA, vuelve a subir el archivo para recalcular.
+      </p>
+
+      {error && <div className="error">{error}</div>}
+
+      {resultado && (
+        <div className="mg-resultado">
+          <div className="mg-resumen">
+            <div className="mg-resumen-marca">
+              {resultado.marca || "Sin marca detectada"}
+            </div>
+            <div className="mg-resumen-stats">
+              <span className="mg-stat">
+                <strong>{resultado.filas.length}</strong> por debajo del {umbral}%
+              </span>
+              <span className="mg-stat">
+                {resultado.analizados} analizados
+              </span>
+              {resultado.sinCoste > 0 && (
+                <span className="mg-stat mg-stat-muted">
+                  {resultado.sinCoste} omitidos (coste 0,00)
+                </span>
+              )}
+            </div>
+          </div>
+
+          {resultado.filas.length === 0 ? (
+            <div className="mg-ok">
+              ✓ Ningún producto por debajo del {umbral}%. Todos los márgenes están
+              bien.
+            </div>
+          ) : (
+            <div className="mg-tabla">
+              <div className="mg-tabla-head">
+                <span>Margen</span>
+                <span>Producto</span>
+                <span className="mg-col-num">PVP</span>
+                <span className="mg-col-num">Coste</span>
+                <span>¿Por qué?</span>
+              </div>
+              {resultado.filas.map((f) => (
+                <div key={f.id} className="mg-fila">
+                  <span
+                    className={
+                      "mg-margen " +
+                      (f.perdidas ? "mg-perdidas" : f.margen < umbral - 5 ? "mg-bajo" : "mg-medio")
+                    }
+                  >
+                    {f.margen.toFixed(1)}%
+                  </span>
+                  <span className="mg-prod">
+                    <span className="mg-prod-nombre">{f.producto}</span>
+                    <span className="mg-prod-meta">
+                      ID {f.id}
+                      {f.propiedad ? ` · ${f.propiedad}` : ""}
+                    </span>
+                  </span>
+                  <span className="mg-col-num">{f.precio.toFixed(2)}€</span>
+                  <span className="mg-col-num">{f.coste.toFixed(2)}€</span>
+                  <span className="mg-causa">
+                    <span
+                      className={
+                        "mg-causa-tag " +
+                        (f.causa === "DESCUENTO" ? "mg-causa-dto" : "mg-causa-precio")
+                      }
+                    >
+                      {f.causa === "DESCUENTO" ? "Descuento" : "Precio/Coste"}
+                    </span>
+                    <span className="mg-causa-detalle">{f.detalle}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {resultado.filas.length > 0 && (
+            <div className="mg-leyenda">
+              <p>
+                <strong>Descuento</strong>: el precio de tarifa está bien, pero la
+                promoción hunde el margen → baja el descuento.
+              </p>
+              <p>
+                <strong>Precio/Coste</strong>: aun sin descuento no llega al {umbral}%
+                → sube el precio de tarifa o revisa el coste.
+              </p>
+              <p className="mg-leyenda-nota">
+                Margen calculado sobre el precio de venta sin IVA ({iva}%). Los
+                productos con coste 0,00 (regalos/packs sin dato) no se pueden
+                calcular y se omiten.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
