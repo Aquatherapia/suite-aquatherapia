@@ -2,7 +2,7 @@
 
 ## Qué es esta app
 
-Una suite de herramientas con IA para latiendadecosmeticos.com, construida con Next.js. Tiene **8 agentes**:
+Una suite de herramientas con IA para latiendadecosmeticos.com, construida con Next.js. Tiene **9 agentes**:
 
 1. **Generador de fichas de producto** — Rellenas los datos y la IA redacta la ficha completa
 2. **Vigilar precios en Cosméticos24h** — Detecta descuentos en tus marcas y avisa si cambian
@@ -12,6 +12,7 @@ Una suite de herramientas con IA para latiendadecosmeticos.com, construida con N
 6. **Vigilar novedades de marcas** — Detecta cuándo una marca sube productos nuevos a su web, para ser de los primeros en venderlos
 7. **Responder reseñas de Google** — Pegas la reseña de un cliente y la IA redacta una respuesta profesional lista para publicar (2 negocios)
 8. **Comparar mis precios con Cosméticos24h** — Cruza TUS precios (latiendadecosmeticos.com) con los de Cosméticos24h por marca: marca dónde vas más caro y qué productos tienen ellos que tú no
+9. **Control de márgenes** — Subes el CSV de control de stocks y detecta los productos con menos del 30% de margen; diagnostica si es por descuento o por precio/coste, y exporta a Excel (con EAN) para el encargado de precios
 
 **En producción:** https://suite-aquatherapia.vercel.app/
 **Repositorio:** GitHub `Aquatherapia/suite-aquatherapia` conectado a Vercel (push a `main` = deploy automático).
@@ -350,6 +351,48 @@ Solo usa **scraping propio + API pública de Cosméticos24h + Upstash + Vercel**
 
 ---
 
+## Agente 9 — Control de márgenes
+
+### URL: `/margenes`
+
+Subes el **CSV de control de stocks** (export de PrestaShop) y te marca los productos cuyo **margen** es inferior a un umbral (30% por defecto). Para cada uno **diagnostica la causa** (descuento o precio/coste) y permite **exportar a Excel** para el encargado de precios.
+
+### Cómo calcula el margen (clave: IVA)
+El **PRECIO (columna I)** lleva **IVA (21% por defecto)**; el **P.COSTE REAL (columna L)** **NO** lleva IVA. Por eso primero se quita el IVA al precio:
+
+```
+Precio sin IVA = PRECIO / 1,21
+Margen % = (Precio sin IVA − Coste) / Precio sin IVA × 100
+```
+
+Es **margen sobre el precio de venta** (estándar de retail), no markup sobre coste. Se marca todo lo que quede por debajo del umbral.
+
+### Diagnóstico de la causa
+Para cada producto marcado compara el margen actual (con el descuento ya aplicado, columna I) contra el margen a **precio de tarifa** (columna J, P. ANT):
+- **Descuento** — a precio de tarifa sí llegaría al umbral, pero la promoción lo hunde → bajar el descuento.
+- **Precio/Coste** — aun sin descuento no llega al umbral → subir el precio de tarifa o revisar el coste.
+
+### Productos omitidos
+Los productos con **coste 0,00** (precio de venta pero sin coste cargado) no se pueden calcular y se **listan aparte** (desplegable "N productos omitidos"), con EAN, producto y PVP, para que se les cargue el coste en PrestaShop. Los regalos/minitallas a 0,00 € (sin precio de venta) no se listan.
+
+### Exportar a Excel
+Botón **"Exportar a Excel"** que descarga un archivo abrible directo en Excel (separador `;`, decimales con coma, BOM UTF-8 para acentos, y el `sep=;` como primera línea). Incluye:
+- **Productos con margen bajo**: EAN, producto, propiedad, margen %, PVP con IVA, PVP sin IVA, coste sin IVA, problema (Descuento/Precio-Coste) y detalle.
+- **Productos sin coste**: al final, con EAN y PVP, marcados como "Sin coste cargado" y la casilla de coste **vacía** para que el encargado la rellene.
+
+El **EAN se fuerza a texto** (`="..."`) para que Excel no lo convierta a notación científica ni pierda dígitos. Archivo: `margenes-bajos_{marca}_{fecha}.csv`.
+
+### Umbral e IVA configurables
+En la propia página se pueden cambiar el **margen mínimo** (30) y el **IVA** (21). Al cambiarlos hay que **volver a subir el CSV** para recalcular.
+
+### Formato del CSV esperado
+Separador `;`. Columnas por índice (0-based): 0=ID, 4=MARCA, 5=PRODUCTO, 6=PROPIEDAD, **7=EAN**, **8=PRECIO** (con IVA, con descuento aplicado), 9=P.ANT (tarifa), 10=DESC %, **11=P.COSTE REAL** (sin IVA).
+
+### Límites (gratis)
+**No usa Gemini, ni Upstash, ni ninguna API**: todo el cálculo se hace **en el navegador** al subir el CSV. No hay persistencia (cada CSV se procesa en el momento). Sin coste de servidor ni límites de uso. También existe una skill equivalente de Claude Code (`/margen-precios`, `analizar_margen.py`) por si se quiere usar desde el chat en vez de la web.
+
+---
+
 ## Exclusión de packs (Agentes 2, 4 y 6)
 
 Ambos vigiladores filtran títulos que contengan: `pack, set, kit, lote, duo, dúo, trio, trío, estuche, bundle, caja, cofre, box, programa, rutina`.
@@ -393,6 +436,7 @@ suite-aquatherapia/
 │   ├── vigilar-novedades/page.tsx     ← Agente 6: novedades de marcas
 │   ├── responder-resenas/page.tsx     ← Agente 7: respuestas a reseñas
 │   ├── comparar-precios/page.tsx      ← Agente 8: comparar mis precios vs Cosméticos24h
+│   ├── margenes/page.tsx              ← Agente 9: control de márgenes (cálculo en cliente, sin API)
 │   └── api/
 │       ├── gemini.ts                  ← Lógica compartida Gemini
 │       ├── generate/route.ts          ← Generación de ficha completa
