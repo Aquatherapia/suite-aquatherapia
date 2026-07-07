@@ -6,6 +6,7 @@ import Link from "next/link";
 type Fila = {
   margen: number;
   id: string;
+  ean: string;
   producto: string;
   propiedad: string;
   precio: number;
@@ -57,6 +58,7 @@ function analizar(texto: string, umbral: number, iva: number): Resultado {
     const id = c[0].trim();
     const mar = (c[4] || "").trim();
     const producto = (c[5] || "").trim();
+    const ean = (c[7] || "").trim(); // EAN (código de barras)
     const propiedad = (c[6] || "").trim();
     const precio = num(c[8]); // PRECIO (con IVA, con descuento aplicado)
     const pant = num(c[9]); // P. ANT (tarifa sin descuento)
@@ -88,6 +90,7 @@ function analizar(texto: string, umbral: number, iva: number): Resultado {
     filas.push({
       margen: mActual,
       id,
+      ean,
       producto,
       propiedad,
       precio,
@@ -135,6 +138,60 @@ export default function Margenes() {
     const reader = new FileReader();
     reader.onload = () => procesar(String(reader.result));
     reader.readAsText(file, "utf-8");
+  }
+
+  function exportarExcel() {
+    if (!resultado || resultado.filas.length === 0) return;
+    const sep = ";";
+    const dec = (n: number, d = 2) => n.toFixed(d).replace(".", ",");
+    const esc = (v: string) => {
+      const s = String(v ?? "");
+      return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const cols = [
+      "EAN",
+      "Producto",
+      "Propiedad",
+      "Margen %",
+      "PVP con IVA (€)",
+      "PVP sin IVA (€)",
+      "Coste sin IVA (€)",
+      "Problema",
+      "Detalle",
+    ];
+    const lineas = ["sep=;", cols.join(sep)];
+    for (const f of resultado.filas) {
+      const psiva = f.precio / (1 + iva / 100);
+      lineas.push(
+        [
+          `="${f.ean}"`, // fuerza texto para no perder el EAN en Excel
+          esc(f.producto),
+          esc(f.propiedad),
+          dec(f.margen, 1),
+          dec(f.precio),
+          dec(psiva),
+          dec(f.coste),
+          f.causa === "DESCUENTO" ? "Descuento excesivo" : "Precio/Coste",
+          esc(f.detalle),
+        ].join(sep)
+      );
+    }
+    const contenido = "﻿" + lineas.join("\r\n");
+    const blob = new Blob([contenido], { type: "text/csv;charset=utf-8;" });
+    const fecha = new Date().toISOString().slice(0, 10);
+    const marcaSlug = (resultado.marca || "sin-marca")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `margenes-bajos_${marcaSlug}_${fecha}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -208,6 +265,18 @@ export default function Margenes() {
               )}
             </div>
           </div>
+
+          {resultado.filas.length > 0 && (
+            <div className="mg-export-bar">
+              <button className="mg-export-btn" onClick={exportarExcel}>
+                ⬇ Exportar a Excel
+              </button>
+              <span className="mg-export-nota">
+                Descarga los {resultado.filas.length} productos marcados (con EAN)
+                para pasárselos a tu compañero de precios.
+              </span>
+            </div>
+          )}
 
           {resultado.filas.length === 0 ? (
             <div className="mg-ok">

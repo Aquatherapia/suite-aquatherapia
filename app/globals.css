@@ -1145,6 +1145,19 @@ button:disabled {
 .mg-leyenda p:last-child { margin-bottom: 0; }
 .mg-leyenda-nota { color: var(--muted); font-size: 12px; }
 
+.mg-export-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 12px 0 4px;
+}
+.mg-export-btn {
+  width: auto; margin-top: 0;
+  background: #1f7a3d; color: #fff; border: none;
+  padding: 9px 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+}
+.mg-export-btn:hover { background: #1a6834; }
+.mg-export-nota { font-size: 12px; color: var(--muted); }
+
 .mg-omitidos { margin-top: 16px; }
 .mg-omitidos-toggle {
   width: 100%; text-align: left; background: var(--card);
