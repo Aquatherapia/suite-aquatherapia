@@ -1017,6 +1017,11 @@ button:disabled {
   font-weight: 700; cursor: help;
 }
 .cp-solo { grid-template-columns: 1fr 66px 22px; }
+.cp-pack-tag {
+  display: inline-block; margin-right: 6px; padding: 0 5px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #6d28d9; background: #ede9fe; border-radius: 4px; vertical-align: middle;
+}
 .cp-packs-nota { font-size: 11px; color: var(--muted); padding: 10px 8px 2px; font-style: italic; }
 .cp-ocultar {
   width: 20px; height: 20px; padding: 0; border: none; background: transparent;

@@ -31,6 +31,7 @@ type Comparacion = {
   confianza: number;   // 0-1, calidad del emparejamiento por nombre
   miUrl: string;
   suUrl: string;
+  esPack?: boolean;    // true si es un pack/estuche
 };
 
 type SoloEllos = {
@@ -156,7 +157,7 @@ async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promis
   return out;
 }
 
-type MiProducto = { nombre: string; url: string; precio: number; tok: Set<string> };
+type MiProducto = { nombre: string; url: string; precio: number; tok: Set<string>; esPack: boolean };
 
 // Enumera y lee los productos de una marca en la tienda propia
 async function leerMisProductos(miToken: string, sitemapXml: string): Promise<MiProducto[]> {
@@ -178,7 +179,8 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<Mi
       if (precio === null) return null;
       const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
       const nombre = slug.replace(/-/g, " ");
-      return { nombre, url, precio, tok: tokens(nombre, miToken) };
+      const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
+      return { nombre, url, precio, tok: tokens(nombre, miToken), esPack };
     } catch {
       return null;
     }
@@ -304,10 +306,11 @@ export async function POST(req: NextRequest) {
           ex.suPrecio = sp.precio;
           let mejor = -1, mejorJ = 0;
           for (let j = 0; j < mis.length; j++) {
+            if (mis[j].esPack !== sp.esPack) continue;
             const jj = jaccard(sp.tok, mis[j].tok);
             if (jj > mejorJ) { mejorJ = jj; mejor = j; }
           }
-          if (mejorJ >= UMBRAL && mejor >= 0 && !sp.esPack) {
+          if (mejorJ >= UMBRAL && mejor >= 0) {
             ex.tipo = "comparacion"; ex.miPrecio = mis[mejor].precio; ex.miUrl = mis[mejor].url;
           } else {
             ex.tipo = "soloEllos";
@@ -321,12 +324,15 @@ export async function POST(req: NextRequest) {
 
         for (const s of suProdsAll) {
           if (ocultos.has(s.url)) continue;
+          // Emparejamos del mismo tipo: pack con pack, suelto con suelto
+          // (evita cruzar un pack suyo con un producto suelto tuyo)
           let mejor = -1, mejorJ = 0;
           for (let j = 0; j < mis.length; j++) {
+            if (mis[j].esPack !== s.esPack) continue;
             const jj = jaccard(s.tok, mis[j].tok);
             if (jj > mejorJ) { mejorJ = jj; mejor = j; }
           }
-          if (mejorJ >= UMBRAL && mejor >= 0 && !s.esPack) {
+          if (mejorJ >= UMBRAL && mejor >= 0) {
             const mp = mis[mejor];
             misUsados.add(mejor);
             comparaciones.push({
@@ -338,6 +344,7 @@ export async function POST(req: NextRequest) {
               confianza: Math.round(mejorJ * 100) / 100,
               miUrl: mp.url,
               suUrl: s.url,
+              esPack: s.esPack,
             });
           } else {
             soloEllos.push({ titulo: s.titulo, precio: s.precio, url: s.url, esPack: s.esPack });

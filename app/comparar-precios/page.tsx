@@ -5,7 +5,7 @@ import Link from "next/link";
 
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
-  diff: number; confianza: number; miUrl: string; suUrl: string;
+  diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean;
 };
 type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean };
 type ResultadoMarca = {
@@ -101,6 +101,7 @@ function MarcaBloque({
                 return (
                   <div key={i} className="cp-fila">
                     <a href={c.miUrl} target="_blank" rel="noreferrer" className="cp-nombre">
+                      {c.esPack && <span className="cp-pack-tag">pack</span>}
                       {c.nombre}
                       {c.confianza < 0.5 && <span className="cp-baja" title="Emparejamiento de baja confianza: revísalo">≈</span>}
                     </a>
@@ -137,7 +138,18 @@ function MarcaBloque({
           )}
 
           {packs.length > 0 && (
-            <div className="cp-packs-nota">+ {packs.length} packs/estuches suyos que no tienes (no comparados por ser lotes)</div>
+            <>
+              <div className="cp-subtit" style={{ marginTop: 16 }}>
+                Packs/estuches que tienen ellos y tú no ({packs.length})
+              </div>
+              {packs.map((s, i) => (
+                <div key={i} className="cp-fila cp-solo">
+                  <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
+                  <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
+                  <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
+                </div>
+              ))}
+            </>
           )}
 
           {ocultos.length > 0 && (

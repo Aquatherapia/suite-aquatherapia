@@ -310,7 +310,8 @@ Solo usa **Gemini** (1 petición por respuesta). No usa Upstash.
 
 Cruza **tus precios** (latiendadecosmeticos.com) con los de **Cosméticos24h**, marca a marca. Dos salidas por marca:
 1. **Comparación de precios** — producto | tu precio | su precio | diferencia. En **rojo** dónde tú vas más caro; en verde dónde vas más barato.
-2. **Tienen ellos y tú no** — productos de esa marca que Cosméticos24h vende y tú aún no tienes (posibles novedades / huecos de catálogo). Los packs/estuches salen aparte.
+2. **Tienen ellos y tú no** — productos de esa marca que Cosméticos24h vende y tú aún no tienes (posibles novedades / huecos de catálogo).
+3. **Packs/estuches que tienen ellos y tú no** — los packs suyos que no tienes, listados aparte (por si alguno interesa añadirlo).
 
 ### Cómo funciona (dos fuentes, sin API de pago)
 - **Tu web**: lee tu `sitemap.xml`, filtra los productos cuyo slug contiene el nombre de la marca, y de cada ficha extrae el precio del **JSON-LD (schema.org)**. Tu web es a medida (nginx+PHP, sin Cloudflare) y expone JSON-LD en cada producto → scraping fiable.
@@ -319,8 +320,8 @@ Cruza **tus precios** (latiendadecosmeticos.com) con los de **Cosméticos24h**, 
 ### Emparejamiento por NOMBRE (limitación clave)
 Cosméticos24h **no publica el EAN** en su API (`barcode: null`) y su SKU es interno suyo → **no hay código común**. Se empareja por **marca + nombre + ml** (similitud de tokens, Jaccard, umbral 0.34). Consecuencias:
 - No es 100% perfecto: algún producto puede quedar sin emparejar o con match de baja confianza (se marca con `≈` para que lo revises).
-- Los **packs** suyos se excluyen de la comparación (evita falsos positivos contra tus productos sueltos) y aparecen listados aparte.
-- En la prueba con Atache: 95 productos tuyos, 120 suyos → 77 comparados + 17 novedades reales + 26 packs.
+- **Packs**: se emparejan solo **pack con pack** (nunca un pack suyo contra un producto suelto tuyo). Los que tenéis ambos se comparan (con etiqueta "pack"); los que solo tienen ellos se listan en su propia sección "Packs/estuches que tienen ellos y tú no". Aun así, sus packs-combo (dos productos juntos) pueden cruzarse con un pack tuyo más simple → si pasa, se oculta con la ×.
+- En la prueba con Atache: 95 productos tuyos, 120 suyos → ~79 comparados (incl. algún pack) + 17 novedades sueltas + 23 packs solo suyos.
 
 ### Ojo con las ofertas del competidor
 El precio que se compara es el **precio de venta actual de cada uno**. Si Cosméticos24h tiene una marca en oferta (p. ej. Atache con −20%), muchos productos saldrán como "tú más caro" simplemente porque ellos están rebajados en ese momento. Es correcto, pero tenlo en cuenta al leerlo.
