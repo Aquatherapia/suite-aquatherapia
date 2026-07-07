@@ -18,6 +18,7 @@ type Fila = {
 
 type Omitido = {
   id: string;
+  ean: string;
   producto: string;
   propiedad: string;
   precio: number;
@@ -70,7 +71,7 @@ function analizar(texto: string, umbral: number, iva: number): Resultado {
     if (precio <= 0) continue;
     // Producto con precio pero sin coste cargado: no se puede calcular el margen
     if (coste <= 0) {
-      omitidos.push({ id, producto, propiedad, precio, motivo: "SIN COSTE" });
+      omitidos.push({ id, ean, producto, propiedad, precio, motivo: "SIN COSTE" });
       continue;
     }
     analizados++;
@@ -141,7 +142,8 @@ export default function Margenes() {
   }
 
   function exportarExcel() {
-    if (!resultado || resultado.filas.length === 0) return;
+    if (!resultado || (resultado.filas.length === 0 && resultado.omitidos.length === 0))
+      return;
     const sep = ";";
     const dec = (n: number, d = 2) => n.toFixed(d).replace(".", ",");
     const esc = (v: string) => {
@@ -173,6 +175,22 @@ export default function Margenes() {
           dec(f.coste),
           f.causa === "DESCUENTO" ? "Descuento excesivo" : "Precio/Coste",
           esc(f.detalle),
+        ].join(sep)
+      );
+    }
+    // Productos sin coste cargado: van al final para que les metan el coste
+    for (const o of resultado.omitidos) {
+      lineas.push(
+        [
+          `="${o.ean}"`,
+          esc(o.producto),
+          esc(o.propiedad),
+          "", // sin margen (no calculable)
+          dec(o.precio),
+          "", // sin PVP sin IVA
+          "", // sin coste: es lo que hay que rellenar
+          "Sin coste cargado",
+          "Cargar el coste para poder calcular el margen",
         ].join(sep)
       );
     }
@@ -266,13 +284,15 @@ export default function Margenes() {
             </div>
           </div>
 
-          {resultado.filas.length > 0 && (
+          {(resultado.filas.length > 0 || resultado.omitidos.length > 0) && (
             <div className="mg-export-bar">
               <button className="mg-export-btn" onClick={exportarExcel}>
                 ⬇ Exportar a Excel
               </button>
               <span className="mg-export-nota">
-                Descarga los {resultado.filas.length} productos marcados (con EAN)
+                Descarga (con EAN) los {resultado.filas.length} productos marcados
+                {resultado.omitidos.length > 0 &&
+                  ` + ${resultado.omitidos.length} sin coste`}{" "}
                 para pasárselos a tu compañero de precios.
               </span>
             </div>
