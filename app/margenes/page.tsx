@@ -15,10 +15,18 @@ type Fila = {
   perdidas: boolean;
 };
 
+type Omitido = {
+  id: string;
+  producto: string;
+  propiedad: string;
+  precio: number;
+  motivo: "SIN COSTE" | "SIN PRECIO";
+};
+
 type Resultado = {
   marca: string;
   analizados: number;
-  sinCoste: number;
+  omitidos: Omitido[];
   filas: Fila[];
 };
 
@@ -39,8 +47,8 @@ function analizar(texto: string, umbral: number, iva: number): Resultado {
   const lineas = texto.split(/\r?\n/).filter((l) => l.trim());
   lineas.shift(); // cabecera
   const filas: Fila[] = [];
+  const omitidos: Omitido[] = [];
   let analizados = 0;
-  let sinCoste = 0;
   let marca = "";
 
   for (const linea of lineas) {
@@ -56,9 +64,11 @@ function analizar(texto: string, umbral: number, iva: number): Resultado {
     const coste = num(c[11]); // P.COSTE REAL (sin IVA)
 
     if (mar && !marca) marca = mar;
+    // Regalos / productos sin precio de venta: no tienen margen que calcular
     if (precio <= 0) continue;
+    // Producto con precio pero sin coste cargado: no se puede calcular el margen
     if (coste <= 0) {
-      sinCoste++;
+      omitidos.push({ id, producto, propiedad, precio, motivo: "SIN COSTE" });
       continue;
     }
     analizados++;
@@ -89,7 +99,7 @@ function analizar(texto: string, umbral: number, iva: number): Resultado {
   }
 
   filas.sort((a, b) => a.margen - b.margen);
-  return { marca, analizados, sinCoste, filas };
+  return { marca, analizados, omitidos, filas };
 }
 
 export default function Margenes() {
@@ -98,6 +108,7 @@ export default function Margenes() {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [nombreArchivo, setNombreArchivo] = useState("");
   const [error, setError] = useState("");
+  const [verOmitidos, setVerOmitidos] = useState(false);
 
   function procesar(texto: string) {
     setError("");
@@ -190,9 +201,9 @@ export default function Margenes() {
               <span className="mg-stat">
                 {resultado.analizados} analizados
               </span>
-              {resultado.sinCoste > 0 && (
+              {resultado.omitidos.length > 0 && (
                 <span className="mg-stat mg-stat-muted">
-                  {resultado.sinCoste} omitidos (coste 0,00)
+                  {resultado.omitidos.length} sin coste (no calculables)
                 </span>
               )}
             </div>
@@ -258,10 +269,44 @@ export default function Margenes() {
                 → sube el precio de tarifa o revisa el coste.
               </p>
               <p className="mg-leyenda-nota">
-                Margen calculado sobre el precio de venta sin IVA ({iva}%). Los
-                productos con coste 0,00 (regalos/packs sin dato) no se pueden
-                calcular y se omiten.
+                Margen calculado sobre el precio de venta sin IVA ({iva}%).
               </p>
+            </div>
+          )}
+
+          {resultado.omitidos.length > 0 && (
+            <div className="mg-omitidos">
+              <button
+                className="mg-omitidos-toggle"
+                onClick={() => setVerOmitidos((v) => !v)}
+              >
+                {verOmitidos ? "▲" : "▼"} {resultado.omitidos.length} producto
+                {resultado.omitidos.length !== 1 ? "s" : ""} omitido
+                {resultado.omitidos.length !== 1 ? "s" : ""} (sin coste cargado, no
+                se puede calcular el margen)
+              </button>
+              {verOmitidos && (
+                <div className="mg-omitidos-lista">
+                  <div className="mg-omitidos-nota">
+                    Estos productos tienen precio de venta pero el P.COSTE REAL está
+                    a 0,00. Cárgales el coste en PrestaShop para poder revisar su
+                    margen.
+                  </div>
+                  {resultado.omitidos.map((o) => (
+                    <div key={o.id} className="mg-omitido-fila">
+                      <span className="mg-prod">
+                        <span className="mg-prod-nombre">{o.producto}</span>
+                        <span className="mg-prod-meta">
+                          ID {o.id}
+                          {o.propiedad ? ` · ${o.propiedad}` : ""}
+                        </span>
+                      </span>
+                      <span className="mg-col-num">{o.precio.toFixed(2)}€</span>
+                      <span className="mg-omitido-tag">Coste 0,00</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
