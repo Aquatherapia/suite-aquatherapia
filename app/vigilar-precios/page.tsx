@@ -62,7 +62,7 @@ function generarPDF(r: ResultadoMarca, ultimaRevision: string | null) {
           <span class="precio-original">${d.precioOriginal.toFixed(2)} €</span>
           <span class="dto">−${d.descuento}%</span>
         </div>
-        <div class="url-prod">cosmeticos24h.com/products/${d.url.split("/products/")[1] ?? ""}</div>
+        <a class="url-prod" href="${d.url}">Ver en Cosméticos24h &rarr;</a>
       </div>
     </div>`).join("");
 
@@ -88,7 +88,7 @@ function generarPDF(r: ResultadoMarca, ultimaRevision: string | null) {
   .precio-actual { font-size: 16px; font-weight: 700; }
   .precio-original { font-size: 12px; color: #999; text-decoration: line-through; }
   .dto { font-size: 12px; font-weight: 700; color: #b91c1c; background: #fee2e2; padding: 2px 6px; border-radius: 4px; }
-  .url-prod { font-size: 10px; color: #888; word-break: break-all; }
+  .url-prod { display: block; font-size: 10px; color: #888; text-decoration: none; word-break: break-all; }
   .nuevo { display: inline-block; background: #fee2e2; color: #b91c1c; font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
   .footer { margin-top: 20px; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
   @media print { body { padding: 16px; } .tarjeta { break-inside: avoid; } }
