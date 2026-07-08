@@ -117,7 +117,7 @@ Monitoriza la tienda **cosmeticos24h.com** (Shopify) en busca de descuentos en l
 
 Cada marca es un acordeón desplegable con todos sus productos con descuento, precio actual y precio tachado. Si hay más de 5 productos aparece el botón "Ver X más →".
 
-**Botón PDF por marca** — Genera una "Constancia de precios" descargable con foto, precio y fecha/hora exacta de cada producto. No incluye datos internos de la app.
+**Botón PDF por marca** — Genera una "Constancia de precios" descargable con foto, precio y fecha/hora exacta de cada producto. No incluye datos internos de la app. Cada tarjeta lleva un enlace corto **"Ver en Cosméticos24h →"** que abre la ficha del producto. Se usa un texto corto (en vez de mostrar la URL completa) a propósito: la URL larga se partía en dos líneas y, al guardar el PDF, el visor solo detectaba la primera línea y abría una dirección incompleta.
 
 La cabecera muestra **"Análisis actualizado el [fecha] a las [hora]"** además del tiempo relativo ("hace X").
 
