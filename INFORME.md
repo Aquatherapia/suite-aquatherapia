@@ -330,6 +330,7 @@ El precio que se compara es el **precio de venta actual de cada uno**. Si Cosmé
 Como el cruce es por nombre, a veces enlaza mal o no encuentra el equivalente. Se puede **forzar el enlace correcto** y queda guardado (tiene prioridad sobre el automático y sobrevive a las revisiones):
 - **Fila mal emparejada** → botón **✎** en la fila: pegas la **URL de Cosméticos24h** correcta y se re-enlaza. La fila queda con etiqueta verde **"✓ manual"**. Desde el mismo editor se puede **"Quitar enlace manual"** (vuelve al automático).
 - **Producto tuyo que no encuentra** → sección desplegable **"Tus productos sin emparejar (N)"**: lista tus productos de esa marca que no cruzaron con ninguno suyo; en cada uno pegas su **URL de C24h** para enlazarlos.
+- **En "Tienen ellos y tú no" y en "Packs que tienen ellos y tú no"** → cada fila tiene botón **✎** ("Ya lo tengo"): como aquí el ancla es el producto SUYO, pegas la **URL de TU web** (latiendadecosmeticos.com) y se enlazan. Útil porque muchos de esos "no los tienes" en realidad sí los tienes con otro nombre. Valida que la URL sea de latiendadecosmeticos.com.
 - Al enlazar, la app lee ese producto de la API de C24h y crea la comparación **al instante** (sin re-escanear toda tu web). Se guarda en Upstash (`mapeos`, por marca). Si pegas una URL que no es de C24h o de otra marca, avisa con un error claro.
 
 ### Excluir productos a mano

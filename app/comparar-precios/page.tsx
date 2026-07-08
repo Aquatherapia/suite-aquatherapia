@@ -91,6 +91,45 @@ function MarcaBloque({
     setEditando(filaId); setUrlInput(suUrlActual); setErrLink("");
   }
 
+  // Enlace en sentido inverso: producto SUYO (suUrl) → pego la URL de MI producto
+  async function guardarEnlaceInverso(suUrl: string) {
+    if (!urlInput.trim()) return;
+    setGuardando(true); setErrLink("");
+    try {
+      await onMapear(urlInput.trim(), suUrl);
+      setEditando(null); setUrlInput("");
+    } catch (e) {
+      setErrLink(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  // Editor para las filas "tienen ellos y tú no": pego la URL de MI web
+  function editorMio(suUrl: string) {
+    if (editando !== suUrl) return null;
+    return (
+      <div className="cp-editor">
+        <div className="cp-editor-lbl">¿Ya lo tienes? Pega la URL de este producto en TU web (latiendadecosmeticos.com):</div>
+        <div className="cp-editor-row">
+          <input
+            className="cp-editor-input"
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && guardarEnlaceInverso(suUrl)}
+            placeholder="https://www.latiendadecosmeticos.com/es/…"
+            autoFocus
+          />
+          <button className="cp-editor-save" disabled={guardando} onClick={() => guardarEnlaceInverso(suUrl)}>
+            {guardando ? "…" : "Enlazar"}
+          </button>
+          <button className="cp-editor-cancel" onClick={() => { setEditando(null); setErrLink(""); }}>Cancelar</button>
+        </div>
+        {errLink && <div className="cp-editor-err">{errLink}</div>}
+      </div>
+    );
+  }
+
   // Estado de la sección "sin emparejar"
   const [linkVals, setLinkVals] = useState<Record<string, string>>({});
   const [guardandoSin, setGuardandoSin] = useState<string | null>(null);
@@ -205,10 +244,16 @@ function MarcaBloque({
                 Tienen ellos y tú no ({soloEllosReal.length}) — posibles novedades
               </div>
               {soloEllosReal.map((s, i) => (
-                <div key={i} className="cp-fila cp-solo">
-                  <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
-                  <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
-                  <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
+                <div key={i}>
+                  <div className="cp-fila cp-solo">
+                    <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
+                    <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
+                    <div className="cp-acciones">
+                      <button className="cp-editar" title="Ya lo tengo: enlazar con mi producto" onClick={() => abrirEditor(s.url, "")}>✎</button>
+                      <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
+                    </div>
+                  </div>
+                  {editorMio(s.url)}
                 </div>
               ))}
             </>
@@ -220,10 +265,16 @@ function MarcaBloque({
                 Packs/estuches que tienen ellos y tú no ({packs.length})
               </div>
               {packs.map((s, i) => (
-                <div key={i} className="cp-fila cp-solo">
-                  <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
-                  <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
-                  <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
+                <div key={i}>
+                  <div className="cp-fila cp-solo">
+                    <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
+                    <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
+                    <div className="cp-acciones">
+                      <button className="cp-editar" title="Ya lo tengo: enlazar con mi producto" onClick={() => abrirEditor(s.url, "")}>✎</button>
+                      <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
+                    </div>
+                  </div>
+                  {editorMio(s.url)}
                 </div>
               ))}
             </>

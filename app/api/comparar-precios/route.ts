@@ -306,6 +306,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Pega la URL del producto en Cosméticos24h (…/products/…)." }, { status: 400 });
     }
     suUrl = `https://cosmeticos24h.com/products/${mSu[1]}`;
+    if (!/latiendadecosmeticos\.com/i.test(miUrl)) {
+      return NextResponse.json({ error: "La URL de tu producto debe ser de latiendadecosmeticos.com" }, { status: 400 });
+    }
 
     // Buscar el producto suyo en la colección de la marca
     const sus = await leerSusProductos(marca.slug, marca.nombre);
