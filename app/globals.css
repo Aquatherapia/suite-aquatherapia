@@ -1022,6 +1022,47 @@ button:disabled {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: #6d28d9; background: #ede9fe; border-radius: 4px; vertical-align: middle;
 }
+.cp-manual-tag {
+  display: inline-block; margin-right: 6px; padding: 0 5px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #15803d; background: #dcfce7; border-radius: 4px; vertical-align: middle;
+}
+.cp-acciones { display: flex; align-items: center; gap: 2px; justify-content: flex-end; }
+.cp-editar {
+  width: 20px; height: 20px; padding: 0; border: none; background: transparent;
+  color: var(--muted); font-size: 12px; line-height: 1; cursor: pointer;
+  border-radius: 4px; opacity: 0.45;
+}
+.cp-fila:hover .cp-editar { opacity: 0.9; }
+.cp-editar:hover { background: var(--card-bg, #eef); color: #2563eb; opacity: 1; }
+.cp-editor {
+  padding: 10px 8px 14px; background: var(--card-bg, #f7f7f8);
+  border-bottom: 1px solid var(--border, #eee);
+}
+.cp-editor-lbl { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.cp-editor-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cp-editor-input {
+  flex: 1; min-width: 180px; width: auto; font-size: 12px; padding: 5px 8px;
+  border: 1px solid var(--border, #ccc); border-radius: 5px;
+  background: var(--bg, #fff); color: var(--fg, #222);
+}
+.cp-editor-save {
+  width: auto; flex-shrink: 0; font-size: 12px; font-weight: 600; padding: 5px 12px;
+  border: none; border-radius: 5px; background: #2563eb; color: #fff; cursor: pointer;
+}
+.cp-editor-save:disabled { opacity: 0.6; cursor: default; }
+.cp-editor-cancel {
+  width: auto; flex-shrink: 0; font-size: 12px; padding: 5px 10px;
+  border: 1px solid var(--border, #ddd); border-radius: 5px;
+  background: transparent; color: var(--fg, #333); cursor: pointer;
+}
+.cp-editor-undo {
+  width: auto; margin-top: 8px; font-size: 11px; padding: 3px 8px;
+  border: 1px solid var(--border, #ddd); border-radius: 5px;
+  background: transparent; color: #b45309; cursor: pointer;
+}
+.cp-editor-err { margin-top: 8px; font-size: 12px; color: #b91c1c; }
+.cp-sinemp-item { padding: 8px 0; border-bottom: 1px solid var(--border, #f0f0f0); }
 .cp-packs-nota { font-size: 11px; color: var(--muted); padding: 10px 8px 2px; font-style: italic; }
 .cp-ocultar {
   width: 20px; height: 20px; padding: 0; border: none; background: transparent;

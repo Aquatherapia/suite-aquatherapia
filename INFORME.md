@@ -326,6 +326,12 @@ Cosméticos24h **no publica el EAN** en su API (`barcode: null`) y su SKU es int
 ### Ojo con las ofertas del competidor
 El precio que se compara es el **precio de venta actual de cada uno**. Si Cosméticos24h tiene una marca en oferta (p. ej. Atache con −20%), muchos productos saldrán como "tú más caro" simplemente porque ellos están rebajados en ese momento. Es correcto, pero tenlo en cuenta al leerlo.
 
+### Enlazar productos a mano (corrige los fallos de emparejamiento)
+Como el cruce es por nombre, a veces enlaza mal o no encuentra el equivalente. Se puede **forzar el enlace correcto** y queda guardado (tiene prioridad sobre el automático y sobrevive a las revisiones):
+- **Fila mal emparejada** → botón **✎** en la fila: pegas la **URL de Cosméticos24h** correcta y se re-enlaza. La fila queda con etiqueta verde **"✓ manual"**. Desde el mismo editor se puede **"Quitar enlace manual"** (vuelve al automático).
+- **Producto tuyo que no encuentra** → sección desplegable **"Tus productos sin emparejar (N)"**: lista tus productos de esa marca que no cruzaron con ninguno suyo; en cada uno pegas su **URL de C24h** para enlazarlos.
+- Al enlazar, la app lee ese producto de la API de C24h y crea la comparación **al instante** (sin re-escanear toda tu web). Se guarda en Upstash (`mapeos`, por marca). Si pegas una URL que no es de C24h o de otra marca, avisa con un error claro.
+
 ### Excluir productos a mano
 Cada fila (tanto en la comparación como en "tienen ellos y tú no") tiene un botón **×** para **ocultarla**. Sirve para quitar los matches erróneos (cuando por nombre cruza dos productos distintos). Lo ocultado:
 - Desaparece al instante y **se mantiene oculto aunque vuelvas a revisar**.
@@ -341,14 +347,14 @@ Compara precio de venta contra precio de venta. El **coste de compra no es públ
 Leer tu web es 1 petición por producto (en paralelo, de 10 en 10). La función usa `maxDuration = 60` (Vercel Hobby lo permite **gratis**; el defecto son 10s). La revisión es **siempre marca a marca** (una sola): cada marca tiene su botón "Revisar" en la columna izquierda. No hay "Revisar todas" a propósito, para evitar esperas largas y no saturar la web propia; la API rechaza cualquier revisión sin marca (HTTP 400). Nota: este agente **no usa Gemini/IA**, así que revisar no consume tokens de ningún tipo — el motivo del límite es solo tiempo/carga.
 
 ### Persistencia
-Upstash KV, clave `comparar-precios-config`. En local cae a `data/comparar-precios-config.json`. Guarda `{ marcas: [{nombre, slug, miToken}], ultimaRevision, resultados }`. Al revisar una marca concreta, solo se reemplaza esa (las demás se conservan).
+Upstash KV, clave `comparar-precios-config`. En local cae a `data/comparar-precios-config.json`. Guarda `{ marcas: [{nombre, slug, miToken}], ultimaRevision, resultados, excluidos, mapeos }`. Al revisar una marca concreta, solo se reemplaza esa (las demás se conservan). `mapeos` (enlaces manuales) y `excluidos` (ocultos) se conservan siempre.
 
 ### Límites (gratis)
 Solo usa **scraping propio + API pública de Cosméticos24h + Upstash + Vercel**. **No usa Gemini.** Solo cubre marcas que Cosméticos24h también venda.
 
 ### API route
 - `GET /api/comparar-precios` → config actual
-- `POST /api/comparar-precios` con `action`: `addMarca` (nombre, slug, miToken?), `deleteMarca` (slug), `revisar` (requiere slug; sin slug → HTTP 400), `excluir` (slug, item{suUrl,titulo,tipo,miPrecio?,suPrecio?,miUrl?} → oculta un producto guardando sus precios), `motivo` (slug, suUrl, motivo → fija el motivo de ocultación), `incluir` (slug, suUrl → lo restaura)
+- `POST /api/comparar-precios` con `action`: `addMarca` (nombre, slug, miToken?), `deleteMarca` (slug), `revisar` (requiere slug; sin slug → HTTP 400), `excluir` (slug, item{suUrl,titulo,tipo,miPrecio?,suPrecio?,miUrl?} → oculta un producto guardando sus precios), `motivo` (slug, suUrl, motivo → fija el motivo de ocultación), `incluir` (slug, suUrl → lo restaura), `mapear` (slug, miUrl, suUrl → enlaza a mano tu producto con el suyo; actualiza al instante), `desmapear` (slug, miUrl → deshace el enlace manual)
 
 ---
 

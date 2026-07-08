@@ -5,14 +5,19 @@ import Link from "next/link";
 
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
-  diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean;
+  diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
 };
 type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean };
+type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean };
 type ResultadoMarca = {
   marca: string; slug: string; error?: string;
-  comparaciones: Comparacion[]; soloEllos: SoloEllos[];
+  comparaciones: Comparacion[]; soloEllos: SoloEllos[]; misSinEmparejar: MiSinEmparejar[];
   misProductos: number; susProductos: number;
 };
+
+function nombreDesdeUrl(url: string) {
+  return (url.split("/es/")[1] ?? url).replace(/-p\d+$/, "").replace(/-/g, " ");
+}
 type Marca = { nombre: string; slug: string; miToken: string };
 type Excluido = {
   suUrl: string; titulo: string;
@@ -53,18 +58,61 @@ function fechaExacta(iso: string) {
 const MOSTRAR_INICIAL = 6;
 
 function MarcaBloque({
-  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo,
+  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onMapear, onDesmapear,
 }: {
   r: ResultadoMarca; ocultos: Excluido[]; expandido: boolean; onToggle: () => void;
   mostrarTodos: boolean; onToggleMostrar: () => void;
   onExcluir: (item: Excluido) => void;
   onIncluir: (suUrl: string) => void;
   onMotivo: (suUrl: string, motivo: string) => void;
+  onMapear: (miUrl: string, suUrl: string) => Promise<void>;
+  onDesmapear: (miUrl: string) => void;
 }) {
   const [verOcultos, setVerOcultos] = useState(false);
+  const [verSinEmp, setVerSinEmp] = useState(false);
+  const [editando, setEditando] = useState<string | null>(null); // suUrl de la fila en edición
+  const [urlInput, setUrlInput] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [errLink, setErrLink] = useState("");
+
+  async function guardarEnlace(miUrl: string) {
+    if (!urlInput.trim()) return;
+    setGuardando(true); setErrLink("");
+    try {
+      await onMapear(miUrl, urlInput.trim());
+      setEditando(null); setUrlInput("");
+    } catch (e) {
+      setErrLink(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGuardando(false);
+    }
+  }
+  function abrirEditor(filaId: string, suUrlActual: string) {
+    setEditando(filaId); setUrlInput(suUrlActual); setErrLink("");
+  }
+
+  // Estado de la sección "sin emparejar"
+  const [linkVals, setLinkVals] = useState<Record<string, string>>({});
+  const [guardandoSin, setGuardandoSin] = useState<string | null>(null);
+  const [errSin, setErrSin] = useState<Record<string, string>>({});
+  async function guardarEnlaceSin(miUrl: string) {
+    const val = (linkVals[miUrl] ?? "").trim();
+    if (!val) return;
+    setGuardandoSin(miUrl); setErrSin(e => ({ ...e, [miUrl]: "" }));
+    try {
+      await onMapear(miUrl, val);
+      setLinkVals(v => { const n = { ...v }; delete n[miUrl]; return n; });
+    } catch (e) {
+      setErrSin(er => ({ ...er, [miUrl]: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setGuardandoSin(null);
+    }
+  }
+
   const masCaro = r.comparaciones.filter(c => c.diff > 0.01);
   const soloEllosReal = r.soloEllos.filter(s => !s.esPack);
   const packs = r.soloEllos.filter(s => s.esPack);
+  const sinEmp = (r.misSinEmparejar ?? []).filter(m => !m.esPack);
   const compMostrar = mostrarTodos ? r.comparaciones : r.comparaciones.slice(0, MOSTRAR_INICIAL);
 
   return (
@@ -99,18 +147,47 @@ function MarcaBloque({
               {compMostrar.map((c, i) => {
                 const caro = c.diff > 0.01;
                 return (
-                  <div key={i} className="cp-fila">
-                    <a href={c.miUrl} target="_blank" rel="noreferrer" className="cp-nombre">
-                      {c.esPack && <span className="cp-pack-tag">pack</span>}
-                      {c.nombre}
-                      {c.confianza < 0.5 && <span className="cp-baja" title="Emparejamiento de baja confianza: revísalo">≈</span>}
-                    </a>
-                    <span className="cp-col-num">{c.miPrecio.toFixed(2)}€</span>
-                    <a href={c.suUrl} target="_blank" rel="noreferrer" className="cp-col-num cp-c24">{c.suPrecio.toFixed(2)}€</a>
-                    <span className={"cp-col-num " + (caro ? "cp-caro" : c.diff < -0.01 ? "cp-barato" : "")}>
-                      {c.diff > 0 ? "+" : ""}{c.diff.toFixed(2)}€
-                    </span>
-                    <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecio, miUrl: c.miUrl })}>×</button>
+                  <div key={i}>
+                    <div className="cp-fila">
+                      <a href={c.miUrl} target="_blank" rel="noreferrer" className="cp-nombre">
+                        {c.esPack && <span className="cp-pack-tag">pack</span>}
+                        {c.manual && <span className="cp-manual-tag" title="Enlazado a mano">✓ manual</span>}
+                        {c.nombre}
+                        {!c.manual && c.confianza < 0.5 && <span className="cp-baja" title="Emparejamiento de baja confianza: revísalo o enlázalo a mano con ✎">≈</span>}
+                      </a>
+                      <span className="cp-col-num">{c.miPrecio.toFixed(2)}€</span>
+                      <a href={c.suUrl} target="_blank" rel="noreferrer" className="cp-col-num cp-c24">{c.suPrecio.toFixed(2)}€</a>
+                      <span className={"cp-col-num " + (caro ? "cp-caro" : c.diff < -0.01 ? "cp-barato" : "")}>
+                        {c.diff > 0 ? "+" : ""}{c.diff.toFixed(2)}€
+                      </span>
+                      <div className="cp-acciones">
+                        <button className="cp-editar" title="Corregir el enlace: pegar la URL correcta de Cosméticos24h" onClick={() => abrirEditor(c.suUrl, c.suUrl)}>✎</button>
+                        <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecio, miUrl: c.miUrl })}>×</button>
+                      </div>
+                    </div>
+                    {editando === c.suUrl && (
+                      <div className="cp-editor">
+                        <div className="cp-editor-lbl">Pega la URL correcta de este producto en Cosméticos24h:</div>
+                        <div className="cp-editor-row">
+                          <input
+                            className="cp-editor-input"
+                            value={urlInput}
+                            onChange={e => setUrlInput(e.target.value)}
+                            onKeyDown={e => e.key === "Enter" && guardarEnlace(c.miUrl)}
+                            placeholder="https://cosmeticos24h.com/products/…"
+                            autoFocus
+                          />
+                          <button className="cp-editor-save" disabled={guardando} onClick={() => guardarEnlace(c.miUrl)}>
+                            {guardando ? "…" : "Enlazar"}
+                          </button>
+                          <button className="cp-editor-cancel" onClick={() => { setEditando(null); setErrLink(""); }}>Cancelar</button>
+                        </div>
+                        {c.manual && (
+                          <button className="cp-editor-undo" onClick={() => { onDesmapear(c.miUrl); setEditando(null); }}>Quitar enlace manual (volver al automático)</button>
+                        )}
+                        {errLink && <div className="cp-editor-err">{errLink}</div>}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -150,6 +227,44 @@ function MarcaBloque({
                 </div>
               ))}
             </>
+          )}
+
+          {sinEmp.length > 0 && (
+            <div className="cp-ocultos-box">
+              <button className="cp-ocultos-toggle" onClick={() => setVerSinEmp(v => !v)}>
+                {verSinEmp ? "▲" : "▼"} Tus productos sin emparejar ({sinEmp.length}) — enlázalos a mano
+              </button>
+              {verSinEmp && (
+                <div className="cp-ocultos-lista">
+                  <div className="cp-packs-nota" style={{ padding: "0 0 8px" }}>
+                    Estos productos tuyos no se han cruzado con ninguno de Cosméticos24h. Si tienen equivalente, pega su URL de C24h para enlazarlos (queda guardado).
+                  </div>
+                  {sinEmp.map((m, i) => (
+                    <div key={i} className="cp-sinemp-item">
+                      <div className="cp-oculto-info">
+                        <a href={m.url} target="_blank" rel="noreferrer" className="cp-oculto-nombre">
+                          {m.esPack && <span className="cp-pack-tag">pack</span>}{m.nombre}
+                        </a>
+                        <div className="cp-oculto-precios">Tu precio: <strong>{m.precio.toFixed(2)}€</strong></div>
+                        <div className="cp-editor-row">
+                          <input
+                            className="cp-editor-input"
+                            value={linkVals[m.url] ?? ""}
+                            onChange={e => setLinkVals(v => ({ ...v, [m.url]: e.target.value }))}
+                            onKeyDown={e => e.key === "Enter" && guardarEnlaceSin(m.url)}
+                            placeholder="URL de este producto en cosmeticos24h.com…"
+                          />
+                          <button className="cp-editor-save" disabled={guardandoSin === m.url} onClick={() => guardarEnlaceSin(m.url)}>
+                            {guardandoSin === m.url ? "…" : "Enlazar"}
+                          </button>
+                        </div>
+                        {errSin[m.url] && <div className="cp-editor-err">{errSin[m.url]}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {ocultos.length > 0 && (
@@ -279,6 +394,24 @@ export default function CompararPrecios() {
     setConfig(await res.json());
   }
 
+  async function mapear(slug: string, miUrl: string, suUrl: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mapear", slug, miUrl, suUrl }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    setConfig(data);
+  }
+
+  async function desmapear(slug: string, miUrl: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "desmapear", slug, miUrl }),
+    });
+    setConfig(await res.json());
+  }
+
   async function revisar(slug: string) {
     setRevisando(slug); setError("");
     try {
@@ -394,6 +527,8 @@ export default function CompararPrecios() {
               onExcluir={(item) => excluir(r.slug, item)}
               onIncluir={(suUrl) => incluir(r.slug, suUrl)}
               onMotivo={(suUrl, motivo) => cambiarMotivo(r.slug, suUrl, motivo)}
+              onMapear={(miUrl, suUrl) => mapear(r.slug, miUrl, suUrl)}
+              onDesmapear={(miUrl) => desmapear(r.slug, miUrl)}
             />
           ))}
         </div>
