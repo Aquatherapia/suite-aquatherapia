@@ -341,6 +341,9 @@ Cada fila (tanto en la comparación como en "tienen ellos y tú no") tiene un bo
 - Se puede **restaurar** desde esa misma lista (reaparece en la siguiente revisión).
 - Los ocultos guardados **antes** de esta función no tenían precios; al **revisar** la marca, la app los rellena automáticamente (busca el producto en Cosméticos24h y lo reempareja con tu web).
 
+### PDF por marca
+Cada marca tiene un botón **PDF** (en su cabecera) que genera un documento descargable (vía impresión del navegador, gratis) con: resumen (nº comparados y en cuántos vas más caro), la **tabla de comparación** (tú vs. C24h, diferencia en rojo/verde, con etiquetas "manual"/"pack"), y las listas de "tienen ellos y tú no" y de packs. Ordenado por diferencia (lo más caro primero).
+
 ### Solo PVP (sin margen)
 Compara precio de venta contra precio de venta. El **coste de compra no es público** (vive en tu panel de admin), así que no hay margen/beneficio.
 

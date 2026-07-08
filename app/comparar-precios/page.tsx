@@ -57,6 +57,83 @@ function fechaExacta(iso: string) {
 
 const MOSTRAR_INICIAL = 6;
 
+function generarPDF(r: ResultadoMarca) {
+  const ahora = new Date();
+  const fechaHora = ahora.toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })
+    + " a las " + ahora.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const comp = [...r.comparaciones].sort((a, b) => b.diff - a.diff);
+  const masCaro = comp.filter(c => c.diff > 0.01);
+  const soloEllosReal = r.soloEllos.filter(s => !s.esPack);
+  const packs = r.soloEllos.filter(s => s.esPack);
+
+  const filasComp = comp.map(c => {
+    const cls = c.diff > 0.01 ? "caro" : c.diff < -0.01 ? "barato" : "";
+    const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (c.manual ? '<span class="tag tag-m">manual</span>' : "");
+    return `<tr>
+      <td>${tags}${esc(c.nombre)}</td>
+      <td class="num">${c.miPrecio.toFixed(2)} €</td>
+      <td class="num">${c.suPrecio.toFixed(2)} €</td>
+      <td class="num ${cls}">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(2)} €</td>
+    </tr>`;
+  }).join("");
+
+  const lista = (arr: { titulo: string; precio: number }[]) =>
+    arr.map(s => `<tr><td>${esc(s.titulo)}</td><td class="num">${s.precio.toFixed(2)} €</td></tr>`).join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8">
+<title>Comparativa ${esc(r.marca)} — Cosméticos24h</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, Helvetica, Arial, sans-serif; font-size: 12px; color: #1a1a1a; padding: 28px; }
+  .header { border-bottom: 2px solid #1a1a1a; padding-bottom: 14px; margin-bottom: 18px; }
+  .logo { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #777; margin-bottom: 6px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 3px; }
+  .meta { font-size: 11px; color: #555; }
+  h2 { font-size: 13px; margin: 22px 0 8px; text-transform: uppercase; letter-spacing: 0.04em; color: #444; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: #888; border-bottom: 1px solid #ccc; padding: 5px 6px; }
+  th.num, td.num { text-align: right; white-space: nowrap; }
+  td { padding: 5px 6px; border-bottom: 1px solid #eee; font-size: 12px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .caro { color: #b91c1c; font-weight: 700; }
+  .barato { color: #15803d; }
+  .tag { display: inline-block; font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 1px 4px; border-radius: 3px; margin-right: 5px; background: #ede9fe; color: #6d28d9; vertical-align: middle; }
+  .tag-m { background: #dcfce7; color: #15803d; }
+  .resumen { font-size: 11px; color: #555; margin-bottom: 4px; }
+  .footer { margin-top: 22px; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+  @media print { body { padding: 16px; } tr { break-inside: avoid; } h2 { break-after: avoid; } }
+</style></head><body>
+<div class="header">
+  <div class="logo">Comparativa de precios</div>
+  <h1>${esc(r.marca)} — tú vs. Cosméticos24h</h1>
+  <div class="meta">Generado el ${fechaHora}</div>
+</div>
+
+<div class="resumen">${comp.length} productos comparados · <strong>${masCaro.length} en los que vas más caro</strong> que Cosméticos24h.</div>
+
+${comp.length ? `<h2>Comparación de precios</h2>
+<table>
+  <thead><tr><th>Producto</th><th class="num">Tú</th><th class="num">Cosméticos24h</th><th class="num">Diferencia</th></tr></thead>
+  <tbody>${filasComp}</tbody>
+</table>` : ""}
+
+${soloEllosReal.length ? `<h2>Tienen ellos y tú no (${soloEllosReal.length})</h2>
+<table><tbody>${lista(soloEllosReal.map(s => ({ titulo: s.titulo, precio: s.precio })))}</tbody></table>` : ""}
+
+${packs.length ? `<h2>Packs que tienen ellos y tú no (${packs.length})</h2>
+<table><tbody>${lista(packs.map(s => ({ titulo: s.titulo, precio: s.precio })))}</tbody></table>` : ""}
+
+<div class="footer">La Tienda de Cosméticos · Comparativa con Cosméticos24h · ${fechaHora}. Los precios son los de venta actuales de cada tienda (si Cosméticos24h tiene la marca en oferta, la diferencia lo refleja).</div>
+<script>window.onload = function(){ window.print(); }<\/script>
+</body></html>`;
+
+  const win = window.open("", "_blank");
+  if (win) { win.document.write(html); win.document.close(); }
+}
+
 function MarcaBloque({
   r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onMapear, onDesmapear,
 }: {
@@ -156,7 +233,7 @@ function MarcaBloque({
 
   return (
     <div className="vp-accordion">
-      <button className="vp-accordion-header" onClick={onToggle}>
+      <div className="vp-accordion-header" onClick={onToggle} role="button" tabIndex={0}>
         <span className="vp-accordion-marca">{r.marca}</span>
         <div className="vp-accordion-right">
           {masCaro.length > 0 && (
@@ -165,9 +242,16 @@ function MarcaBloque({
           <span className="vp-accordion-count">
             {r.comparaciones.length} comparados · {soloEllosReal.length} solo ellos
           </span>
+          <button
+            className="regen-btn"
+            onClick={e => { e.stopPropagation(); generarPDF(r); }}
+            title="Descargar PDF de esta marca"
+          >
+            PDF
+          </button>
           <span className="vp-chevron">{expandido ? "▲" : "▼"}</span>
         </div>
-      </button>
+      </div>
 
       {expandido && (
         <div className="vp-accordion-content">
