@@ -6,7 +6,7 @@ import Link from "next/link";
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
-  verificado?: boolean;
+  verificado?: boolean; nombreEditado?: boolean;
 };
 type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean };
 type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean };
@@ -147,7 +147,7 @@ ${packs.length ? `<h2>Packs que tienen ellos y tú no (${packs.length})</h2>
 }
 
 function MarcaBloque({
-  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onMapear, onDesmapear, onVerificar, onDesverificar,
+  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onMapear, onDesmapear, onVerificar, onDesverificar, onRenombrar, onRestaurarNombre,
 }: {
   r: ResultadoMarca; ocultos: Excluido[]; expandido: boolean; onToggle: () => void;
   mostrarTodos: boolean; onToggleMostrar: () => void;
@@ -158,6 +158,8 @@ function MarcaBloque({
   onDesmapear: (miUrl: string) => void;
   onVerificar: (suUrl: string) => void;
   onDesverificar: (suUrl: string) => void;
+  onRenombrar: (suUrl: string, nombre: string) => Promise<void>;
+  onRestaurarNombre: (suUrl: string) => void;
 }) {
   const [verOcultos, setVerOcultos] = useState(false);
   const [verSinEmp, setVerSinEmp] = useState(false);
@@ -180,6 +182,28 @@ function MarcaBloque({
   }
   function abrirEditor(filaId: string, suUrlActual: string) {
     setEditando(filaId); setUrlInput(suUrlActual); setErrLink("");
+  }
+
+  // Editor del nombre mostrado del producto
+  const [editandoNombre, setEditandoNombre] = useState<string | null>(null); // suUrl de la fila en edición
+  const [nombreInput, setNombreInput] = useState("");
+  const [guardandoNombre, setGuardandoNombre] = useState(false);
+  const [errNombre, setErrNombre] = useState("");
+
+  async function guardarNombre(suUrl: string) {
+    if (!nombreInput.trim()) return;
+    setGuardandoNombre(true); setErrNombre("");
+    try {
+      await onRenombrar(suUrl, nombreInput.trim());
+      setEditandoNombre(null); setNombreInput("");
+    } catch (e) {
+      setErrNombre(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGuardandoNombre(false);
+    }
+  }
+  function abrirEditorNombre(suUrl: string, nombreActual: string) {
+    setEditandoNombre(suUrl); setNombreInput(nombreActual); setErrNombre("");
   }
 
   // Enlace en sentido inverso: producto SUYO (suUrl) → pego la URL de MI producto
@@ -290,6 +314,7 @@ function MarcaBloque({
                         {c.esPack && <span className="cp-pack-tag">pack</span>}
                         {c.manual && <span className="cp-manual-tag" title="Enlazado a mano">✓ manual</span>}
                         {c.verificado && <span className="cp-verificado-tag" title="Comprobado a mano: es el mismo producto">✓ verificado</span>}
+                        {c.nombreEditado && <span className="cp-nombre-tag" title="Nombre editado a mano">✎ editado</span>}
                         {c.nombre}
                         {!c.manual && !c.verificado && c.confianza < 0.5 && <span className="cp-baja" title="Emparejamiento de baja confianza: revísalo o enlázalo a mano con ✎">≈</span>}
                       </a>
@@ -306,10 +331,33 @@ function MarcaBloque({
                         >
                           ✓
                         </button>
+                        <button className="cp-renombrar" title="Editar el nombre mostrado" onClick={() => abrirEditorNombre(c.suUrl, c.nombre)}>Aa</button>
                         <button className="cp-editar" title="Corregir el enlace: pegar la URL correcta de Cosméticos24h" onClick={() => abrirEditor(c.suUrl, c.suUrl)}>✎</button>
                         <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecio, miUrl: c.miUrl })}>×</button>
                       </div>
                     </div>
+                    {editandoNombre === c.suUrl && (
+                      <div className="cp-editor">
+                        <div className="cp-editor-lbl">Nombre a mostrar para este producto:</div>
+                        <div className="cp-editor-row">
+                          <input
+                            className="cp-editor-input"
+                            value={nombreInput}
+                            onChange={e => setNombreInput(e.target.value)}
+                            onKeyDown={e => e.key === "Enter" && guardarNombre(c.suUrl)}
+                            autoFocus
+                          />
+                          <button className="cp-editor-save" disabled={guardandoNombre} onClick={() => guardarNombre(c.suUrl)}>
+                            {guardandoNombre ? "…" : "Guardar"}
+                          </button>
+                          <button className="cp-editor-cancel" onClick={() => { setEditandoNombre(null); setErrNombre(""); }}>Cancelar</button>
+                        </div>
+                        {c.nombreEditado && (
+                          <button className="cp-editor-undo" onClick={() => { onRestaurarNombre(c.suUrl); setEditandoNombre(null); }}>Restaurar nombre original</button>
+                        )}
+                        {errNombre && <div className="cp-editor-err">{errNombre}</div>}
+                      </div>
+                    )}
                     {editando === c.suUrl && (
                       <div className="cp-editor">
                         <div className="cp-editor-lbl">Pega la URL correcta de este producto en Cosméticos24h:</div>
@@ -585,6 +633,24 @@ export default function CompararPrecios() {
     setConfig(await res.json());
   }
 
+  async function renombrar(slug: string, suUrl: string, nombre: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "renombrar", slug, suUrl, nombre }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    setConfig(data);
+  }
+
+  async function restaurarNombre(slug: string, suUrl: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "restaurarNombre", slug, suUrl }),
+    });
+    setConfig(await res.json());
+  }
+
   async function revisar(slug: string) {
     setRevisando(slug); setError("");
     try {
@@ -704,6 +770,8 @@ export default function CompararPrecios() {
               onDesmapear={(miUrl) => desmapear(r.slug, miUrl)}
               onVerificar={(suUrl) => verificar(r.slug, suUrl)}
               onDesverificar={(suUrl) => desverificar(r.slug, suUrl)}
+              onRenombrar={(suUrl, nombre) => renombrar(r.slug, suUrl, nombre)}
+              onRestaurarNombre={(suUrl) => restaurarNombre(r.slug, suUrl)}
             />
           ))}
         </div>

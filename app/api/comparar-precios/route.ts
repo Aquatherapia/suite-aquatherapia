@@ -34,6 +34,7 @@ type Comparacion = {
   esPack?: boolean;    // true si es un pack/estuche
   manual?: boolean;    // true si el enlace lo puso el usuario a mano
   verificado?: boolean; // true si el usuario ha confirmado a mano que es el mismo producto
+  nombreEditado?: boolean; // true si el nombre mostrado lo ha escrito el usuario a mano
 };
 
 type SoloEllos = {
@@ -75,6 +76,9 @@ type Excluido = {
 // Enlace manual: fuerza que TU producto (miUrl) se compare con el suyo (suUrl)
 type Mapeo = { miUrl: string; suUrl: string };
 
+// Nombre editado a mano por el usuario (guarda el original para poder restaurarlo)
+type NombreManual = { suUrl: string; nombre: string; original: string };
+
 type Config = {
   marcas: Marca[];
   ultimaRevision: string | null;
@@ -85,10 +89,12 @@ type Config = {
   mapeos: Record<string, Mapeo[]>;
   // Por marca (slug): suUrl de los productos que el usuario ha comprobado a mano que son el mismo
   verificados: Record<string, string[]>;
+  // Por marca (slug): nombres editados a mano (con el original para poder restaurarlo)
+  nombres: Record<string, NombreManual[]>;
 };
 
 function configVacia(): Config {
-  return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {} };
+  return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {}, nombres: {} };
 }
 
 async function leerConfig(): Promise<Config> {
@@ -96,7 +102,7 @@ async function leerConfig(): Promise<Config> {
     const { kv } = await import("@vercel/kv");
     const data = await kv.get<Config>(KV_KEY);
     if (!data) return configVacia();
-    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {}, verificados: data.verificados ?? {} };
+    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {}, verificados: data.verificados ?? {}, nombres: data.nombres ?? {} };
   }
   try {
     const parsed = JSON.parse(await fs.readFile(CONFIG_PATH, "utf-8"));
@@ -107,6 +113,7 @@ async function leerConfig(): Promise<Config> {
       excluidos: parsed.excluidos ?? {},
       mapeos: parsed.mapeos ?? {},
       verificados: parsed.verificados ?? {},
+      nombres: parsed.nombres ?? {},
     };
   } catch {
     return configVacia();
@@ -256,6 +263,7 @@ export async function POST(req: NextRequest) {
     delete config.excluidos[body.slug];
     delete config.mapeos[body.slug];
     delete config.verificados[body.slug];
+    delete config.nombres[body.slug];
     await guardarConfig(config);
     return NextResponse.json(config);
   }
@@ -320,6 +328,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(config);
   }
 
+  // Editar a mano el nombre mostrado de un producto (guarda el original por si se quiere restaurar)
+  if (body.action === "renombrar") {
+    const { slug, suUrl, nombre } = body as { slug: string; suUrl: string; nombre: string };
+    if (!slug || !suUrl || !nombre?.trim()) {
+      return NextResponse.json({ error: "Falta el nombre." }, { status: 400 });
+    }
+    const c = config.resultados.find(x => x.slug === slug)?.comparaciones.find(x => x.suUrl === suUrl);
+    if (!c) return NextResponse.json({ error: "Producto no encontrado en el resultado actual." }, { status: 404 });
+    const lista = config.nombres[slug] ?? [];
+    const original = lista.find(n => n.suUrl === suUrl)?.original ?? c.nombre;
+    config.nombres[slug] = [...lista.filter(n => n.suUrl !== suUrl), { suUrl, nombre: nombre.trim(), original }];
+    c.nombre = nombre.trim();
+    c.nombreEditado = true;
+    await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
+  // Restaurar el nombre original (detectado automáticamente)
+  if (body.action === "restaurarNombre") {
+    const { slug, suUrl } = body as { slug: string; suUrl: string };
+    const lista = config.nombres[slug] ?? [];
+    const entrada = lista.find(n => n.suUrl === suUrl);
+    config.nombres[slug] = lista.filter(n => n.suUrl !== suUrl);
+    const c = config.resultados.find(x => x.slug === slug)?.comparaciones.find(x => x.suUrl === suUrl);
+    if (c && entrada) { c.nombre = entrada.original; c.nombreEditado = false; }
+    await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
   // Enlazar a mano TU producto (miUrl) con el suyo (suUrl de Cosméticos24h).
   // Actualiza el resultado al momento sin re-escanear toda tu web.
   if (body.action === "mapear") {
@@ -379,11 +416,13 @@ export async function POST(req: NextRequest) {
       r.comparaciones = r.comparaciones.filter(c => c.miUrl !== miUrl && c.suUrl !== suUrl);
       r.soloEllos = r.soloEllos.filter(s => s.url !== suUrl);
       r.misSinEmparejar = (r.misSinEmparejar ?? []).filter(m => m.url !== miUrl);
+      const nombreOverride = (config.nombres[marca.slug] ?? []).find(n => n.suUrl === suUrl)?.nombre;
       r.comparaciones.push({
-        nombre: sp.titulo || nombre, miPrecio, suPrecio: sp.precio, suPrecioTachado: sp.tachado,
+        nombre: nombreOverride || sp.titulo || nombre, miPrecio, suPrecio: sp.precio, suPrecioTachado: sp.tachado,
         diff: Math.round((miPrecio - sp.precio) * 100) / 100,
         confianza: 1, miUrl, suUrl, esPack: sp.esPack || miEsPack, manual: true,
         verificado: (config.verificados[marca.slug] ?? []).includes(suUrl),
+        nombreEditado: !!nombreOverride,
       });
       r.comparaciones.sort((a, b) => b.diff - a.diff);
     }
@@ -421,6 +460,7 @@ export async function POST(req: NextRequest) {
       try {
         const ocultos = new Set((config.excluidos[marca.slug] ?? []).map(e => e.suUrl));
         const verificados = new Set(config.verificados[marca.slug] ?? []);
+        const nombresOverride = new Map((config.nombres[marca.slug] ?? []).map(n => [n.suUrl, n.nombre]));
         const mapeos = config.mapeos[marca.slug] ?? [];
         const forzadoPorMi = new Map(mapeos.map(f => [f.miUrl, f.suUrl]));
         const forzadoSu = new Set(mapeos.map(f => f.suUrl));
@@ -468,10 +508,10 @@ export async function POST(req: NextRequest) {
           if (!s || !mp) continue; // producto ya no disponible; se ignora
           miUsados.add(mp.url);
           comparaciones.push({
-            nombre: s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
+            nombre: nombresOverride.get(s.url) ?? s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
             diff: Math.round((mp.precio - s.precio) * 100) / 100,
             confianza: 1, miUrl: mp.url, suUrl: s.url, esPack: s.esPack, manual: true,
-            verificado: verificados.has(s.url),
+            verificado: verificados.has(s.url), nombreEditado: nombresOverride.has(s.url),
           });
         }
 
@@ -489,11 +529,11 @@ export async function POST(req: NextRequest) {
             const mp = mis[mejor];
             miUsados.add(mp.url);
             comparaciones.push({
-              nombre: s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
+              nombre: nombresOverride.get(s.url) ?? s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
               diff: Math.round((mp.precio - s.precio) * 100) / 100,
               confianza: Math.round(mejorJ * 100) / 100,
               miUrl: mp.url, suUrl: s.url, esPack: s.esPack,
-              verificado: verificados.has(s.url),
+              verificado: verificados.has(s.url), nombreEditado: nombresOverride.has(s.url),
             });
           } else {
             soloEllos.push({ titulo: s.titulo, precio: s.precio, url: s.url, esPack: s.esPack });

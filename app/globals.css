@@ -995,7 +995,7 @@ button:disabled {
 }
 .cp-fila {
   display: grid;
-  grid-template-columns: 1fr 62px 62px 66px 64px;
+  grid-template-columns: 1fr 62px 62px 66px 86px;
   gap: 6px;
   align-items: center;
   padding: 7px 8px;
@@ -1032,6 +1032,11 @@ button:disabled {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: #1d4ed8; background: #dbeafe; border-radius: 4px; vertical-align: middle;
 }
+.cp-nombre-tag {
+  display: inline-block; margin-right: 6px; padding: 0 5px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #b45309; background: #fef3c7; border-radius: 4px; vertical-align: middle;
+}
 .cp-acciones { display: flex; align-items: center; gap: 2px; justify-content: flex-end; }
 .cp-verificar {
   width: 20px; height: 20px; padding: 0; border: none; background: transparent;
@@ -1042,6 +1047,13 @@ button:disabled {
 .cp-verificar:hover { background: #dbeafe; color: #1d4ed8; opacity: 1; }
 .cp-verificar-on { opacity: 1; color: #1d4ed8; background: #dbeafe; }
 .cp-verificar-on:hover { background: #bfdbfe; }
+.cp-renombrar {
+  width: 20px; height: 20px; padding: 0; border: none; background: transparent;
+  color: var(--muted); font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer;
+  border-radius: 4px; opacity: 0.45;
+}
+.cp-fila:hover .cp-renombrar { opacity: 0.9; }
+.cp-renombrar:hover { background: #fef3c7; color: #b45309; opacity: 1; }
 .cp-editar {
   width: 20px; height: 20px; padding: 0; border: none; background: transparent;
   color: var(--muted); font-size: 12px; line-height: 1; cursor: pointer;
