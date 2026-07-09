@@ -6,6 +6,7 @@ import Link from "next/link";
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
+  verificado?: boolean;
 };
 type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean };
 type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean };
@@ -70,7 +71,7 @@ function generarPDF(r: ResultadoMarca) {
 
   const filasComp = comp.map(c => {
     const cls = c.diff > 0.01 ? "caro" : c.diff < -0.01 ? "barato" : "";
-    const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (c.manual ? '<span class="tag tag-m">manual</span>' : "");
+    const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (c.manual ? '<span class="tag tag-m">manual</span>' : "") + (c.verificado ? '<span class="tag tag-v">verificado</span>' : "");
     const miPrecio = c.miUrl
       ? `<a class="lnk" href="${esc(c.miUrl)}">${c.miPrecio.toFixed(2)} €</a>`
       : `${c.miPrecio.toFixed(2)} €`;
@@ -112,6 +113,7 @@ function generarPDF(r: ResultadoMarca) {
   .barato { color: #15803d; }
   .tag { display: inline-block; font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 1px 4px; border-radius: 3px; margin-right: 5px; background: #ede9fe; color: #6d28d9; vertical-align: middle; }
   .tag-m { background: #dcfce7; color: #15803d; }
+  .tag-v { background: #dbeafe; color: #1d4ed8; }
   .resumen { font-size: 11px; color: #555; margin-bottom: 4px; }
   .footer { margin-top: 22px; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
   @media print { body { padding: 16px; } tr { break-inside: avoid; } h2 { break-after: avoid; } }
@@ -145,7 +147,7 @@ ${packs.length ? `<h2>Packs que tienen ellos y tú no (${packs.length})</h2>
 }
 
 function MarcaBloque({
-  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onMapear, onDesmapear,
+  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onMapear, onDesmapear, onVerificar, onDesverificar,
 }: {
   r: ResultadoMarca; ocultos: Excluido[]; expandido: boolean; onToggle: () => void;
   mostrarTodos: boolean; onToggleMostrar: () => void;
@@ -154,6 +156,8 @@ function MarcaBloque({
   onMotivo: (suUrl: string, motivo: string) => void;
   onMapear: (miUrl: string, suUrl: string) => Promise<void>;
   onDesmapear: (miUrl: string) => void;
+  onVerificar: (suUrl: string) => void;
+  onDesverificar: (suUrl: string) => void;
 }) {
   const [verOcultos, setVerOcultos] = useState(false);
   const [verSinEmp, setVerSinEmp] = useState(false);
@@ -285,8 +289,9 @@ function MarcaBloque({
                       <a href={c.miUrl} target="_blank" rel="noreferrer" className="cp-nombre">
                         {c.esPack && <span className="cp-pack-tag">pack</span>}
                         {c.manual && <span className="cp-manual-tag" title="Enlazado a mano">✓ manual</span>}
+                        {c.verificado && <span className="cp-verificado-tag" title="Comprobado a mano: es el mismo producto">✓ verificado</span>}
                         {c.nombre}
-                        {!c.manual && c.confianza < 0.5 && <span className="cp-baja" title="Emparejamiento de baja confianza: revísalo o enlázalo a mano con ✎">≈</span>}
+                        {!c.manual && !c.verificado && c.confianza < 0.5 && <span className="cp-baja" title="Emparejamiento de baja confianza: revísalo o enlázalo a mano con ✎">≈</span>}
                       </a>
                       <span className="cp-col-num">{c.miPrecio.toFixed(2)}€</span>
                       <a href={c.suUrl} target="_blank" rel="noreferrer" className="cp-col-num cp-c24">{c.suPrecio.toFixed(2)}€</a>
@@ -294,6 +299,13 @@ function MarcaBloque({
                         {c.diff > 0 ? "+" : ""}{c.diff.toFixed(2)}€
                       </span>
                       <div className="cp-acciones">
+                        <button
+                          className={"cp-verificar" + (c.verificado ? " cp-verificar-on" : "")}
+                          title={c.verificado ? "Verificado: quitar la marca" : "Marcar: he comprobado que es el mismo producto"}
+                          onClick={() => c.verificado ? onDesverificar(c.suUrl) : onVerificar(c.suUrl)}
+                        >
+                          ✓
+                        </button>
                         <button className="cp-editar" title="Corregir el enlace: pegar la URL correcta de Cosméticos24h" onClick={() => abrirEditor(c.suUrl, c.suUrl)}>✎</button>
                         <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecio, miUrl: c.miUrl })}>×</button>
                       </div>
@@ -557,6 +569,22 @@ export default function CompararPrecios() {
     setConfig(await res.json());
   }
 
+  async function verificar(slug: string, suUrl: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "verificar", slug, suUrl }),
+    });
+    setConfig(await res.json());
+  }
+
+  async function desverificar(slug: string, suUrl: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "desverificar", slug, suUrl }),
+    });
+    setConfig(await res.json());
+  }
+
   async function revisar(slug: string) {
     setRevisando(slug); setError("");
     try {
@@ -674,6 +702,8 @@ export default function CompararPrecios() {
               onMotivo={(suUrl, motivo) => cambiarMotivo(r.slug, suUrl, motivo)}
               onMapear={(miUrl, suUrl) => mapear(r.slug, miUrl, suUrl)}
               onDesmapear={(miUrl) => desmapear(r.slug, miUrl)}
+              onVerificar={(suUrl) => verificar(r.slug, suUrl)}
+              onDesverificar={(suUrl) => desverificar(r.slug, suUrl)}
             />
           ))}
         </div>

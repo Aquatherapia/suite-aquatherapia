@@ -33,6 +33,7 @@ type Comparacion = {
   suUrl: string;
   esPack?: boolean;    // true si es un pack/estuche
   manual?: boolean;    // true si el enlace lo puso el usuario a mano
+  verificado?: boolean; // true si el usuario ha confirmado a mano que es el mismo producto
 };
 
 type SoloEllos = {
@@ -82,10 +83,12 @@ type Config = {
   excluidos: Record<string, Excluido[]>;
   // Por marca (slug): enlaces manuales tuyo↔suyo (tienen prioridad sobre el automático)
   mapeos: Record<string, Mapeo[]>;
+  // Por marca (slug): suUrl de los productos que el usuario ha comprobado a mano que son el mismo
+  verificados: Record<string, string[]>;
 };
 
 function configVacia(): Config {
-  return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {} };
+  return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {} };
 }
 
 async function leerConfig(): Promise<Config> {
@@ -93,7 +96,7 @@ async function leerConfig(): Promise<Config> {
     const { kv } = await import("@vercel/kv");
     const data = await kv.get<Config>(KV_KEY);
     if (!data) return configVacia();
-    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {} };
+    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {}, verificados: data.verificados ?? {} };
   }
   try {
     const parsed = JSON.parse(await fs.readFile(CONFIG_PATH, "utf-8"));
@@ -103,6 +106,7 @@ async function leerConfig(): Promise<Config> {
       resultados: parsed.resultados ?? [],
       excluidos: parsed.excluidos ?? {},
       mapeos: parsed.mapeos ?? {},
+      verificados: parsed.verificados ?? {},
     };
   } catch {
     return configVacia();
@@ -251,6 +255,7 @@ export async function POST(req: NextRequest) {
     config.resultados = config.resultados.filter(r => r.slug !== body.slug);
     delete config.excluidos[body.slug];
     delete config.mapeos[body.slug];
+    delete config.verificados[body.slug];
     await guardarConfig(config);
     return NextResponse.json(config);
   }
@@ -288,6 +293,29 @@ export async function POST(req: NextRequest) {
   if (body.action === "incluir") {
     const { slug, suUrl } = body as { slug: string; suUrl: string };
     config.excluidos[slug] = (config.excluidos[slug] ?? []).filter(e => e.suUrl !== suUrl);
+    await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
+  // Marcar a mano que el usuario ha comprobado que es el mismo producto
+  if (body.action === "verificar") {
+    const { slug, suUrl } = body as { slug: string; suUrl: string };
+    if (!slug || !suUrl) return NextResponse.json({ error: "Faltan datos para verificar el producto." }, { status: 400 });
+    const lista = config.verificados[slug] ?? [];
+    if (!lista.includes(suUrl)) lista.push(suUrl);
+    config.verificados[slug] = lista;
+    const c = config.resultados.find(x => x.slug === slug)?.comparaciones.find(x => x.suUrl === suUrl);
+    if (c) c.verificado = true;
+    await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
+  // Quitar la verificación a mano de un producto
+  if (body.action === "desverificar") {
+    const { slug, suUrl } = body as { slug: string; suUrl: string };
+    config.verificados[slug] = (config.verificados[slug] ?? []).filter(u => u !== suUrl);
+    const c = config.resultados.find(x => x.slug === slug)?.comparaciones.find(x => x.suUrl === suUrl);
+    if (c) c.verificado = false;
     await guardarConfig(config);
     return NextResponse.json(config);
   }
@@ -355,6 +383,7 @@ export async function POST(req: NextRequest) {
         nombre: sp.titulo || nombre, miPrecio, suPrecio: sp.precio, suPrecioTachado: sp.tachado,
         diff: Math.round((miPrecio - sp.precio) * 100) / 100,
         confianza: 1, miUrl, suUrl, esPack: sp.esPack || miEsPack, manual: true,
+        verificado: (config.verificados[marca.slug] ?? []).includes(suUrl),
       });
       r.comparaciones.sort((a, b) => b.diff - a.diff);
     }
@@ -391,6 +420,7 @@ export async function POST(req: NextRequest) {
     for (const marca of objetivo) {
       try {
         const ocultos = new Set((config.excluidos[marca.slug] ?? []).map(e => e.suUrl));
+        const verificados = new Set(config.verificados[marca.slug] ?? []);
         const mapeos = config.mapeos[marca.slug] ?? [];
         const forzadoPorMi = new Map(mapeos.map(f => [f.miUrl, f.suUrl]));
         const forzadoSu = new Set(mapeos.map(f => f.suUrl));
@@ -441,6 +471,7 @@ export async function POST(req: NextRequest) {
             nombre: s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
             diff: Math.round((mp.precio - s.precio) * 100) / 100,
             confianza: 1, miUrl: mp.url, suUrl: s.url, esPack: s.esPack, manual: true,
+            verificado: verificados.has(s.url),
           });
         }
 
@@ -462,6 +493,7 @@ export async function POST(req: NextRequest) {
               diff: Math.round((mp.precio - s.precio) * 100) / 100,
               confianza: Math.round(mejorJ * 100) / 100,
               miUrl: mp.url, suUrl: s.url, esPack: s.esPack,
+              verificado: verificados.has(s.url),
             });
           } else {
             soloEllos.push({ titulo: s.titulo, precio: s.precio, url: s.url, esPack: s.esPack });
