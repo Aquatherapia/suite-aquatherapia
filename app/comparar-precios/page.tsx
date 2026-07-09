@@ -264,6 +264,7 @@ function MarcaBloque({
   }
 
   const masCaro = r.comparaciones.filter(c => c.diff > 0.01);
+  const verificados = r.comparaciones.filter(c => c.verificado);
   const soloEllosReal = r.soloEllos.filter(s => !s.esPack);
   const packs = r.soloEllos.filter(s => s.esPack);
   const sinEmp = (r.misSinEmparejar ?? []).filter(m => !m.esPack);
@@ -276,6 +277,9 @@ function MarcaBloque({
         <div className="vp-accordion-right">
           {masCaro.length > 0 && (
             <span className="vp-pill vp-pill-nuevo">{masCaro.length} caro{masCaro.length !== 1 ? "s" : ""}</span>
+          )}
+          {verificados.length > 0 && (
+            <span className="vp-pill vp-pill-verificado" title="Productos que has comprobado a mano">✓ {verificados.length} verificado{verificados.length !== 1 ? "s" : ""}</span>
           )}
           <span className="vp-accordion-count">
             {r.comparaciones.length} comparados · {soloEllosReal.length} solo ellos

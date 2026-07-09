@@ -750,6 +750,7 @@ button:disabled {
 
 .vp-pill-nuevo { background: #fee2e2; color: #b91c1c; }
 .vp-pill-conocido { background: #f0f0f0; color: #777; }
+.vp-pill-verificado { background: #dbeafe; color: #1d4ed8; }
 
 .vp-accordion-count { font-size: 12px; color: var(--muted); }
 
