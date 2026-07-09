@@ -71,16 +71,25 @@ function generarPDF(r: ResultadoMarca) {
   const filasComp = comp.map(c => {
     const cls = c.diff > 0.01 ? "caro" : c.diff < -0.01 ? "barato" : "";
     const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (c.manual ? '<span class="tag tag-m">manual</span>' : "");
+    const miPrecio = c.miUrl
+      ? `<a class="lnk" href="${esc(c.miUrl)}">${c.miPrecio.toFixed(2)} €</a>`
+      : `${c.miPrecio.toFixed(2)} €`;
+    const suPrecio = c.suUrl
+      ? `<a class="lnk" href="${esc(c.suUrl)}">${c.suPrecio.toFixed(2)} €</a>`
+      : `${c.suPrecio.toFixed(2)} €`;
     return `<tr>
       <td>${tags}${esc(c.nombre)}</td>
-      <td class="num">${c.miPrecio.toFixed(2)} €</td>
-      <td class="num">${c.suPrecio.toFixed(2)} €</td>
+      <td class="num">${miPrecio}</td>
+      <td class="num">${suPrecio}</td>
       <td class="num ${cls}">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(2)} €</td>
     </tr>`;
   }).join("");
 
-  const lista = (arr: { titulo: string; precio: number }[]) =>
-    arr.map(s => `<tr><td>${esc(s.titulo)}</td><td class="num">${s.precio.toFixed(2)} €</td></tr>`).join("");
+  const lista = (arr: { titulo: string; precio: number; url: string }[]) =>
+    arr.map(s => {
+      const titulo = s.url ? `<a class="lnk" href="${esc(s.url)}">${esc(s.titulo)}</a>` : esc(s.titulo);
+      return `<tr><td>${titulo}</td><td class="num">${s.precio.toFixed(2)} €</td></tr>`;
+    }).join("");
 
   const html = `<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8">
@@ -98,6 +107,7 @@ function generarPDF(r: ResultadoMarca) {
   th.num, td.num { text-align: right; white-space: nowrap; }
   td { padding: 5px 6px; border-bottom: 1px solid #eee; font-size: 12px; }
   .num { font-variant-numeric: tabular-nums; }
+  a.lnk { color: inherit; text-decoration: underline; text-decoration-color: #9ca3af; }
   .caro { color: #b91c1c; font-weight: 700; }
   .barato { color: #15803d; }
   .tag { display: inline-block; font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 1px 4px; border-radius: 3px; margin-right: 5px; background: #ede9fe; color: #6d28d9; vertical-align: middle; }
@@ -121,10 +131,10 @@ ${comp.length ? `<h2>Comparación de precios</h2>
 </table>` : ""}
 
 ${soloEllosReal.length ? `<h2>Tienen ellos y tú no (${soloEllosReal.length})</h2>
-<table><tbody>${lista(soloEllosReal.map(s => ({ titulo: s.titulo, precio: s.precio })))}</tbody></table>` : ""}
+<table><tbody>${lista(soloEllosReal.map(s => ({ titulo: s.titulo, precio: s.precio, url: s.url })))}</tbody></table>` : ""}
 
 ${packs.length ? `<h2>Packs que tienen ellos y tú no (${packs.length})</h2>
-<table><tbody>${lista(packs.map(s => ({ titulo: s.titulo, precio: s.precio })))}</tbody></table>` : ""}
+<table><tbody>${lista(packs.map(s => ({ titulo: s.titulo, precio: s.precio, url: s.url })))}</tbody></table>` : ""}
 
 <div class="footer">La Tienda de Cosméticos · Comparativa con Cosméticos24h · ${fechaHora}. Los precios son los de venta actuales de cada tienda (si Cosméticos24h tiene la marca en oferta, la diferencia lo refleja).</div>
 <script>window.onload = function(){ window.print(); }<\/script>
