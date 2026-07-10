@@ -10,9 +10,17 @@ const PROMPTS: Record<string, string> = {
 Redacta SOLO la sección DESCRIPCIÓN CORTA del producto con este formato exacto:
 
 [DESCRIPCION]
-<h2>[tipo de producto en español] de [Marca]</h2>
+<h2>[Tipo de producto] [adjetivo] de [Marca]</h2>
 <p>Texto de 2-4 frases pensado para VENDER. Empieza con un gancho que conecte con el deseo o problema del cliente. Describe el resultado que va a notar, no solo los ingredientes. Tono cercano y entusiasta, sin exageraciones médicas. Que quien lo lea quiera comprarlo.</p>
+<h3>FORMATO DE [formato/s]</h3>
 [/DESCRIPCION]
+
+Reglas del H2:
+- SIEMPRE incluye un adjetivo que describa la propiedad principal del producto (reafirmante, hidratante, iluminador, antiedad...). Nunca lo dejes solo con el tipo de producto a secas.
+  → Ejemplo correcto: "Crema reafirmante corporal de Dermoder". Ejemplo incorrecto: "Crema corporal de Dermoder".
+Reglas del H3 de formato:
+- SIEMPRE añádelo tras el párrafo, tanto si hay un solo formato como si hay varios (sepáralos por comas): <h3>FORMATO DE 30ml</h3> o <h3>FORMATO DE 30ml, 50ml</h3>.
+- Si no hay ningún formato indicado, omite el H3 por completo.
 
 {{LONGITUD}}
 
@@ -40,7 +48,7 @@ Devuelve ÚNICAMENTE ese bloque, sin nada más.`,
 Redacta SOLO el meta title del producto con este formato exacto:
 
 [META_TITLE]
-Meta title entre 50 y 60 caracteres. Incluye el nombre del producto y la marca. Atractivo para el clic.
+Meta title de máximo 60 caracteres (nunca los superes). Incluye el nombre del producto y la marca. Atractivo para el clic.
 [/META_TITLE]
 
 Devuelve ÚNICAMENTE ese bloque, sin nada más.`,
@@ -50,7 +58,7 @@ Devuelve ÚNICAMENTE ese bloque, sin nada más.`,
 Redacta SOLO la meta description del producto con este formato exacto:
 
 [META_DESC]
-Meta description de unos 150 caracteres. Resume el beneficio clave e invita a hacer clic. Sin claims médicos.
+Meta description de máximo 160 caracteres (nunca los superes). Resume el beneficio clave e invita a hacer clic. Sin claims médicos.
 [/META_DESC]
 
 Devuelve ÚNICAMENTE ese bloque, sin nada más.`,
@@ -65,9 +73,6 @@ Redacta SOLO la sección BENEFICIOS Y PROPIEDADES con este formato exacto:
 <li>Beneficio 1.</li>
 ... (4-7 puntos)
 </ul>
-REGLA FORMATO: Si el campo Formato tiene MÚLTIPLES valores, añade AL FINAL (después de </ul>) un H3 con los formatos separados por comas:
-<h3>FORMATO DE 30ml, 50ml</h3>
-Si hay un solo formato, NO añadas el H3.
 [/BENEFICIOS]
 
 {{LONGITUD}}

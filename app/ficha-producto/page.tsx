@@ -209,12 +209,12 @@ export default function Home() {
                     <div className="meta-label">
                       Meta title
                       {secciones.metaTitle && editando !== "metaTitle" && (
-                        <span className={`meta-chars ${secciones.metaTitle.length >= 50 && secciones.metaTitle.length <= 60 ? "ok" : "warn"}`}>
+                        <span className={`meta-chars ${secciones.metaTitle.length <= 60 ? "ok" : "warn"}`}>
                           {secciones.metaTitle.length} car.
                         </span>
                       )}
                       {editando === "metaTitle" && (
-                        <span className={`meta-chars ${editMetaTexto.length >= 50 && editMetaTexto.length <= 60 ? "ok" : "warn"}`}>
+                        <span className={`meta-chars ${editMetaTexto.length <= 60 ? "ok" : "warn"}`}>
                           {editMetaTexto.length} car.
                         </span>
                       )}

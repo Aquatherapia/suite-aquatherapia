@@ -25,9 +25,16 @@ Reglas del H1:
 [/TITULO]
 
 [DESCRIPCION]
-<h2>[tipo de producto en español] de [Marca]</h2>
+<h2>[Tipo de producto] [adjetivo] de [Marca]</h2>
 <p>Texto de 2-4 frases pensado para VENDER. Empieza con un gancho que conecte con el deseo o problema del cliente (ej: lucir piel más joven, eliminar el maquillaje sin irritar...). Describe el resultado que va a notar, no solo los ingredientes. Usa un tono cercano y entusiasta, sin exageraciones médicas. Que quien lo lea quiera seguir leyendo o comprarlo directamente.</p>
+<h3>FORMATO DE [formato/s]</h3>
 [/DESCRIPCION]
+Reglas del H2 de esta sección:
+- SIEMPRE incluye un adjetivo que describa la propiedad principal del producto (reafirmante, hidratante, iluminador, antiedad...). Nunca dejes el H2 solo con el tipo de producto a secas.
+  → Ejemplo correcto: "Crema reafirmante corporal de Dermoder". Ejemplo incorrecto: "Crema corporal de Dermoder".
+Regla del H3 de formato:
+- SIEMPRE añádelo tras el párrafo, tanto si hay un solo formato como si hay varios (sepáralos por comas): <h3>FORMATO DE 30ml</h3> o <h3>FORMATO DE 30ml, 50ml</h3>.
+- Si no hay ningún formato indicado, omite el H3 por completo.
 
 [BENEFICIOS]
 <h2>BENEFICIOS Y PROPIEDADES</h2>
@@ -36,9 +43,6 @@ Reglas del H1:
 <li>Beneficio 2.</li>
 ... (4-7 puntos)
 </ul>
-IMPORTANTE: Si hay MÚLTIPLES formatos, añade al final (DESPUÉS de la lista) este H3 con los formatos separados por comas:
-<h3>FORMATO DE 30ml, 50ml</h3>
-Si solo hay un formato, NO añadas el H3.
 [/BENEFICIOS]
 
 [ACTIVOS]
@@ -66,11 +70,11 @@ Si solo hay un formato, NO añadas el H3.
 [/IDEAL]
 
 [META_TITLE]
-Meta title entre 50 y 60 caracteres
+Meta title de máximo 60 caracteres (nunca los superes)
 [/META_TITLE]
 
 [META_DESC]
-Meta description de unos 150 caracteres
+Meta description de máximo 160 caracteres (nunca los superes)
 [/META_DESC]
 
 Reglas generales:
