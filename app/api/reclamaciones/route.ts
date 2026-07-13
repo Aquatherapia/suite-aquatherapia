@@ -151,7 +151,9 @@ export async function POST(req: NextRequest) {
     );
   }
   const pideFoto = tipo === "equivocado" || tipo === "roto";
-  const pideStock = pideFoto || tipo === "sin_stock";
+  const pideStock =
+    pideFoto || tipo === "sin_stock" || tipo === "extraviado";
+  const avisoInterno = tipo === "extraviado" && !body.hayStock;
 
   if (pideFoto) {
     const queFoto =
@@ -167,7 +169,17 @@ export async function POST(req: NextRequest) {
     }
   }
   if (pideStock) {
-    if (body.hayStock) {
+    if (tipo === "extraviado") {
+      if (body.hayStock) {
+        extras.push(
+          "- SÍ tenemos otro en almacén: dile que **le enviamos otro hoy mismo**. 📦"
+        );
+      } else {
+        extras.push(
+          "- NO tenemos otro en almacén ahora mismo: discúlpate, dile que ya lo estamos gestionando y ofrécele reponérselo en cuanto lo tengamos o devolverle el dinero, lo que prefiera. NO prometas que sale hoy."
+        );
+      }
+    } else if (body.hayStock) {
       extras.push(
         "- SÍ tenemos stock del producto: dile que **se lo enviamos hoy mismo**. 📦"
       );
@@ -194,7 +206,7 @@ export async function POST(req: NextRequest) {
       systemPrompt(tipo, canal, instruccionesExtra),
       buildUserContent(body)
     );
-    return NextResponse.json({ texto, regaloPorTardanza });
+    return NextResponse.json({ texto, regaloPorTardanza, avisoInterno });
   } catch (e: unknown) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Error al generar" },

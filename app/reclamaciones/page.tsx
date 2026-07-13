@@ -27,12 +27,14 @@ export default function ReclamacionesPage() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [texto, setTexto] = useState("");
+  const [avisoInterno, setAvisoInterno] = useState(false);
   const [copiado, setCopiado] = useState(false);
 
   async function generar() {
     setCargando(true);
     setError("");
     setTexto("");
+    setAvisoInterno(false);
     setCopiado(false);
     try {
       const res = await fetch("/api/reclamaciones", {
@@ -47,13 +49,16 @@ export default function ReclamacionesPage() {
           fotoRecibida: pideFoto ? fotoRecibida === "si" : undefined,
           hayStock: pideStock ? hayStock === "si" : undefined,
           fechaLlegada:
-            pideStock && hayStock === "no" ? fechaLlegada || undefined : undefined,
+            pideStock && hayStock === "no" && tipo !== "extraviado"
+              ? fechaLlegada || undefined
+              : undefined,
           mensajeCliente: mensajeCliente.trim() || undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error desconocido");
       setTexto(data.texto);
+      setAvisoInterno(!!data.avisoInterno);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error al generar");
     } finally {
@@ -103,7 +108,7 @@ export default function ReclamacionesPage() {
   }
 
   const pideFoto = tipo === "equivocado" || tipo === "roto";
-  const pideStock = pideFoto || tipo === "sin_stock";
+  const pideStock = pideFoto || tipo === "sin_stock" || tipo === "extraviado";
   const puedeGenerar = nombre.trim() && pedido.trim() && !cargando;
 
   return (
@@ -227,7 +232,11 @@ export default function ReclamacionesPage() {
 
           {pideStock && (
             <>
-              <label>¿Tenemos stock del producto?</label>
+              <label>
+                {tipo === "extraviado"
+                  ? "¿Tenemos otro en almacén?"
+                  : "¿Tenemos stock del producto?"}
+              </label>
               <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
                 {(["si", "no"] as const).map((v) => (
                   <button
@@ -259,7 +268,20 @@ export default function ReclamacionesPage() {
                     marginBottom: 16,
                   }}
                 >
-                  Hay stock: se le dice que le sale hoy mismo. 📦
+                  {tipo === "extraviado"
+                    ? "Hay otro en almacén: se le envía otro hoy mismo. 📦"
+                    : "Hay stock: se le dice que le sale hoy mismo. 📦"}
+                </div>
+              ) : tipo === "extraviado" ? (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--muted)",
+                    marginBottom: 16,
+                  }}
+                >
+                  Sin stock en almacén: al generar saldrá un aviso interno para
+                  que hagáis pedido de reposición. ⚠️
                 </div>
               ) : (
                 <>
@@ -321,6 +343,25 @@ export default function ReclamacionesPage() {
         <div className="right-col">
           {!texto && !cargando && (
             <p className="placeholder">La respuesta aparecerá aquí.</p>
+          )}
+
+          {avisoInterno && (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: "12px 14px",
+                background: "#fff7ed",
+                border: "1px solid #fdba74",
+                borderRadius: 8,
+                fontSize: 13,
+                lineHeight: 1.5,
+                color: "#9a3412",
+              }}
+            >
+              <strong>⚠️ Aviso interno (no se envía al cliente):</strong> no hay
+              otro en almacén para el pedido {pedido || "—"}. Hay que hacer{" "}
+              <strong>pedido de reposición</strong> para poder reenviárselo.
+            </div>
           )}
 
           {texto && (
