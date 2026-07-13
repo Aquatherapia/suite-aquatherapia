@@ -4,12 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 
 type Canal = "whatsapp" | "email";
-type Tipo = "extraviado" | "sin_stock" | "roto" | "otro";
+type Tipo = "extraviado" | "sin_stock" | "roto" | "equivocado" | "otro";
 
 const TIPOS: { value: Tipo; label: string }[] = [
   { value: "extraviado", label: "Envío extraviado / no llega" },
   { value: "sin_stock", label: "No ha salido de almacén (rotura de stock)" },
   { value: "roto", label: "Producto llegado roto / dañado" },
+  { value: "equivocado", label: "Producto equivocado (enviado mal)" },
   { value: "otro", label: "Otro" },
 ];
 

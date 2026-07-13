@@ -21,6 +21,12 @@ const TIPOS = {
       "El producto ha llegado roto, dañado o derramado. Hay que disculparse mostrando que en almacén se embala con mucho cuidado (así que ha sido un golpe en el transporte), pedir foto si no la tiene y ofrecer reposición o devolución.",
     plantillaEjemplo: `Uy {nombre}! 😱 Mira que lo embalamos siempre **súper bien** desde almacén, pero está claro que en el camino le han dado un buen golpe 😔 Lo sentimos muchísimo. ¿Puedes pasarme una **foto** del producto y de la caja tal cual te llegó? Así lo reclamamos al transportista 📸 Y tú tranqui, que del pedido **{pedido}** te mando **uno nuevo ya mismo** (o te devuelvo el dinero, como prefieras) 📦💜 Gracias por avisarnos!`,
   },
+  equivocado: {
+    etiqueta: "Producto equivocado (enviado mal)",
+    contexto:
+      "Nos hemos equivocado y le hemos enviado un producto distinto al que pidió. La culpa es nuestra: hay que reconocerlo con naturalidad, disculparse y darle solución (enviarle el correcto ya mismo y decirle que se quede el equivocado o que gestionamos la recogida, sin coste para él).",
+    plantillaEjemplo: `Ay {nombre}, la hemos liado nosotros con tu pedido **{pedido}** 🙈 Te hemos mandado el producto equivocado, ¡mil perdones! 😔 Ahora mismo te enviamos el **correcto sin que tengas que pagar nada** 📦 Y el que te llegó por error **quédatelo** o si prefieres te organizamos la recogida, tú tranqui, no te preocupes de nada 💜 Perdona el despiste!`,
+  },
   otro: {
     etiqueta: "Otro / reclamación general",
     contexto:
