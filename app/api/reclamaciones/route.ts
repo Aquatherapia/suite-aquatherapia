@@ -12,8 +12,26 @@ const TIPOS = {
   sin_stock: {
     etiqueta: "Pedido no ha salido (rotura de stock)",
     contexto:
-      "El pedido todavía no ha salido de almacén porque falta stock de algún producto. Hay que disculparse y dar una alternativa (esperar, cambiar producto o reembolso).",
-    plantillaEjemplo: `Hola {nombre}! 🙈 Mil perdones por el retraso con tu pedido **{pedido}** 🙏 Nos hemos quedado sin stock de uno de los productos justo cuando iba a salir, una pena 😩 Ya hemos pedido reposición y en cuanto entre te lo mandamos **volando** 📦 Si no quieres esperar, dímelo y te lo **cambio por otro producto o te devuelvo ese importe** sin ningún problema 😊 Perdona otra vez el lío!`,
+      "El pedido todavía no ha salido de almacén porque falta stock de algún producto (retraso en el envío). Somos nosotros quienes contactamos con el cliente para avisarle y darle opciones.",
+    plantillaEjemplo: `Asunto: {nombre}, tenemos una pequeña actualización sobre tu pedido #{pedido}
+
+¡Hola!, {nombre}.
+
+Hemos estado revisando tu pedido #{pedido} y... tenemos un pequeño culpable que está retrasando la salida. Se trata de: {producto pendiente}.
+
+Justo cuando realizaste el pedido se agotaron las últimas unidades disponibles. La buena noticia es que el proveedor ya nos ha confirmado la reposición y esperamos recibirla {fecha estimada}, así que no debería tardar mucho más.
+
+Mientras tanto, te damos dos opciones:
+- Esperar unos días y enviártelo todo junto en cuanto recibamos el producto.
+- O, si te viene mejor, hoy mismo sacamos el resto del pedido y, en cuanto llegue {producto pendiente}, te lo enviaremos en un segundo paquete sin ningún coste adicional.
+
+Solo dinos qué prefieres y nos ponemos con ello.
+
+Gracias por esperar y por confiar en nosotros. Estamos pendientes de este pedido para que salga de nuestro almacén en cuanto llegue la reposición.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`,
   },
   roto: {
     etiqueta: "Producto llegado roto / dañado",
@@ -41,12 +59,12 @@ const CANALES = {
   whatsapp: {
     etiqueta: "WhatsApp",
     formato:
-      "Mensaje de WhatsApp: cortito (2-4 frases), tuteo directo, súper cercano. Sin saludos formales ni firma al final.",
+      "Mensaje de WhatsApp: cortito (2-4 frases), tuteo directo, súper cercano y muy informal. CON emojis/iconos con naturalidad. SIN asunto ni firma. Si hay plantilla de referencia (que estará en versión email), quédate con su contenido y las opciones, pero hazlo mucho más corto e informal.",
   },
   email: {
     etiqueta: "Correo electrónico",
     formato:
-      "Correo electrónico: empieza con 'Hola {nombre},' en su propia línea y termina con una despedida corta y cercana en su propia línea (ej: 'Un abrazo,' o '¡Gracias por tu paciencia!,') seguida de 'El equipo de La Tienda de Cosméticos'. Puede ser un pelín más largo que el WhatsApp, pero sigue igual de informal y cercano, nunca corporativo.",
+      "Correo electrónico: SIN emojis. Empieza con una línea 'Asunto: ...' (que incluya el nombre del cliente y el nº de pedido), luego una línea en blanco y el cuerpo. Saluda ('¡Hola!, {nombre}.' o 'Hola {nombre},') y cierra en líneas separadas con 'Un saludo,' / 'Atención al Cliente' / 'La Tienda de Cosméticos'. Tono cercano y humano pero algo más cuidado que el WhatsApp, nunca acartonado. Si hay plantilla de referencia, sigue de cerca su estructura y contenido.",
   },
 } as const;
 
@@ -65,15 +83,15 @@ Tu tarea es redactar la RESPUESTA a la reclamación de un cliente, para enviárs
 
 TIPO DE RECLAMACIÓN: ${t.etiqueta}
 Contexto de esta situación: ${t.contexto}
-${t.plantillaEjemplo ? `\nPlantilla de referencia (tono orientativo, NO la copies literalmente, varía saludo/cierre/palabras cada vez):\n"""\n${t.plantillaEjemplo}\n"""\n` : ""}
+${t.plantillaEjemplo ? `\nPlantilla de referencia (te marca el CONTENIDO y la SOLUCIÓN de este caso; el FORMATO — asunto, saludo, cierre y emojis — lo manda el "Formato del canal", no la plantilla). Varíala un poco para que no sea un copia-pega idéntico:\n"""\n${t.plantillaEjemplo}\n"""\n` : ""}
 CANAL: ${c.etiqueta}
 Formato del canal: ${c.formato}
 ${instruccionesExtra ? `\nINSTRUCCIONES ADICIONALES PARA ESTE CASO (tenlas muy en cuenta):\n${instruccionesExtra}\n` : ""}
 ESTILO OBLIGATORIO:
-- Español, tono **muy muy informal** y cercano, como un mensaje a un colega de confianza. Nada de "Estimado cliente" ni lenguaje corporativo o acartonado.
+- Tono cercano y humano, nada corporativo ni acartonado. El nivel exacto depende del canal (ver "Formato del canal"): WhatsApp muy informal; email cercano pero algo más cuidado.
 - SIEMPRE menciona el nombre del cliente y el número de pedido en algún punto del mensaje.
-- Usa **negritas** poniendo el texto entre dobles asteriscos (por ejemplo **el número de pedido**, **la solución que ofreces**, **el regalo**...). 2 o 3 negritas como mucho, para resaltar lo importante.
-- Usa varios emojis/iconos con naturalidad (📦 😊 🎁 🙏 ✨ 💜 😔 📸 ...), TANTO en WhatsApp como en email.
+- Usa **negritas** poniendo el texto entre dobles asteriscos (por ejemplo **el número de pedido**, **la solución que ofreces**, **el regalo**...). 2 o 3 negritas como mucho, para resaltar lo importante. En ambos canales.
+- Emojis/iconos SEGÚN EL CANAL: en WhatsApp usa varios con naturalidad (📦 😊 🎁 🙏 ✨ 💜 😔 📸 ...); en EMAIL no uses ningún emoji.
 - Ten en cuenta lo que ha escrito el cliente para responder acorde: si está enfadado, más empatía; si solo pregunta, más ligero.
 - Ofrece siempre una solución o siguiente paso concreto (reponer, reembolsar, esperar reposición, pedir foto...).
 - NO inventes datos que no te den (plazos exactos, nombres de empleados, políticas concretas) más allá de lo que aparece en la plantilla de referencia.
@@ -84,11 +102,14 @@ ESTILO OBLIGATORIO:
 function buildUserContent(body: {
   nombre?: string;
   pedido?: string;
+  productoPendiente?: string;
   mensajeCliente?: string;
 }) {
   const lineas: string[] = [];
   if (body.nombre?.trim()) lineas.push(`Nombre del cliente: ${body.nombre.trim()}`);
   if (body.pedido?.trim()) lineas.push(`Número de pedido: ${body.pedido.trim()}`);
+  if (body.productoPendiente?.trim())
+    lineas.push(`Producto pendiente / que falta (causa del retraso): ${body.productoPendiente.trim()}`);
   const mensaje = body.mensajeCliente?.trim();
   if (mensaje) {
     lineas.push(`Lo que ha escrito el cliente:\n${mensaje}`);
@@ -98,13 +119,22 @@ function buildUserContent(body: {
   return lineas.join("\n");
 }
 
-// Días transcurridos desde la fecha de compra (YYYY-MM-DD). null si no válida.
-function diasDesde(fecha?: string): number | null {
+// Días laborables (lunes-viernes) transcurridos desde la fecha de compra. null si no válida.
+function diasLaborables(fecha?: string): number | null {
   if (!fecha) return null;
   const d = new Date(fecha + "T00:00:00");
   if (isNaN(d.getTime())) return null;
-  const ms = Date.now() - d.getTime();
-  return Math.floor(ms / (1000 * 60 * 60 * 24));
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  let count = 0;
+  const cur = new Date(d);
+  cur.setDate(cur.getDate() + 1); // desde el día siguiente a la compra
+  while (cur <= hoy) {
+    const day = cur.getDay();
+    if (day !== 0 && day !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
 }
 
 // Fecha (YYYY-MM-DD) en texto largo español, ej. "miércoles 5 de agosto". null si no válida.
@@ -141,13 +171,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const dias = diasDesde(body.fechaCompra);
-  const regaloPorTardanza = tipo === "sin_stock" && dias !== null && dias > 7;
+  const diasLab = diasLaborables(body.fechaCompra);
+  const regaloPorTardanza = tipo === "sin_stock" && diasLab !== null && diasLab > 5;
 
   const extras: string[] = [];
   if (regaloPorTardanza) {
     extras.push(
-      "- Han pasado más de una semana desde que hizo la compra: además de disculparte por el retraso, dile que **por las molestias le vamos a meter un regalito/detalle en el pedido** 🎁, con naturalidad y cariño."
+      "- Han pasado más de 5 días laborables desde la compra: además de disculparte por el retraso, dile que como agradecimiento por su paciencia, cuando reciba el paquete encontrará un **regalo/detalle** de nuestra parte. Con naturalidad y cariño."
     );
   }
   const pideFoto = tipo === "equivocado" || tipo === "roto";

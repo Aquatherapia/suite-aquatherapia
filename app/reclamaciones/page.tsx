@@ -20,6 +20,7 @@ export default function ReclamacionesPage() {
   const [canal, setCanal] = useState<Canal>("whatsapp");
   const [tipo, setTipo] = useState<Tipo>("extraviado");
   const [fechaCompra, setFechaCompra] = useState("");
+  const [productoPendiente, setProductoPendiente] = useState("");
   const [fotoRecibida, setFotoRecibida] = useState<"si" | "no">("no");
   const [hayStock, setHayStock] = useState<"si" | "no">("si");
   const [fechaLlegada, setFechaLlegada] = useState("");
@@ -46,6 +47,8 @@ export default function ReclamacionesPage() {
           canal,
           tipo,
           fechaCompra: tipo === "sin_stock" ? fechaCompra || undefined : undefined,
+          productoPendiente:
+            tipo === "sin_stock" ? productoPendiente.trim() || undefined : undefined,
           fotoRecibida: pideFoto ? fotoRecibida === "si" : undefined,
           hayStock: pideStock ? hayStock === "si" : undefined,
           fechaLlegada:
@@ -211,6 +214,19 @@ export default function ReclamacionesPage() {
           {tipo === "sin_stock" && (
             <>
               <label>
+                Producto pendiente / que falta{" "}
+                <span style={{ fontWeight: 400, color: "var(--muted)" }}>
+                  (opcional)
+                </span>
+              </label>
+              <input
+                type="text"
+                placeholder="Ej: Sérum Vitamina C 30 ml"
+                value={productoPendiente}
+                onChange={(e) => setProductoPendiente(e.target.value)}
+              />
+
+              <label>
                 Fecha de la compra{" "}
                 <span style={{ fontWeight: 400, color: "var(--muted)" }}>
                   (opcional)
@@ -224,8 +240,8 @@ export default function ReclamacionesPage() {
               <div
                 style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}
               >
-                Si la compra es de hace más de una semana, se le ofrece un regalo
-                por la tardanza. 🎁
+                Si han pasado más de 5 días laborables desde la compra, se le
+                ofrece un regalo por la tardanza. 🎁
               </div>
             </>
           )}
