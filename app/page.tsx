@@ -152,6 +152,19 @@ export default async function Home() {
           <span className="agente-arrow">→</span>
         </Link>
 
+        <Link href="/reclamaciones" className="agente-card">
+          <span className="agente-icono">✉</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Reclamaciones de clientes</div>
+            <div className="agente-desc">
+              Indica cliente, pedido y el motivo (envío extraviado, rotura de
+              stock, producto roto...) y la IA redacta la respuesta lista para
+              WhatsApp o email con tu tono habitual.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
+
         <Link href="/margenes" className="agente-card">
           <span className="agente-icono">％</span>
           <div className="agente-info">
