@@ -175,6 +175,17 @@ export async function POST(req: NextRequest) {
   const regaloPorTardanza = tipo === "sin_stock" && diasLab !== null && diasLab > 5;
 
   const extras: string[] = [];
+  if (tipo === "sin_stock") {
+    if (body.variosProductos) {
+      extras.push(
+        "- El pedido lleva MÁS productos además del que falta: ofrécele la opción de enviarle YA lo que sí está disponible y mandarle el producto pendiente en un segundo paquete en cuanto nos llegue, sin coste adicional (con la fecha aproximada si se conoce); o, si prefiere, esperar y recibirlo todo junto. Que elija."
+      );
+    } else {
+      extras.push(
+        "- El pedido es SOLO el producto que falta (no hay más productos): NO ofrezcas 'enviar el resto del pedido', porque no hay nada más que mandar. Las opciones son esperar a que llegue la reposición (dile la fecha aproximada si se sabe) o devolverle el dinero."
+      );
+    }
+  }
   if (regaloPorTardanza) {
     extras.push(
       "- Han pasado más de 5 días laborables desde la compra: además de disculparte por el retraso, dile que como agradecimiento por su paciencia, cuando reciba el paquete encontrará un **regalo/detalle** de nuestra parte. Con naturalidad y cariño."

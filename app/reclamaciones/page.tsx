@@ -21,6 +21,7 @@ export default function ReclamacionesPage() {
   const [tipo, setTipo] = useState<Tipo>("extraviado");
   const [fechaCompra, setFechaCompra] = useState("");
   const [productoPendiente, setProductoPendiente] = useState("");
+  const [variosProductos, setVariosProductos] = useState<"si" | "no">("si");
   const [fotoRecibida, setFotoRecibida] = useState<"si" | "no">("no");
   const [hayStock, setHayStock] = useState<"si" | "no">("si");
   const [fechaLlegada, setFechaLlegada] = useState("");
@@ -49,6 +50,7 @@ export default function ReclamacionesPage() {
           fechaCompra: tipo === "sin_stock" ? fechaCompra || undefined : undefined,
           productoPendiente:
             tipo === "sin_stock" ? productoPendiente.trim() || undefined : undefined,
+          variosProductos: tipo === "sin_stock" ? variosProductos === "si" : undefined,
           fotoRecibida: pideFoto ? fotoRecibida === "si" : undefined,
           hayStock: pideStock ? hayStock === "si" : undefined,
           fechaLlegada:
@@ -225,6 +227,38 @@ export default function ReclamacionesPage() {
                 value={productoPendiente}
                 onChange={(e) => setProductoPendiente(e.target.value)}
               />
+
+              <label>¿El pedido lleva más productos aparte del que falta?</label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                {(["si", "no"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setVariosProductos(v)}
+                    style={{
+                      flex: 1,
+                      marginTop: 0,
+                      padding: "10px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background:
+                        variosProductos === v ? "var(--accent)" : "#fff",
+                      color: variosProductos === v ? "#fff" : "var(--ink)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {v === "si" ? "Sí, lleva más" : "No, solo ese"}
+                  </button>
+                ))}
+              </div>
+              <div
+                style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}
+              >
+                {variosProductos === "si"
+                  ? "Se le ofrece enviar ya lo disponible y el pendiente después."
+                  : "Solo ese producto: se le ofrece esperar la reposición o reembolso."}
+              </div>
 
               <label>
                 Fecha de la compra{" "}
