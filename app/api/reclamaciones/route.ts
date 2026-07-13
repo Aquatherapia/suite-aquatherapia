@@ -280,7 +280,7 @@ const CANALES = {
   email: {
     etiqueta: "Correo electrónico",
     formato:
-      "Correo electrónico: SIN emojis. Sigue de cerca la plantilla de referencia: empieza con su línea 'Asunto: ...', luego una línea en blanco y el cuerpo, y cierra con 'Un saludo,' / 'Atención al Cliente' / 'La Tienda de Cosméticos' en líneas separadas. Tono cercano y humano pero algo más cuidado que el WhatsApp, nunca acartonado.",
+      "Correo electrónico: reproduce la plantilla de referencia CASI TAL CUAL, palabra por palabra. Tu única tarea es: (1) rellenar los datos entre {llaves} con lo que te den; (2) aplicar las 'instrucciones adicionales' si las hay. NO reformules el resto del texto, NO añadas frases nuevas, NO añadas negritas ni emojis. Mantén su línea 'Asunto: ...', su saludo y su cierre 'Un saludo,' / 'Atención al Cliente' / 'La Tienda de Cosméticos'. Si falta el dato de alguna {llave}, adáptala con naturalidad o quita esa parte, sin dejar huecos.",
   },
 } as const;
 
@@ -300,15 +300,13 @@ Tu tarea es redactar la RESPUESTA a la reclamación de un cliente, para enviárs
 
 TIPO DE RECLAMACIÓN: ${t.etiqueta}
 Contexto de esta situación: ${t.contexto}
-${plantilla ? `\nPlantilla de referencia (te marca el CONTENIDO y la SOLUCIÓN de este caso; el FORMATO — asunto, saludo, cierre y emojis — lo manda el "Formato del canal", no la plantilla). Los datos entre {llaves} debes rellenarlos con los datos que te den más abajo; si falta alguno, adáptalo con naturalidad o quítalo, pero NUNCA dejes las {llaves} escritas ni inventes datos concretos:\n"""\n${plantilla}\n"""\n` : ""}
+${plantilla ? `\nPlantilla de referencia. Los datos entre {llaves} debes rellenarlos con los datos que te den más abajo; si falta alguno, adáptalo con naturalidad o quítalo, pero NUNCA dejes las {llaves} escritas ni inventes datos concretos. Cómo de fiel ser a esta plantilla depende del canal (ver "Formato del canal"): en EMAIL se reproduce casi literal; en WhatsApp se coge su contenido y solución pero se hace más corto e informal:\n"""\n${plantilla}\n"""\n` : ""}
 CANAL: ${c.etiqueta}
 Formato del canal: ${c.formato}
 ${instruccionesExtra ? `\nINSTRUCCIONES ADICIONALES PARA ESTE CASO (tenlas muy en cuenta):\n${instruccionesExtra}\n` : ""}
 ESTILO OBLIGATORIO:
-- Tono cercano y humano, nada corporativo ni acartonado. El nivel exacto depende del canal (ver "Formato del canal"): WhatsApp muy informal; email cercano pero algo más cuidado.
 - SIEMPRE menciona el nombre del cliente y el número de pedido en algún punto del mensaje.
-- Usa **negritas** poniendo el texto entre dobles asteriscos para resaltar lo importante (2 o 3 como mucho). En ambos canales.
-- Emojis/iconos SEGÚN EL CANAL: en WhatsApp usa varios con naturalidad (📦 😊 🎁 🙏 ✨ 💜 😔 📸 ...); en EMAIL no uses ningún emoji.
+- Emojis y negritas SOLO en WhatsApp: allí usa varios emojis con naturalidad (📦 😊 🎁 🙏 ✨ 💜 😔 📸 ...) y alguna **negrita** (dobles asteriscos) para resaltar 1-2 cosas, con tono muy informal y cercano. En EMAIL: ni emojis ni negritas añadidas — respeta la plantilla tal cual.
 - Ten en cuenta lo que ha escrito el cliente para responder acorde: si está enfadado, más empatía; si solo pregunta, más ligero.
 - Ofrece siempre la solución o siguiente paso concreto de la plantilla.
 - NO inventes datos que no te den (plazos exactos, nombres de empleados, políticas concretas) más allá de lo que aparece en la plantilla.
