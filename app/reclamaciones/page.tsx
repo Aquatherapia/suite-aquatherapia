@@ -128,7 +128,7 @@ export default function ReclamacionesPage() {
           // stock + alternativa (roto, equivocado, contrareembolso, extraviado)
           hayStock: pideStockAlt ? hayStock === "si" : undefined,
           productoAlternativo:
-            pideStockAlt && hayStock === "no"
+            (pideStockAlt && hayStock === "no") || tipo === "sin_stock"
               ? productoAlternativo.trim() || undefined
               : undefined,
           // extraviado + contrareembolso
@@ -312,6 +312,18 @@ export default function ReclamacionesPage() {
               <div style={hint}>
                 Si han pasado más de 5 días laborables desde la compra, se le
                 ofrece un regalo por la tardanza. 🎁
+              </div>
+
+              <label>Producto alternativo que le ofrecemos {opcional}</label>
+              <input
+                type="text"
+                placeholder="Ej: Sérum Vitamina C Plus 30 ml"
+                value={productoAlternativo}
+                onChange={(e) => setProductoAlternativo(e.target.value)}
+              />
+              <div style={hint}>
+                Si lo rellenas, además de esperar la reposición se le ofrece esta
+                alternativa por si no quiere esperar.
               </div>
             </>
           )}

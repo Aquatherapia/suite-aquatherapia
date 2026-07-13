@@ -433,6 +433,11 @@ export async function POST(req: NextRequest) {
         "- No se conoce la fecha estimada de reposición: no des una fecha concreta; di simplemente que la esperamos lo antes posible / en cuanto nos la confirme el proveedor."
       );
     }
+    if (body.productoAlternativo?.trim()) {
+      extras.push(
+        `- Como alternativa a esperar la reposición, ofrécele también **${body.productoAlternativo.trim()}** (un producto parecido que sí tenemos disponible), por si prefiere no esperar.`
+      );
+    }
   }
   if (regaloPorTardanza) {
     extras.push(
