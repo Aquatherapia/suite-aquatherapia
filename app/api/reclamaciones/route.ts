@@ -107,6 +107,24 @@ function diasDesde(fecha?: string): number | null {
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 }
 
+// Fecha (YYYY-MM-DD) en texto largo español, ej. "miércoles 5 de agosto". null si no válida.
+function fechaLarga(fecha?: string): string | null {
+  if (!fecha) return null;
+  const d = new Date(fecha + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat("es-ES", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    })
+      .format(d)
+      .replace(",", "");
+  } catch {
+    return fecha;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const apiKey = process.env.GEMINI_API_KEY;
@@ -132,7 +150,10 @@ export async function POST(req: NextRequest) {
       "- Han pasado más de una semana desde que hizo la compra: además de disculparte por el retraso, dile que **por las molestias le vamos a meter un regalito/detalle en el pedido** 🎁, con naturalidad y cariño."
     );
   }
-  if (tipo === "equivocado" || tipo === "roto") {
+  const pideFoto = tipo === "equivocado" || tipo === "roto";
+  const pideStock = pideFoto || tipo === "sin_stock";
+
+  if (pideFoto) {
     const queFoto =
       tipo === "roto"
         ? "una foto del producto roto y de la caja tal cual le llegó"
@@ -142,18 +163,25 @@ export async function POST(req: NextRequest) {
         `- Todavía NO nos ha enviado la foto: pídesela con naturalidad (${queFoto}) para poder gestionarlo. 📸`
       );
     } else {
-      extras.push(
-        "- Ya tenemos la foto, así que NO le pidas ninguna foto."
-      );
+      extras.push("- Ya tenemos la foto, así que NO le pidas ninguna foto.");
     }
+  }
+  if (pideStock) {
     if (body.hayStock) {
       extras.push(
-        "- SÍ tenemos stock del producto correcto: dile que **se lo enviamos hoy mismo**. 📦"
+        "- SÍ tenemos stock del producto: dile que **se lo enviamos hoy mismo**. 📦"
       );
     } else {
-      extras.push(
-        "- NO tenemos stock del producto correcto ahora mismo: NO prometas que sale hoy; dile que se lo enviamos en cuanto vuelva a entrar en stock / lo repongamos, lo antes posible."
-      );
+      const llegada = fechaLarga(body.fechaLlegada);
+      if (llegada) {
+        extras.push(
+          `- Ahora mismo NO tenemos stock, pero la reposición nos entra el ${llegada}. Explícale que en cuanto nos llegue se lo enviamos, y que a él le llegaría aproximadamente **2 días laborables después**. NO prometas que sale hoy.`
+        );
+      } else {
+        extras.push(
+          "- NO tenemos stock ahora mismo: NO prometas que sale hoy; dile que se lo enviamos en cuanto vuelva a entrar en stock / lo repongamos, lo antes posible."
+        );
+      }
     }
   }
   const instruccionesExtra = extras.join("\n");

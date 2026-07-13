@@ -22,6 +22,7 @@ export default function ReclamacionesPage() {
   const [fechaCompra, setFechaCompra] = useState("");
   const [fotoRecibida, setFotoRecibida] = useState<"si" | "no">("no");
   const [hayStock, setHayStock] = useState<"si" | "no">("si");
+  const [fechaLlegada, setFechaLlegada] = useState("");
   const [mensajeCliente, setMensajeCliente] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -43,8 +44,10 @@ export default function ReclamacionesPage() {
           canal,
           tipo,
           fechaCompra: tipo === "sin_stock" ? fechaCompra || undefined : undefined,
-          fotoRecibida: pideFotoYStock ? fotoRecibida === "si" : undefined,
-          hayStock: pideFotoYStock ? hayStock === "si" : undefined,
+          fotoRecibida: pideFoto ? fotoRecibida === "si" : undefined,
+          hayStock: pideStock ? hayStock === "si" : undefined,
+          fechaLlegada:
+            pideStock && hayStock === "no" ? fechaLlegada || undefined : undefined,
           mensajeCliente: mensajeCliente.trim() || undefined,
         }),
       });
@@ -99,7 +102,8 @@ export default function ReclamacionesPage() {
     setTimeout(() => setCopiado(false), 2000);
   }
 
-  const pideFotoYStock = tipo === "equivocado" || tipo === "roto";
+  const pideFoto = tipo === "equivocado" || tipo === "roto";
+  const pideStock = pideFoto || tipo === "sin_stock";
   const puedeGenerar = nombre.trim() && pedido.trim() && !cargando;
 
   return (
@@ -168,7 +172,7 @@ export default function ReclamacionesPage() {
             ))}
           </select>
 
-          {pideFotoYStock && (
+          {pideFoto && (
             <>
               <label>
                 ¿Nos ha enviado ya la foto del producto{" "}
@@ -196,35 +200,6 @@ export default function ReclamacionesPage() {
                   </button>
                 ))}
               </div>
-
-              <label>¿Tenemos en stock el producto correcto?</label>
-              <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-                {(["si", "no"] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setHayStock(v)}
-                    style={{
-                      flex: 1,
-                      marginTop: 0,
-                      padding: "10px",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: hayStock === v ? "var(--accent)" : "#fff",
-                      color: hayStock === v ? "#fff" : "var(--ink)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {v === "si" ? "Sí" : "No"}
-                  </button>
-                ))}
-              </div>
-              <div
-                style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}
-              >
-                Si hay stock, se le dice que le sale hoy mismo. 📦
-              </div>
             </>
           )}
 
@@ -247,6 +222,71 @@ export default function ReclamacionesPage() {
                 Si la compra es de hace más de una semana, se le ofrece un regalo
                 por la tardanza. 🎁
               </div>
+            </>
+          )}
+
+          {pideStock && (
+            <>
+              <label>¿Tenemos stock del producto?</label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                {(["si", "no"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setHayStock(v)}
+                    style={{
+                      flex: 1,
+                      marginTop: 0,
+                      padding: "10px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: hayStock === v ? "var(--accent)" : "#fff",
+                      color: hayStock === v ? "#fff" : "var(--ink)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {v === "si" ? "Sí" : "No"}
+                  </button>
+                ))}
+              </div>
+
+              {hayStock === "si" ? (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--muted)",
+                    marginBottom: 16,
+                  }}
+                >
+                  Hay stock: se le dice que le sale hoy mismo. 📦
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "var(--muted)",
+                      margin: "4px 0 8px",
+                    }}
+                  >
+                    Sin stock. ¿Sabes cuándo os entra la reposición? Se le dirá
+                    que le llega ~2 días laborables después.
+                  </div>
+                  <label>
+                    ¿Cuándo os llega la reposición?{" "}
+                    <span style={{ fontWeight: 400, color: "var(--muted)" }}>
+                      (opcional)
+                    </span>
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaLlegada}
+                    onChange={(e) => setFechaLlegada(e.target.value)}
+                    style={{ marginBottom: 16 }}
+                  />
+                </>
+              )}
             </>
           )}
 
