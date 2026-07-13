@@ -244,7 +244,11 @@ export default function ReclamacionesPage() {
           />
 
           <label>Motivo de la reclamación</label>
-          <select value={tipo} onChange={(e) => setTipo(e.target.value as Tipo)}>
+          <select
+            className="rc-select"
+            value={tipo}
+            onChange={(e) => setTipo(e.target.value as Tipo)}
+          >
             {TIPOS.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
