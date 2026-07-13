@@ -18,6 +18,7 @@ export default function ReclamacionesPage() {
   const [pedido, setPedido] = useState("");
   const [canal, setCanal] = useState<Canal>("whatsapp");
   const [tipo, setTipo] = useState<Tipo>("extraviado");
+  const [fechaCompra, setFechaCompra] = useState("");
   const [mensajeCliente, setMensajeCliente] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -38,6 +39,7 @@ export default function ReclamacionesPage() {
           pedido: pedido.trim(),
           canal,
           tipo,
+          fechaCompra: tipo === "sin_stock" ? fechaCompra || undefined : undefined,
           mensajeCliente: mensajeCliente.trim() || undefined,
         }),
       });
@@ -51,8 +53,43 @@ export default function ReclamacionesPage() {
     }
   }
 
-  function copiar() {
-    navigator.clipboard.writeText(texto);
+  // **negrita** → HTML (para la vista previa y el copiado a email con formato)
+  function escapeHtml(s: string) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+  function toHtml(t: string) {
+    return escapeHtml(t)
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\n/g, "<br>");
+  }
+
+  async function copiar() {
+    try {
+      if (canal === "whatsapp") {
+        // WhatsApp usa *un asterisco* para negrita
+        const plano = texto.replace(/\*\*(.+?)\*\*/g, "*$1*");
+        await navigator.clipboard.writeText(plano);
+      } else {
+        // Email: copiamos con formato real (negritas) + versión plano de reserva
+        const html = toHtml(texto);
+        const plano = texto.replace(/\*\*(.+?)\*\*/g, "$1");
+        if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              "text/html": new Blob([html], { type: "text/html" }),
+              "text/plain": new Blob([plano], { type: "text/plain" }),
+            }),
+          ]);
+        } else {
+          await navigator.clipboard.writeText(plano);
+        }
+      }
+    } catch {
+      await navigator.clipboard.writeText(texto.replace(/\*\*(.+?)\*\*/g, "$1"));
+    }
     setCopiado(true);
     setTimeout(() => setCopiado(false), 2000);
   }
@@ -125,6 +162,28 @@ export default function ReclamacionesPage() {
             ))}
           </select>
 
+          {tipo === "sin_stock" && (
+            <>
+              <label>
+                Fecha de la compra{" "}
+                <span style={{ fontWeight: 400, color: "var(--muted)" }}>
+                  (opcional)
+                </span>
+              </label>
+              <input
+                type="date"
+                value={fechaCompra}
+                onChange={(e) => setFechaCompra(e.target.value)}
+              />
+              <div
+                style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}
+              >
+                Si la compra es de hace más de una semana, se le ofrece un regalo
+                por la tardanza. 🎁
+              </div>
+            </>
+          )}
+
           <label>
             Lo que ha escrito la clienta/e{" "}
             <span style={{ fontWeight: 400, color: "var(--muted)" }}>
@@ -179,9 +238,8 @@ export default function ReclamacionesPage() {
                     lineHeight: 1.7,
                     whiteSpace: "pre-wrap",
                   }}
-                >
-                  {texto}
-                </div>
+                  dangerouslySetInnerHTML={{ __html: toHtml(texto) }}
+                />
               </div>
 
               <button
