@@ -7,39 +7,96 @@ type Canal = "whatsapp" | "email";
 type Tipo =
   | "extraviado"
   | "sin_stock"
+  | "contrareembolso"
   | "roto"
   | "equivocado"
   | "descatalogado"
   | "otro";
+type SiNo = "si" | "no";
 
 const TIPOS: { value: Tipo; label: string }[] = [
-  { value: "extraviado", label: "Envío extraviado / no llega" },
-  { value: "sin_stock", label: "No ha salido de almacén (rotura de stock)" },
+  { value: "sin_stock", label: "Retraso: no ha salido de almacén (rotura de stock)" },
+  { value: "extraviado", label: "Envío extraviado / no llega (ya salió)" },
+  { value: "contrareembolso", label: "Contrareembolso con retraso / no recibido" },
   { value: "roto", label: "Producto llegado roto / dañado" },
   { value: "equivocado", label: "Producto equivocado (enviado mal)" },
   { value: "descatalogado", label: "Producto descatalogado (ofrecer otro)" },
   { value: "otro", label: "Otro" },
 ];
 
+// Grupo de botones tipo segmento (Sí / No, opciones...)
+function Segmento<T extends string>({
+  value,
+  onChange,
+  options,
+  mb = 16,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { v: T; label: string }[];
+  mb?: number;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 8, marginBottom: mb }}>
+      {options.map((o) => (
+        <button
+          key={o.v}
+          onClick={() => onChange(o.v)}
+          style={{
+            flex: 1,
+            marginTop: 0,
+            padding: "10px",
+            fontSize: 13,
+            fontWeight: 600,
+            background: value === o.v ? "var(--accent)" : "#fff",
+            color: value === o.v ? "#fff" : "var(--ink)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            cursor: "pointer",
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const hint = { fontSize: 12, color: "var(--muted)", marginBottom: 16 } as const;
+const opcional = (
+  <span style={{ fontWeight: 400, color: "var(--muted)" }}>(opcional)</span>
+);
+
 export default function ReclamacionesPage() {
   const [nombre, setNombre] = useState("");
   const [pedido, setPedido] = useState("");
   const [canal, setCanal] = useState<Canal>("whatsapp");
-  const [tipo, setTipo] = useState<Tipo>("extraviado");
-  const [fechaCompra, setFechaCompra] = useState("");
+  const [tipo, setTipo] = useState<Tipo>("sin_stock");
+  // sin_stock
   const [productoPendiente, setProductoPendiente] = useState("");
-  const [variosProductos, setVariosProductos] = useState<"si" | "no">("si");
-  const [productoDescatalogado, setProductoDescatalogado] = useState("");
-  const [productoAlternativo, setProductoAlternativo] = useState("");
-  const [fotoRecibida, setFotoRecibida] = useState<"si" | "no">("no");
-  const [hayStock, setHayStock] = useState<"si" | "no">("si");
+  const [variosProductos, setVariosProductos] = useState<SiNo>("si");
   const [fechaLlegada, setFechaLlegada] = useState("");
+  const [fechaCompra, setFechaCompra] = useState("");
+  // extraviado / contrareembolso
+  const [incidencia, setIncidencia] = useState("");
+  const [hayStock, setHayStock] = useState<SiNo>("si");
+  const [contraRepetido, setContraRepetido] = useState<SiNo>("no");
+  // roto / equivocado
+  const [fotoRecibida, setFotoRecibida] = useState<SiNo>("no");
+  const [hayQueRecoger, setHayQueRecoger] = useState<SiNo>("no");
+  // descatalogado
+  const [productoDescatalogado, setProductoDescatalogado] = useState("");
+  const [alternativa1, setAlternativa1] = useState("");
+  const [alternativa2, setAlternativa2] = useState("");
+  // común
   const [mensajeCliente, setMensajeCliente] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
   const [texto, setTexto] = useState("");
   const [avisoInterno, setAvisoInterno] = useState(false);
   const [copiado, setCopiado] = useState(false);
+
+  const pideFoto = tipo === "equivocado" || tipo === "roto";
 
   async function generar() {
     setCargando(true);
@@ -56,24 +113,37 @@ export default function ReclamacionesPage() {
           pedido: pedido.trim(),
           canal,
           tipo,
-          fechaCompra: tipo === "sin_stock" ? fechaCompra || undefined : undefined,
+          // sin_stock
           productoPendiente:
             tipo === "sin_stock" ? productoPendiente.trim() || undefined : undefined,
           variosProductos: tipo === "sin_stock" ? variosProductos === "si" : undefined,
+          fechaLlegada: tipo === "sin_stock" ? fechaLlegada || undefined : undefined,
+          fechaCompra: tipo === "sin_stock" ? fechaCompra || undefined : undefined,
+          // extraviado
+          hayStock: tipo === "extraviado" ? hayStock === "si" : undefined,
+          // extraviado + contrareembolso
+          incidencia:
+            tipo === "extraviado" || tipo === "contrareembolso"
+              ? incidencia.trim() || undefined
+              : undefined,
+          // contrareembolso
+          contraRepetido:
+            tipo === "contrareembolso" ? contraRepetido === "si" : undefined,
+          // roto / equivocado
+          fotoRecibida: pideFoto ? fotoRecibida === "si" : undefined,
+          hayQueRecoger:
+            tipo === "roto" && fotoRecibida === "si"
+              ? hayQueRecoger === "si"
+              : undefined,
+          // descatalogado
           productoDescatalogado:
             tipo === "descatalogado"
               ? productoDescatalogado.trim() || undefined
               : undefined,
-          productoAlternativo:
-            tipo === "descatalogado"
-              ? productoAlternativo.trim() || undefined
-              : undefined,
-          fotoRecibida: pideFoto ? fotoRecibida === "si" : undefined,
-          hayStock: pideStock ? hayStock === "si" : undefined,
-          fechaLlegada:
-            pideStock && hayStock === "no" && tipo !== "extraviado"
-              ? fechaLlegada || undefined
-              : undefined,
+          alternativa1:
+            tipo === "descatalogado" ? alternativa1.trim() || undefined : undefined,
+          alternativa2:
+            tipo === "descatalogado" ? alternativa2.trim() || undefined : undefined,
           mensajeCliente: mensajeCliente.trim() || undefined,
         }),
       });
@@ -104,11 +174,9 @@ export default function ReclamacionesPage() {
   async function copiar() {
     try {
       if (canal === "whatsapp") {
-        // WhatsApp usa *un asterisco* para negrita
         const plano = texto.replace(/\*\*(.+?)\*\*/g, "*$1*");
         await navigator.clipboard.writeText(plano);
       } else {
-        // Email: copiamos con formato real (negritas) + versión plano de reserva
         const html = toHtml(texto);
         const plano = texto.replace(/\*\*(.+?)\*\*/g, "$1");
         if (typeof ClipboardItem !== "undefined" && navigator.clipboard.write) {
@@ -129,8 +197,6 @@ export default function ReclamacionesPage() {
     setTimeout(() => setCopiado(false), 2000);
   }
 
-  const pideFoto = tipo === "equivocado" || tipo === "roto";
-  const pideStock = pideFoto || tipo === "sin_stock" || tipo === "extraviado";
   const puedeGenerar = nombre.trim() && pedido.trim() && !cargando;
 
   return (
@@ -167,28 +233,15 @@ export default function ReclamacionesPage() {
           />
 
           <label>Canal de respuesta</label>
-          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-            {(["whatsapp", "email"] as Canal[]).map((c) => (
-              <button
-                key={c}
-                onClick={() => setCanal(c)}
-                style={{
-                  flex: 1,
-                  marginTop: 0,
-                  padding: "10px",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  background: canal === c ? "var(--accent)" : "#fff",
-                  color: canal === c ? "#fff" : "var(--ink)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 8,
-                  cursor: "pointer",
-                }}
-              >
-                {c === "whatsapp" ? "WhatsApp" : "Correo electrónico"}
-              </button>
-            ))}
-          </div>
+          <Segmento<Canal>
+            value={canal}
+            onChange={setCanal}
+            mb={20}
+            options={[
+              { v: "whatsapp", label: "WhatsApp" },
+              { v: "email", label: "Correo electrónico" },
+            ]}
+          />
 
           <label>Motivo de la reclamación</label>
           <select value={tipo} onChange={(e) => setTipo(e.target.value as Tipo)}>
@@ -199,81 +252,10 @@ export default function ReclamacionesPage() {
             ))}
           </select>
 
-          {tipo === "descatalogado" && (
-            <>
-              <label>
-                Producto descatalogado{" "}
-                <span style={{ fontWeight: 400, color: "var(--muted)" }}>
-                  (opcional)
-                </span>
-              </label>
-              <input
-                type="text"
-                placeholder="Ej: Crema Hidratante XYZ 50 ml"
-                value={productoDescatalogado}
-                onChange={(e) => setProductoDescatalogado(e.target.value)}
-              />
-
-              <label>
-                Producto alternativo que ofrecemos{" "}
-                <span style={{ fontWeight: 400, color: "var(--muted)" }}>
-                  (opcional)
-                </span>
-              </label>
-              <input
-                type="text"
-                placeholder="Ej: Crema Hidratante ABC 50 ml"
-                value={productoAlternativo}
-                onChange={(e) => setProductoAlternativo(e.target.value)}
-              />
-              <div
-                style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}
-              >
-                Si dejas el alternativo vacío, no se inventa ninguno: se ofrece
-                buscar una alternativa o el reembolso.
-              </div>
-            </>
-          )}
-
-          {pideFoto && (
-            <>
-              <label>
-                ¿Nos ha enviado ya la foto del producto{" "}
-                {tipo === "roto" ? "roto" : "incorrecto"}?
-              </label>
-              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-                {(["si", "no"] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setFotoRecibida(v)}
-                    style={{
-                      flex: 1,
-                      marginTop: 0,
-                      padding: "10px",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: fotoRecibida === v ? "var(--accent)" : "#fff",
-                      color: fotoRecibida === v ? "#fff" : "var(--ink)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {v === "si" ? "Sí" : "No, aún no"}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
+          {/* ── Retraso: no ha salido (rotura de stock) ── */}
           {tipo === "sin_stock" && (
             <>
-              <label>
-                Producto pendiente / que falta{" "}
-                <span style={{ fontWeight: 400, color: "var(--muted)" }}>
-                  (opcional)
-                </span>
-              </label>
+              <label>Producto pendiente / que falta {opcional}</label>
               <input
                 type="text"
                 placeholder="Ej: Sérum Vitamina C 30 ml"
@@ -282,145 +264,174 @@ export default function ReclamacionesPage() {
               />
 
               <label>¿El pedido lleva más productos aparte del que falta?</label>
-              <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-                {(["si", "no"] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setVariosProductos(v)}
-                    style={{
-                      flex: 1,
-                      marginTop: 0,
-                      padding: "10px",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background:
-                        variosProductos === v ? "var(--accent)" : "#fff",
-                      color: variosProductos === v ? "#fff" : "var(--ink)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {v === "si" ? "Sí, lleva más" : "No, solo ese"}
-                  </button>
-                ))}
-              </div>
-              <div
-                style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}
-              >
+              <Segmento<SiNo>
+                value={variosProductos}
+                onChange={setVariosProductos}
+                mb={4}
+                options={[
+                  { v: "si", label: "Sí, lleva más" },
+                  { v: "no", label: "No, solo ese" },
+                ]}
+              />
+              <div style={hint}>
                 {variosProductos === "si"
-                  ? "Se le ofrece enviar ya lo disponible y el pendiente después."
+                  ? "Se le ofrece esperar a tenerlo todo o enviar ya lo disponible y el pendiente después."
                   : "Solo ese producto: se le ofrece esperar la reposición o reembolso."}
               </div>
 
-              <label>
-                Fecha de la compra{" "}
-                <span style={{ fontWeight: 400, color: "var(--muted)" }}>
-                  (opcional)
-                </span>
-              </label>
+              <label>Fecha estimada de reposición {opcional}</label>
+              <input
+                type="date"
+                value={fechaLlegada}
+                onChange={(e) => setFechaLlegada(e.target.value)}
+              />
+              <div style={hint}>
+                Si la sabes, se la indicamos al cliente; si no, no se da fecha.
+              </div>
+
+              <label>Fecha de la compra {opcional}</label>
               <input
                 type="date"
                 value={fechaCompra}
                 onChange={(e) => setFechaCompra(e.target.value)}
               />
-              <div
-                style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}
-              >
+              <div style={hint}>
                 Si han pasado más de 5 días laborables desde la compra, se le
                 ofrece un regalo por la tardanza. 🎁
               </div>
             </>
           )}
 
-          {pideStock && (
+          {/* ── Extraviado: ya salió y no llega ── */}
+          {tipo === "extraviado" && (
             <>
-              <label>
-                {tipo === "extraviado"
-                  ? "¿Tenemos otro en almacén?"
-                  : "¿Tenemos stock del producto?"}
-              </label>
-              <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
-                {(["si", "no"] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setHayStock(v)}
-                    style={{
-                      flex: 1,
-                      marginTop: 0,
-                      padding: "10px",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      background: hayStock === v ? "var(--accent)" : "#fff",
-                      color: hayStock === v ? "#fff" : "var(--ink)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {v === "si" ? "Sí" : "No"}
-                  </button>
-                ))}
+              <label>¿Qué indica el seguimiento / incidencia del transporte? {opcional}</label>
+              <textarea
+                rows={2}
+                placeholder="Ej: el paquete figura retenido en la delegación de reparto"
+                value={incidencia}
+                onChange={(e) => setIncidencia(e.target.value)}
+              />
+
+              <label>¿Tenemos otro en almacén?</label>
+              <Segmento<SiNo>
+                value={hayStock}
+                onChange={setHayStock}
+                mb={4}
+                options={[
+                  { v: "si", label: "Sí" },
+                  { v: "no", label: "No" },
+                ]}
+              />
+              <div style={hint}>
+                {hayStock === "si"
+                  ? "Se abre reclamación con transporte (plazo 24-72 h)."
+                  : "Sin stock: además del aviso al cliente, saldrá un aviso interno para hacer pedido de reposición. ⚠️"}
+              </div>
+            </>
+          )}
+
+          {/* ── Contrareembolso con retraso ── */}
+          {tipo === "contrareembolso" && (
+            <>
+              <label>¿Es la primera vez o ya había pasado antes?</label>
+              <Segmento<SiNo>
+                value={contraRepetido}
+                onChange={setContraRepetido}
+                mb={4}
+                options={[
+                  { v: "no", label: "Primera vez" },
+                  { v: "si", label: "Ya había pasado" },
+                ]}
+              />
+              <div style={hint}>
+                {contraRepetido === "si"
+                  ? "Ya pasó otra vez: esta vez se le pide el pago por adelantado antes de reenviar."
+                  : "Primera vez: se le ofrece reenviarlo otra vez por contrarreembolso."}
               </div>
 
-              {hayStock === "si" ? (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--muted)",
-                    marginBottom: 16,
-                  }}
-                >
-                  {tipo === "extraviado"
-                    ? "Hay otro en almacén: se le envía otro hoy mismo. 📦"
-                    : "Hay stock: se le dice que le sale hoy mismo. 📦"}
-                </div>
-              ) : tipo === "extraviado" ? (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "var(--muted)",
-                    marginBottom: 16,
-                  }}
-                >
-                  Sin stock en almacén: al generar saldrá un aviso interno para
-                  que hagáis pedido de reposición. ⚠️
-                </div>
-              ) : (
+              <label>¿Qué indica el transporte? {opcional}</label>
+              <textarea
+                rows={2}
+                placeholder="Ej: no pudo entregarse / fue rechazado / no había nadie en el domicilio"
+                value={incidencia}
+                onChange={(e) => setIncidencia(e.target.value)}
+              />
+            </>
+          )}
+
+          {/* ── Roto / Equivocado: foto ── */}
+          {pideFoto && (
+            <>
+              <label>
+                ¿Nos ha enviado ya la foto del producto{" "}
+                {tipo === "roto" ? "roto" : "incorrecto"}?
+              </label>
+              <Segmento<SiNo>
+                value={fotoRecibida}
+                onChange={setFotoRecibida}
+                options={[
+                  { v: "si", label: "Sí" },
+                  { v: "no", label: "No, aún no" },
+                ]}
+              />
+
+              {tipo === "roto" && fotoRecibida === "si" && (
                 <>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--muted)",
-                      margin: "4px 0 8px",
-                    }}
-                  >
-                    Sin stock. ¿Sabes cuándo os entra la reposición? Se le dirá
-                    que le llega ~2 días laborables después.
-                  </div>
-                  <label>
-                    ¿Cuándo os llega la reposición?{" "}
-                    <span style={{ fontWeight: 400, color: "var(--muted)" }}>
-                      (opcional)
-                    </span>
-                  </label>
-                  <input
-                    type="date"
-                    value={fechaLlegada}
-                    onChange={(e) => setFechaLlegada(e.target.value)}
-                    style={{ marginBottom: 16 }}
+                  <label>¿Hay que recoger el producto roto?</label>
+                  <Segmento<SiNo>
+                    value={hayQueRecoger}
+                    onChange={setHayQueRecoger}
+                    mb={4}
+                    options={[
+                      { v: "si", label: "Sí, recogerlo" },
+                      { v: "no", label: "No hace falta" },
+                    ]}
                   />
+                  <div style={hint}>
+                    {hayQueRecoger === "si"
+                      ? "Recogida y entrega simultánea con el repartidor."
+                      : "Se le envía una nueva unidad directamente."}
+                  </div>
                 </>
               )}
             </>
           )}
 
-          <label>
-            Lo que ha escrito la clienta/e{" "}
-            <span style={{ fontWeight: 400, color: "var(--muted)" }}>
-              (opcional)
-            </span>
-          </label>
+          {/* ── Descatalogado ── */}
+          {tipo === "descatalogado" && (
+            <>
+              <label>Producto descatalogado {opcional}</label>
+              <input
+                type="text"
+                placeholder="Ej: Crema Hidratante XYZ 50 ml"
+                value={productoDescatalogado}
+                onChange={(e) => setProductoDescatalogado(e.target.value)}
+              />
+
+              <label>Alternativa 1 que ofrecemos {opcional}</label>
+              <input
+                type="text"
+                placeholder="Ej: Crema Hidratante ABC 50 ml"
+                value={alternativa1}
+                onChange={(e) => setAlternativa1(e.target.value)}
+              />
+
+              <label>Alternativa 2 que ofrecemos {opcional}</label>
+              <input
+                type="text"
+                placeholder="Ej: Crema Hidratante DEF 50 ml"
+                value={alternativa2}
+                onChange={(e) => setAlternativa2(e.target.value)}
+              />
+              <div style={hint}>
+                Si dejas las alternativas vacías, no se inventan: se ofrece
+                buscar una alternativa o el reembolso.
+              </div>
+            </>
+          )}
+
+          <label>Lo que ha escrito la clienta/e {opcional}</label>
           <textarea
             rows={6}
             placeholder="Pega aquí el mensaje del cliente…"

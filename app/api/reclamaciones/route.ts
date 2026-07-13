@@ -4,16 +4,49 @@ import { llamarGemini } from "../gemini";
 
 const TIPOS = {
   extraviado: {
-    etiqueta: "Envío extraviado / no llega",
+    etiqueta: "Envío extraviado / no llega (ya salió)",
     contexto:
-      "El pedido está de camino (o debería estarlo) pero el cliente dice que no le ha llegado, lleva mucho retraso o el transportista no da señales de vida.",
-    plantillaEjemplo: `Hola {nombre}! 😊 Vaya movida con tu pedido **{pedido}**, de verdad que lo sentimos un montón 😔 Nosotros lo sacamos de almacén en su día, así que esto es cosa de la agencia de transporte, que a veces se lía. Ya lo estamos **reclamando** para localizarlo cuanto antes y en cuanto sepamos algo te decimos 📦 Si en un par de días sigue sin aparecer, te lo **reponemos o te devolvemos el dinero**, lo que tú prefieras 💜 Mil gracias por la paciencia!`,
+      "El pedido ya salió de nuestras instalaciones pero el cliente dice que no le ha llegado. Hay que investigar y abrir una reclamación con la empresa de transporte.",
   },
   sin_stock: {
-    etiqueta: "Pedido no ha salido (rotura de stock)",
+    etiqueta: "Retraso: no ha salido de almacén (rotura de stock)",
     contexto:
-      "El pedido todavía no ha salido de almacén porque falta stock de algún producto (retraso en el envío). Somos nosotros quienes contactamos con el cliente para avisarle y darle opciones.",
-    plantillaEjemplo: `Asunto: {nombre}, tenemos una pequeña actualización sobre tu pedido #{pedido}
+      "El pedido todavía no ha salido porque falta stock de algún producto. Somos nosotros quienes avisamos al cliente y le damos opciones.",
+  },
+  contrareembolso: {
+    etiqueta: "Contrareembolso con retraso / no recibido",
+    contexto:
+      "Un envío contrarreembolso no se ha podido entregar y vuelve de camino a nuestras instalaciones. Hay que ofrecer volver a enviarlo.",
+  },
+  roto: {
+    etiqueta: "Producto llegado roto / dañado",
+    contexto:
+      "El producto ha llegado roto o dañado. Según si el cliente ya ha enviado fotos y si hay que recoger el producto, la gestión cambia.",
+  },
+  equivocado: {
+    etiqueta: "Producto equivocado (enviado mal)",
+    contexto:
+      "Le hemos enviado un producto distinto al que pidió. La culpa es nuestra.",
+  },
+  descatalogado: {
+    etiqueta: "Producto descatalogado (ofrecer otro)",
+    contexto:
+      "El producto que pidió está descatalogado y no volverá a entrar. Hay que ofrecerle alternativas o el reembolso.",
+  },
+  otro: {
+    etiqueta: "Otro / reclamación general",
+    contexto:
+      "Cualquier otra reclamación que no encaje en las anteriores. Sin plantilla fija: escuchar la queja y ofrecer solución con el mismo tono cercano.",
+  },
+} as const;
+
+type TipoKey = keyof typeof TIPOS;
+
+// ───────────────────────── Plantillas (texto real del cliente) ─────────────────────────
+// Placeholders entre {llaves}: se rellenan con los datos aportados; si falta alguno,
+// la IA lo adapta con naturalidad (nunca deja las llaves ni inventa datos concretos).
+
+const TPL_SIN_STOCK = `Asunto: {nombre}, tenemos una pequeña actualización sobre tu pedido #{pedido}
 
 ¡Hola!, {nombre}.
 
@@ -31,46 +64,222 @@ Gracias por esperar y por confiar en nosotros. Estamos pendientes de este pedido
 
 Un saludo,
 Atención al Cliente
-La Tienda de Cosméticos`,
-  },
-  roto: {
-    etiqueta: "Producto llegado roto / dañado",
-    contexto:
-      "El producto ha llegado roto, dañado o derramado. Hay que disculparse mostrando que en almacén se embala con mucho cuidado (así que ha sido un golpe en el transporte), pedir foto si no la tiene y ofrecer reposición o devolución.",
-    plantillaEjemplo: `Uy {nombre}! 😱 Mira que lo embalamos siempre **súper bien** desde almacén, pero está claro que en el camino le han dado un buen golpe 😔 Lo sentimos muchísimo. ¿Puedes pasarme una **foto** del producto y de la caja tal cual te llegó? Así lo reclamamos al transportista 📸 Y tú tranqui, que del pedido **{pedido}** te mando **uno nuevo ya mismo** (o te devuelvo el dinero, como prefieras) 📦💜 Gracias por avisarnos!`,
-  },
-  equivocado: {
-    etiqueta: "Producto equivocado (enviado mal)",
-    contexto:
-      "Nos hemos equivocado y le hemos enviado un producto distinto al que pidió. La culpa es nuestra: hay que reconocerlo con naturalidad, disculparse y darle solución (enviarle el correcto ya mismo y decirle que se quede el equivocado o que gestionamos la recogida, sin coste para él).",
-    plantillaEjemplo: `Ay {nombre}, la hemos liado nosotros con tu pedido **{pedido}** 🙈 Te hemos mandado el producto equivocado, ¡mil perdones! 😔 Ahora mismo te enviamos el **correcto sin que tengas que pagar nada** 📦 Y el que te llegó por error **quédatelo** o si prefieres te organizamos la recogida, tú tranqui, no te preocupes de nada 💜 Perdona el despiste!`,
-  },
-  descatalogado: {
-    etiqueta: "Producto descatalogado (ofrecer otro)",
-    contexto:
-      "El producto que pidió el cliente está descatalogado / ya no está disponible y no va a volver. Hay que disculparse, explicárselo con naturalidad y ofrecerle un producto alternativo parecido; si no le encaja, devolverle el dinero.",
-    plantillaEjemplo: `Hola {nombre}! 😔 Tenemos que darte una noticia regular sobre tu pedido **{pedido}**: el producto que pediste ({producto descatalogado}) lo han **descatalogado** y ya no nos vuelve a entrar, una pena 😩 Como alternativa te podemos ofrecer **{producto alternativo}**, que es muy parecido y va genial ✨ Si te encaja te lo enviamos ya mismo y si prefieres te **devolvemos el dinero** sin ningún problema 💜 Dime qué prefieres!`,
-  },
-  otro: {
-    etiqueta: "Otro / reclamación general",
-    contexto:
-      "Cualquier otra reclamación que no encaje en las anteriores (producto equivocado, factura, plazo, etc). Responder con el mismo tono cercano, sin plantilla fija: escuchar la queja y ofrecer solución.",
-    plantillaEjemplo: "",
-  },
-} as const;
+La Tienda de Cosméticos`;
 
-type TipoKey = keyof typeof TIPOS;
+const TPL_EXTRAVIADO = `Asunto: {nombre}, ya hemos revisado tu pedido #{pedido}
+
+¡Hola, {nombre}!
+
+¿Cómo es posible que tu pedido todavía no esté en tus manos? La verdad es que esto no suele pasar, así que en cuanto hemos recibido tu mensaje nos hemos puesto a investigar.
+
+Vemos que {incidencia del transporte}.
+
+Como el pedido ya debería haberse entregado, hemos puesto en marcha una reclamación con la empresa de transporte para que revisen qué ha podido pasar. Normalmente suelen respondernos en un plazo de 24 a 72 horas laborables.
+
+En cuanto tengamos una respuesta, nos pondremos en contacto contigo para contarte qué ha ocurrido y, sobre todo, darte una solución lo antes posible.
+
+Mientras tanto, vamos a seguir muy de cerca esta gestión hasta que el pedido llegue a tus manos.
+
+Gracias por avisarnos. Esperamos escribirte muy pronto con buenas noticias.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`;
+
+const TPL_CONTRA_1 = `Asunto: {nombre}, tenemos una pequeña actualización sobre tu pedido #{pedido}
+
+¡Hola, {nombre}!
+
+Hemos estado revisando el seguimiento de tu pedido #{pedido} y la empresa de transporte nos indica que {incidencia}.
+
+Como se trata de un envío contrarreembolso, el pedido ya viene de camino de vuelta a nuestras instalaciones.
+
+Si sigues interesado en recibirlo, no te preocupes, podemos prepararlo de nuevo y enviártelo otra vez por contrarreembolso, sin problema.
+
+Solo tienes que responder a este correo confirmándonos que quieres que lo volvamos a enviar y, en cuanto lo recibamos de vuelta, nos pondremos con ello.
+
+Esperamos que esta vez sí consiga llegar a su destino.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`;
+
+const TPL_CONTRA_2 = `Asunto: {nombre}, vamos a hacer que esta vez tu pedido llegue sin problemas
+
+¡Hola, {nombre}!
+
+Hemos estado revisando tu pedido #{pedido} y la empresa de transporte nos indica que {incidencia}, por lo que el paquete ya viene de camino de vuelta a nuestras instalaciones.
+
+Además, al revisar tu historial de pedidos, hemos visto que esta situación ya nos ocurrió en una ocasión anterior.
+
+Como nuestra prioridad es que recibas tu pedido y evitar que vuelva a pasar lo mismo, en este caso necesitaremos que el pedido esté abonado antes de volver a enviarlo.
+
+En cuanto el paquete llegue de nuevo a nuestro almacén, podremos prepararlo otra vez para que salga lo antes posible.
+
+Si quieres que lo gestionemos, solo tienes que responder a este correo y te indicaremos cómo realizar el pago para ponerlo en marcha.
+
+Esperamos que esta vez el pedido llegue a tus manos sin más rodeos.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`;
+
+const TPL_ROTO_1 = `Asunto: {nombre}, vamos a solucionarlo #{pedido}
+
+¡Hola, {nombre}!
+
+Vaya... ese no era precisamente el estado en el que queríamos que recibieras tu pedido.
+
+Para poder gestionar la incidencia lo antes posible, necesitamos que nos envíes unas fotografías donde podamos ver el estado en el que ha llegado el producto. Si también puedes incluir una foto del embalaje, mucho mejor, ya que nos ayudará a revisar qué ha podido ocurrir durante el transporte.
+
+En cuanto las recibamos, revisaremos la incidencia y nos pondremos con la solución para que puedas disfrutar de tu pedido cuanto antes.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`;
+
+const TPL_ROTO_2 = `Asunto: {nombre}, ya estamos preparando la solución #{pedido}
+
+¡Hola, {nombre}!
+
+Vaya... ese no era precisamente el estado en el que queríamos que recibieras tu pedido.
+
+Ya hemos revisado las fotografías y vamos a solucionarlo.
+
+En este caso necesitamos recoger el producto, así que vamos a gestionar una recogida y entrega simultánea. Es decir, el mismo repartidor que te entregará la nueva unidad será quien recoja el producto dañado.
+
+Y no te preocupes por la etiqueta o por preparar el envío, nosotros nos encargamos de todo. El repartidor llevará la etiqueta de devolución, así que solo tendrás que tener el producto correctamente embalado para que pueda recogerlo.
+
+En cuanto tengamos la gestión organizada, te escribiremos con todos los detalles.
+
+Nosotros nos encargamos del resto para que puedas olvidarte de la parte complicada.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`;
+
+const TPL_ROTO_3 = `Asunto: {nombre}, ya lo tenemos solucionado #{pedido}
+
+¡Hola, {nombre}!
+
+Vaya... ese no era precisamente el estado en el que queríamos que recibieras tu pedido.
+
+Ya hemos revisado las fotografías y, para que no tengas que esperar más, vamos a preparar una nueva unidad para que salga hacia tu dirección lo antes posible.
+
+En cuanto el pedido salga de nuestras instalaciones, recibirás un correo con toda la información del envío.
+
+Esperamos que esta vez llegue en perfecto estado.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`;
+
+const TPL_EQUIV_1 = `Asunto: {nombre}, vamos a revisar tu pedido #{pedido}
+
+¡Hola, {nombre}!
+
+¡Oh, no! Esto no tenía que haber pasado.
+
+Vamos a revisarlo para que puedas recibir el producto correcto lo antes posible.
+
+¿Podrías enviarnos una fotografía del producto que has recibido? Si en la imagen también aparece el código del producto, mucho mejor, ya que nos ayudará a comprobar qué ha ocurrido.
+
+En cuanto la recibamos, revisaremos la incidencia y la solucionaremos cuanto antes.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`;
+
+const TPL_EQUIV_2 = `Asunto: {nombre}, ya estamos preparando la solución de tu #{pedido}
+
+¡Hola, {nombre}!
+
+¡Oh, no! Esto no tenía que haber pasado.
+
+Ya hemos revisado las fotografías y vamos a preparar el envío del producto correcto.
+
+Además, para que no tengas que preocuparte por nada, gestionaremos una recogida y entrega simultánea. El mismo repartidor que te entregue el producto correcto recogerá el que has recibido por error.
+
+Y no te preocupes por la etiqueta de devolución. Nosotros nos encargamos de todo: el repartidor la llevará preparada, así que solo tendrás que tener el producto correctamente embalado para que pueda recogerlo.
+
+En cuanto tengamos la gestión organizada, te escribiremos con todos los detalles.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`;
+
+const TPL_DESCAT = `Asunto: {nombre}, tenemos una actualización sobre tu pedido #{pedido}
+
+¡Hola, {nombre}!
+
+Mientras preparábamos tu pedido nos hemos encontrado con algo que no esperábamos.
+
+Al ir a preparar {producto}, hemos comprobado que se habían agotado las últimas unidades. Al intentar reponerlo, la marca nos ha confirmado que el producto ya está descatalogado, por lo que no podremos volver a recibirlo.
+
+Sabemos que no es la noticia que esperabas, y créenos que a nosotros tampoco nos gusta tener que dar este tipo de noticias.
+
+Pero no queremos dejarte sin una solución. Así que, si te parece bien, podemos ofrecerte cualquiera de estas alternativas para que no te quedes sin el tratamiento que buscabas:
+- {alternativa 1}
+- {alternativa 2}
+
+Si alguna de ellas encaja contigo, nos encargaremos de hacer el cambio. Y si prefieres otra opción, estaremos encantados de ayudarte a encontrar el producto que mejor se adapte a lo que buscabas.
+
+Solo dinos qué prefieres y nos ponemos con ello.
+
+Un saludo,
+Atención al Cliente
+La Tienda de Cosméticos`;
+
+type Body = {
+  nombre?: string;
+  pedido?: string;
+  canal?: string;
+  tipo?: string;
+  productoPendiente?: string;
+  variosProductos?: boolean;
+  fechaCompra?: string;
+  fechaLlegada?: string;
+  incidencia?: string;
+  hayStock?: boolean;
+  contraRepetido?: boolean;
+  fotoRecibida?: boolean;
+  hayQueRecoger?: boolean;
+  productoDescatalogado?: string;
+  alternativa1?: string;
+  alternativa2?: string;
+  mensajeCliente?: string;
+};
+
+function plantillaPara(tipo: TipoKey, body: Body): string {
+  switch (tipo) {
+    case "sin_stock":
+      return TPL_SIN_STOCK;
+    case "extraviado":
+      return TPL_EXTRAVIADO;
+    case "contrareembolso":
+      return body.contraRepetido ? TPL_CONTRA_2 : TPL_CONTRA_1;
+    case "roto":
+      if (!body.fotoRecibida) return TPL_ROTO_1;
+      return body.hayQueRecoger ? TPL_ROTO_2 : TPL_ROTO_3;
+    case "equivocado":
+      return body.fotoRecibida ? TPL_EQUIV_2 : TPL_EQUIV_1;
+    case "descatalogado":
+      return TPL_DESCAT;
+    default:
+      return "";
+  }
+}
 
 const CANALES = {
   whatsapp: {
     etiqueta: "WhatsApp",
     formato:
-      "Mensaje de WhatsApp: cortito (2-4 frases), tuteo directo, súper cercano y muy informal. CON emojis/iconos con naturalidad. SIN asunto ni firma. Si hay plantilla de referencia (que estará en versión email), quédate con su contenido y las opciones, pero hazlo mucho más corto e informal.",
+      "Mensaje de WhatsApp: cortito (2-4 frases), tuteo directo, súper cercano y muy informal. CON emojis/iconos con naturalidad. SIN asunto ni firma. Si hay plantilla de referencia (que estará en versión email), quédate con su contenido y la solución, pero hazlo mucho más corto e informal.",
   },
   email: {
     etiqueta: "Correo electrónico",
     formato:
-      "Correo electrónico: SIN emojis. Empieza con una línea 'Asunto: ...' (que incluya el nombre del cliente y el nº de pedido), luego una línea en blanco y el cuerpo. Saluda ('¡Hola!, {nombre}.' o 'Hola {nombre},') y cierra en líneas separadas con 'Un saludo,' / 'Atención al Cliente' / 'La Tienda de Cosméticos'. Tono cercano y humano pero algo más cuidado que el WhatsApp, nunca acartonado. Si hay plantilla de referencia, sigue de cerca su estructura y contenido.",
+      "Correo electrónico: SIN emojis. Sigue de cerca la plantilla de referencia: empieza con su línea 'Asunto: ...', luego una línea en blanco y el cuerpo, y cierra con 'Un saludo,' / 'Atención al Cliente' / 'La Tienda de Cosméticos' en líneas separadas. Tono cercano y humano pero algo más cuidado que el WhatsApp, nunca acartonado.",
   },
 } as const;
 
@@ -79,6 +288,7 @@ type CanalKey = keyof typeof CANALES;
 function systemPrompt(
   tipo: TipoKey,
   canal: CanalKey,
+  plantilla: string,
   instruccionesExtra: string
 ) {
   const t = TIPOS[tipo];
@@ -89,39 +299,37 @@ Tu tarea es redactar la RESPUESTA a la reclamación de un cliente, para enviárs
 
 TIPO DE RECLAMACIÓN: ${t.etiqueta}
 Contexto de esta situación: ${t.contexto}
-${t.plantillaEjemplo ? `\nPlantilla de referencia (te marca el CONTENIDO y la SOLUCIÓN de este caso; el FORMATO — asunto, saludo, cierre y emojis — lo manda el "Formato del canal", no la plantilla). Varíala un poco para que no sea un copia-pega idéntico:\n"""\n${t.plantillaEjemplo}\n"""\n` : ""}
+${plantilla ? `\nPlantilla de referencia (te marca el CONTENIDO y la SOLUCIÓN de este caso; el FORMATO — asunto, saludo, cierre y emojis — lo manda el "Formato del canal", no la plantilla). Los datos entre {llaves} debes rellenarlos con los datos que te den más abajo; si falta alguno, adáptalo con naturalidad o quítalo, pero NUNCA dejes las {llaves} escritas ni inventes datos concretos:\n"""\n${plantilla}\n"""\n` : ""}
 CANAL: ${c.etiqueta}
 Formato del canal: ${c.formato}
 ${instruccionesExtra ? `\nINSTRUCCIONES ADICIONALES PARA ESTE CASO (tenlas muy en cuenta):\n${instruccionesExtra}\n` : ""}
 ESTILO OBLIGATORIO:
 - Tono cercano y humano, nada corporativo ni acartonado. El nivel exacto depende del canal (ver "Formato del canal"): WhatsApp muy informal; email cercano pero algo más cuidado.
 - SIEMPRE menciona el nombre del cliente y el número de pedido en algún punto del mensaje.
-- Usa **negritas** poniendo el texto entre dobles asteriscos (por ejemplo **el número de pedido**, **la solución que ofreces**, **el regalo**...). 2 o 3 negritas como mucho, para resaltar lo importante. En ambos canales.
+- Usa **negritas** poniendo el texto entre dobles asteriscos para resaltar lo importante (2 o 3 como mucho). En ambos canales.
 - Emojis/iconos SEGÚN EL CANAL: en WhatsApp usa varios con naturalidad (📦 😊 🎁 🙏 ✨ 💜 😔 📸 ...); en EMAIL no uses ningún emoji.
 - Ten en cuenta lo que ha escrito el cliente para responder acorde: si está enfadado, más empatía; si solo pregunta, más ligero.
-- Ofrece siempre una solución o siguiente paso concreto (reponer, reembolsar, esperar reposición, pedir foto...).
-- NO inventes datos que no te den (plazos exactos, nombres de empleados, políticas concretas) más allá de lo que aparece en la plantilla de referencia.
-- Varía el saludo y el cierre cada vez, que no suene a copia-pega.
+- Ofrece siempre la solución o siguiente paso concreto de la plantilla.
+- NO inventes datos que no te den (plazos exactos, nombres de empleados, políticas concretas) más allá de lo que aparece en la plantilla.
 - Devuelve SOLO el texto del mensaje final, sin comillas ni explicaciones. Las negritas van con dobles asteriscos **así**.`;
 }
 
-function buildUserContent(body: {
-  nombre?: string;
-  pedido?: string;
-  productoPendiente?: string;
-  productoDescatalogado?: string;
-  productoAlternativo?: string;
-  mensajeCliente?: string;
-}) {
+function buildUserContent(body: Body, fechaEstimadaTxt: string | null) {
   const lineas: string[] = [];
   if (body.nombre?.trim()) lineas.push(`Nombre del cliente: ${body.nombre.trim()}`);
   if (body.pedido?.trim()) lineas.push(`Número de pedido: ${body.pedido.trim()}`);
   if (body.productoPendiente?.trim())
     lineas.push(`Producto pendiente / que falta (causa del retraso): ${body.productoPendiente.trim()}`);
+  if (fechaEstimadaTxt)
+    lineas.push(`Fecha estimada de reposición: ${fechaEstimadaTxt}`);
+  if (body.incidencia?.trim())
+    lineas.push(`Lo que indica el seguimiento / incidencia del transporte: ${body.incidencia.trim()}`);
   if (body.productoDescatalogado?.trim())
     lineas.push(`Producto descatalogado que pidió: ${body.productoDescatalogado.trim()}`);
-  if (body.productoAlternativo?.trim())
-    lineas.push(`Producto alternativo que le ofrecemos: ${body.productoAlternativo.trim()}`);
+  if (body.alternativa1?.trim())
+    lineas.push(`Alternativa 1 que le ofrecemos: ${body.alternativa1.trim()}`);
+  if (body.alternativa2?.trim())
+    lineas.push(`Alternativa 2 que le ofrecemos: ${body.alternativa2.trim()}`);
   const mensaje = body.mensajeCliente?.trim();
   if (mensaje) {
     lineas.push(`Lo que ha escrito el cliente:\n${mensaje}`);
@@ -168,12 +376,14 @@ function fechaLarga(fecha?: string): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
+  const body: Body = await req.json();
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey)
     return NextResponse.json({ error: "Sin clave Gemini" }, { status: 500 });
 
-  const tipo: TipoKey = body.tipo in TIPOS ? body.tipo : "otro";
+  const tipo: TipoKey = (body.tipo && body.tipo in TIPOS
+    ? body.tipo
+    : "otro") as TipoKey;
   const canal: CanalKey = body.canal === "email" ? "email" : "whatsapp";
 
   if (!body.nombre?.trim() || !body.pedido?.trim()) {
@@ -183,86 +393,48 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const fechaEstimadaTxt =
+    tipo === "sin_stock" ? fechaLarga(body.fechaLlegada) : null;
   const diasLab = diasLaborables(body.fechaCompra);
-  const regaloPorTardanza = tipo === "sin_stock" && diasLab !== null && diasLab > 5;
+  const regaloPorTardanza =
+    tipo === "sin_stock" && diasLab !== null && diasLab > 5;
+  const avisoInterno = tipo === "extraviado" && !body.hayStock;
 
   const extras: string[] = [];
   if (tipo === "sin_stock") {
     if (body.variosProductos) {
       extras.push(
-        "- El pedido lleva MÁS productos además del que falta: ofrécele la opción de enviarle YA lo que sí está disponible y mandarle el producto pendiente en un segundo paquete en cuanto nos llegue, sin coste adicional (con la fecha aproximada si se conoce); o, si prefiere, esperar y recibirlo todo junto. Que elija."
+        "- El pedido lleva MÁS productos además del que falta: mantén las DOS opciones de la plantilla (esperar y recibirlo todo junto, o enviarle ya lo disponible y el pendiente en un segundo paquete sin coste)."
       );
     } else {
       extras.push(
-        "- El pedido es SOLO el producto que falta (no hay más productos): NO ofrezcas 'enviar el resto del pedido', porque no hay nada más que mandar. Las opciones son esperar a que llegue la reposición (dile la fecha aproximada si se sabe) o devolverle el dinero."
+        "- El pedido es SOLO el producto que falta (no hay más productos): NO ofrezcas 'enviar el resto del pedido', porque no hay nada más que mandar. Las opciones son esperar a que llegue la reposición o devolverle el dinero. Adapta la plantilla a esto."
+      );
+    }
+    if (!body.fechaLlegada) {
+      extras.push(
+        "- No se conoce la fecha estimada de reposición: no des una fecha concreta; di simplemente que la esperamos lo antes posible / en cuanto nos la confirme el proveedor."
       );
     }
   }
   if (regaloPorTardanza) {
     extras.push(
-      "- Han pasado más de 5 días laborables desde la compra: además de disculparte por el retraso, dile que como agradecimiento por su paciencia, cuando reciba el paquete encontrará un **regalo/detalle** de nuestra parte. Con naturalidad y cariño."
+      "- Han pasado más de 5 días laborables desde la compra: añade que, como agradecimiento por su paciencia, cuando reciba el paquete encontrará un **regalo/detalle** de nuestra parte. Con naturalidad y cariño."
     );
   }
-  if (tipo === "descatalogado" && !body.productoAlternativo?.trim()) {
+  if (tipo === "descatalogado" && !body.alternativa1?.trim() && !body.alternativa2?.trim()) {
     extras.push(
-      "- No se ha indicado un producto alternativo concreto: NO te inventes un nombre de producto. Dile que le buscamos/proponemos una alternativa parecida (sin nombrarla) y que, si prefiere, le devolvemos el dinero."
+      "- No se han indicado alternativas concretas: NO te inventes nombres de productos. Dile que le proponemos/buscamos alternativas parecidas y que, si prefiere, le devolvemos el dinero."
     );
   }
-  const pideFoto = tipo === "equivocado" || tipo === "roto";
-  const pideStock =
-    pideFoto || tipo === "sin_stock" || tipo === "extraviado";
-  const avisoInterno = tipo === "extraviado" && !body.hayStock;
-
-  if (pideFoto) {
-    const queFoto =
-      tipo === "roto"
-        ? "una foto del producto roto y de la caja tal cual le llegó"
-        : "una foto del producto que le ha llegado por error";
-    if (!body.fotoRecibida) {
-      extras.push(
-        `- Todavía NO nos ha enviado la foto: pídesela con naturalidad (${queFoto}) para poder gestionarlo. 📸`
-      );
-    } else {
-      extras.push("- Ya tenemos la foto, así que NO le pidas ninguna foto.");
-    }
-  }
-  if (pideStock) {
-    if (tipo === "extraviado") {
-      if (body.hayStock) {
-        extras.push(
-          "- SÍ tenemos otro en almacén: dile que **le enviamos otro hoy mismo**. 📦"
-        );
-      } else {
-        extras.push(
-          "- NO tenemos otro en almacén ahora mismo: discúlpate, dile que ya lo estamos gestionando y ofrécele reponérselo en cuanto lo tengamos o devolverle el dinero, lo que prefiera. NO prometas que sale hoy."
-        );
-      }
-    } else if (body.hayStock) {
-      extras.push(
-        "- SÍ tenemos stock del producto: dile que **se lo enviamos hoy mismo**. 📦"
-      );
-    } else {
-      const llegada = fechaLarga(body.fechaLlegada);
-      if (llegada) {
-        extras.push(
-          `- Ahora mismo NO tenemos stock, pero la reposición nos entra el ${llegada}. Explícale que en cuanto nos llegue se lo enviamos, y que a él le llegaría aproximadamente **2 días laborables después**. NO prometas que sale hoy.`
-        );
-      } else {
-        extras.push(
-          "- NO tenemos stock ahora mismo: NO prometas que sale hoy; dile que se lo enviamos en cuanto vuelva a entrar en stock / lo repongamos, lo antes posible."
-        );
-      }
-    }
-  }
-  const instruccionesExtra = extras.join("\n");
 
   const genAI = new GoogleGenerativeAI(apiKey);
 
   try {
     const texto = await llamarGemini(
       genAI,
-      systemPrompt(tipo, canal, instruccionesExtra),
-      buildUserContent(body)
+      systemPrompt(tipo, canal, plantillaPara(tipo, body), extras.join("\n")),
+      buildUserContent(body, fechaEstimadaTxt)
     );
     return NextResponse.json({ texto, regaloPorTardanza, avisoInterno });
   } catch (e: unknown) {
