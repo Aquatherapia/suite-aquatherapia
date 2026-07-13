@@ -17,7 +17,7 @@ type SiNo = "si" | "no";
 const TIPOS: { value: Tipo; label: string }[] = [
   { value: "sin_stock", label: "Retraso: no ha salido de almacén (rotura de stock)" },
   { value: "extraviado", label: "Envío extraviado / no llega (ya salió)" },
-  { value: "contrareembolso", label: "Contrareembolso con retraso / no recibido" },
+  { value: "contrareembolso", label: "Contrarreembolso recibido de vuelta" },
   { value: "roto", label: "Producto llegado roto / dañado" },
   { value: "equivocado", label: "Producto equivocado (enviado mal)" },
   { value: "descatalogado", label: "Producto descatalogado (ofrecer otro)" },

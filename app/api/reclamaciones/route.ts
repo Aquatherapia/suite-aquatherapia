@@ -14,7 +14,7 @@ const TIPOS = {
       "El pedido todavía no ha salido porque falta stock de algún producto. Somos nosotros quienes avisamos al cliente y le damos opciones.",
   },
   contrareembolso: {
-    etiqueta: "Contrareembolso con retraso / no recibido",
+    etiqueta: "Contrarreembolso recibido de vuelta",
     contexto:
       "Un envío contrarreembolso no se ha podido entregar y vuelve de camino a nuestras instalaciones. Hay que ofrecer volver a enviarlo.",
   },
