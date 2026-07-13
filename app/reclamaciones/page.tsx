@@ -43,8 +43,8 @@ export default function ReclamacionesPage() {
           canal,
           tipo,
           fechaCompra: tipo === "sin_stock" ? fechaCompra || undefined : undefined,
-          fotoRecibida: tipo === "equivocado" ? fotoRecibida === "si" : undefined,
-          hayStock: tipo === "equivocado" ? hayStock === "si" : undefined,
+          fotoRecibida: pideFotoYStock ? fotoRecibida === "si" : undefined,
+          hayStock: pideFotoYStock ? hayStock === "si" : undefined,
           mensajeCliente: mensajeCliente.trim() || undefined,
         }),
       });
@@ -99,6 +99,7 @@ export default function ReclamacionesPage() {
     setTimeout(() => setCopiado(false), 2000);
   }
 
+  const pideFotoYStock = tipo === "equivocado" || tipo === "roto";
   const puedeGenerar = nombre.trim() && pedido.trim() && !cargando;
 
   return (
@@ -167,9 +168,12 @@ export default function ReclamacionesPage() {
             ))}
           </select>
 
-          {tipo === "equivocado" && (
+          {pideFotoYStock && (
             <>
-              <label>¿Nos ha enviado ya la foto del producto incorrecto?</label>
+              <label>
+                ¿Nos ha enviado ya la foto del producto{" "}
+                {tipo === "roto" ? "roto" : "incorrecto"}?
+              </label>
               <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                 {(["si", "no"] as const).map((v) => (
                   <button

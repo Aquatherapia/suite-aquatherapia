@@ -132,14 +132,18 @@ export async function POST(req: NextRequest) {
       "- Han pasado más de una semana desde que hizo la compra: además de disculparte por el retraso, dile que **por las molestias le vamos a meter un regalito/detalle en el pedido** 🎁, con naturalidad y cariño."
     );
   }
-  if (tipo === "equivocado") {
+  if (tipo === "equivocado" || tipo === "roto") {
+    const queFoto =
+      tipo === "roto"
+        ? "una foto del producto roto y de la caja tal cual le llegó"
+        : "una foto del producto que le ha llegado por error";
     if (!body.fotoRecibida) {
       extras.push(
-        "- Todavía NO nos ha enviado la foto del producto equivocado: pídesela con naturalidad (una foto del producto que le ha llegado por error) para poder gestionarlo. 📸"
+        `- Todavía NO nos ha enviado la foto: pídesela con naturalidad (${queFoto}) para poder gestionarlo. 📸`
       );
     } else {
       extras.push(
-        "- Ya tenemos la foto del producto equivocado, así que NO le pidas ninguna foto."
+        "- Ya tenemos la foto, así que NO le pidas ninguna foto."
       );
     }
     if (body.hayStock) {
