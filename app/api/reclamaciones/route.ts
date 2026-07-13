@@ -244,6 +244,7 @@ type Body = {
   contraRepetido?: boolean;
   fotoRecibida?: boolean;
   hayQueRecoger?: boolean;
+  productoAlternativo?: string;
   productoDescatalogado?: string;
   alternativa1?: string;
   alternativa2?: string;
@@ -398,9 +399,25 @@ export async function POST(req: NextRequest) {
   const diasLab = diasLaborables(body.fechaCompra);
   const regaloPorTardanza =
     tipo === "sin_stock" && diasLab !== null && diasLab > 5;
-  const avisoInterno = tipo === "extraviado" && !body.hayStock;
+  const avisoInterno = tipo === "extraviado" && body.hayStock === false;
+  const pideStockAlt =
+    tipo === "roto" ||
+    tipo === "equivocado" ||
+    tipo === "contrareembolso" ||
+    tipo === "extraviado";
 
   const extras: string[] = [];
+  if (pideStockAlt && body.hayStock === false) {
+    if (body.productoAlternativo?.trim()) {
+      extras.push(
+        `- NO tenemos el producto en stock para enviárselo: ofrécele como alternativa **${body.productoAlternativo.trim()}** y, si no le encaja, el reembolso.`
+      );
+    } else {
+      extras.push(
+        "- NO tenemos el producto en stock para enviárselo: ofrécele una alternativa parecida (SIN inventarte un nombre concreto) y, si prefiere, el reembolso."
+      );
+    }
+  }
   if (tipo === "sin_stock") {
     if (body.variosProductos) {
       extras.push(

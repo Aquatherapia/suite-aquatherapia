@@ -80,6 +80,7 @@ export default function ReclamacionesPage() {
   // extraviado / contrareembolso
   const [incidencia, setIncidencia] = useState("");
   const [hayStock, setHayStock] = useState<SiNo>("si");
+  const [productoAlternativo, setProductoAlternativo] = useState("");
   const [contraRepetido, setContraRepetido] = useState<SiNo>("no");
   // roto / equivocado
   const [fotoRecibida, setFotoRecibida] = useState<SiNo>("no");
@@ -97,6 +98,11 @@ export default function ReclamacionesPage() {
   const [copiado, setCopiado] = useState(false);
 
   const pideFoto = tipo === "equivocado" || tipo === "roto";
+  const pideStockAlt =
+    tipo === "roto" ||
+    tipo === "equivocado" ||
+    tipo === "contrareembolso" ||
+    tipo === "extraviado";
 
   async function generar() {
     setCargando(true);
@@ -119,8 +125,12 @@ export default function ReclamacionesPage() {
           variosProductos: tipo === "sin_stock" ? variosProductos === "si" : undefined,
           fechaLlegada: tipo === "sin_stock" ? fechaLlegada || undefined : undefined,
           fechaCompra: tipo === "sin_stock" ? fechaCompra || undefined : undefined,
-          // extraviado
-          hayStock: tipo === "extraviado" ? hayStock === "si" : undefined,
+          // stock + alternativa (roto, equivocado, contrareembolso, extraviado)
+          hayStock: pideStockAlt ? hayStock === "si" : undefined,
+          productoAlternativo:
+            pideStockAlt && hayStock === "no"
+              ? productoAlternativo.trim() || undefined
+              : undefined,
           // extraviado + contrareembolso
           incidencia:
             tipo === "extraviado" || tipo === "contrareembolso"
@@ -316,21 +326,8 @@ export default function ReclamacionesPage() {
                 value={incidencia}
                 onChange={(e) => setIncidencia(e.target.value)}
               />
-
-              <label>¿Tenemos otro en almacén?</label>
-              <Segmento<SiNo>
-                value={hayStock}
-                onChange={setHayStock}
-                mb={4}
-                options={[
-                  { v: "si", label: "Sí" },
-                  { v: "no", label: "No" },
-                ]}
-              />
               <div style={hint}>
-                {hayStock === "si"
-                  ? "Se abre reclamación con transporte (plazo 24-72 h)."
-                  : "Sin stock: además del aviso al cliente, saldrá un aviso interno para hacer pedido de reposición. ⚠️"}
+                Se abre reclamación con la empresa de transporte (plazo 24-72 h).
               </div>
             </>
           )}
@@ -432,6 +429,40 @@ export default function ReclamacionesPage() {
                 Si dejas las alternativas vacías, no se inventan: se ofrece
                 buscar una alternativa o el reembolso.
               </div>
+            </>
+          )}
+
+          {/* ── Stock del producto + alternativa (casos de reposición) ── */}
+          {pideStockAlt && (
+            <>
+              <label>¿Tenemos el producto en stock para enviárselo?</label>
+              <Segmento<SiNo>
+                value={hayStock}
+                onChange={setHayStock}
+                mb={hayStock === "no" ? 16 : 4}
+                options={[
+                  { v: "si", label: "Sí" },
+                  { v: "no", label: "No" },
+                ]}
+              />
+              {hayStock === "no" && (
+                <>
+                  <label>Producto alternativo que le ofrecemos {opcional}</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Sérum Vitamina C Plus 30 ml"
+                    value={productoAlternativo}
+                    onChange={(e) => setProductoAlternativo(e.target.value)}
+                  />
+                  <div style={hint}>
+                    Sin stock: se le ofrece esta alternativa (o el reembolso). Si
+                    la dejas vacía, no se inventa ninguna.
+                    {tipo === "extraviado"
+                      ? " Además saldrá un aviso interno para reposición. ⚠️"
+                      : ""}
+                  </div>
+                </>
+              )}
             </>
           )}
 
