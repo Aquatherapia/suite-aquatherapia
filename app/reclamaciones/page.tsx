@@ -20,6 +20,8 @@ export default function ReclamacionesPage() {
   const [canal, setCanal] = useState<Canal>("whatsapp");
   const [tipo, setTipo] = useState<Tipo>("extraviado");
   const [fechaCompra, setFechaCompra] = useState("");
+  const [fotoRecibida, setFotoRecibida] = useState<"si" | "no">("no");
+  const [hayStock, setHayStock] = useState<"si" | "no">("si");
   const [mensajeCliente, setMensajeCliente] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
@@ -41,6 +43,8 @@ export default function ReclamacionesPage() {
           canal,
           tipo,
           fechaCompra: tipo === "sin_stock" ? fechaCompra || undefined : undefined,
+          fotoRecibida: tipo === "equivocado" ? fotoRecibida === "si" : undefined,
+          hayStock: tipo === "equivocado" ? hayStock === "si" : undefined,
           mensajeCliente: mensajeCliente.trim() || undefined,
         }),
       });
@@ -162,6 +166,63 @@ export default function ReclamacionesPage() {
               </option>
             ))}
           </select>
+
+          {tipo === "equivocado" && (
+            <>
+              <label>¿Nos ha enviado ya la foto del producto incorrecto?</label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                {(["si", "no"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setFotoRecibida(v)}
+                    style={{
+                      flex: 1,
+                      marginTop: 0,
+                      padding: "10px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: fotoRecibida === v ? "var(--accent)" : "#fff",
+                      color: fotoRecibida === v ? "#fff" : "var(--ink)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {v === "si" ? "Sí" : "No, aún no"}
+                  </button>
+                ))}
+              </div>
+
+              <label>¿Tenemos en stock el producto correcto?</label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 4 }}>
+                {(["si", "no"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setHayStock(v)}
+                    style={{
+                      flex: 1,
+                      marginTop: 0,
+                      padding: "10px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      background: hayStock === v ? "var(--accent)" : "#fff",
+                      color: hayStock === v ? "#fff" : "var(--ink)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {v === "si" ? "Sí" : "No"}
+                  </button>
+                ))}
+              </div>
+              <div
+                style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}
+              >
+                Si hay stock, se le dice que le sale hoy mismo. 📦
+              </div>
+            </>
+          )}
 
           {tipo === "sin_stock" && (
             <>

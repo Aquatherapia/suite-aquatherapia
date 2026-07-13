@@ -55,7 +55,7 @@ type CanalKey = keyof typeof CANALES;
 function systemPrompt(
   tipo: TipoKey,
   canal: CanalKey,
-  regaloPorTardanza: boolean
+  instruccionesExtra: string
 ) {
   const t = TIPOS[tipo];
   const c = CANALES[canal];
@@ -68,7 +68,7 @@ Contexto de esta situación: ${t.contexto}
 ${t.plantillaEjemplo ? `\nPlantilla de referencia (tono orientativo, NO la copies literalmente, varía saludo/cierre/palabras cada vez):\n"""\n${t.plantillaEjemplo}\n"""\n` : ""}
 CANAL: ${c.etiqueta}
 Formato del canal: ${c.formato}
-${regaloPorTardanza ? `\nIMPORTANTE — REGALO POR TARDANZA: Han pasado más de una semana desde que hizo la compra, así que además de disculparte por el retraso, dile que **por las molestias le vamos a meter un regalito/detalle en el pedido** 🎁. Menciónalo con naturalidad y cariño.\n` : ""}
+${instruccionesExtra ? `\nINSTRUCCIONES ADICIONALES PARA ESTE CASO (tenlas muy en cuenta):\n${instruccionesExtra}\n` : ""}
 ESTILO OBLIGATORIO:
 - Español, tono **muy muy informal** y cercano, como un mensaje a un colega de confianza. Nada de "Estimado cliente" ni lenguaje corporativo o acartonado.
 - SIEMPRE menciona el nombre del cliente y el número de pedido en algún punto del mensaje.
@@ -126,12 +126,40 @@ export async function POST(req: NextRequest) {
   const dias = diasDesde(body.fechaCompra);
   const regaloPorTardanza = tipo === "sin_stock" && dias !== null && dias > 7;
 
+  const extras: string[] = [];
+  if (regaloPorTardanza) {
+    extras.push(
+      "- Han pasado más de una semana desde que hizo la compra: además de disculparte por el retraso, dile que **por las molestias le vamos a meter un regalito/detalle en el pedido** 🎁, con naturalidad y cariño."
+    );
+  }
+  if (tipo === "equivocado") {
+    if (!body.fotoRecibida) {
+      extras.push(
+        "- Todavía NO nos ha enviado la foto del producto equivocado: pídesela con naturalidad (una foto del producto que le ha llegado por error) para poder gestionarlo. 📸"
+      );
+    } else {
+      extras.push(
+        "- Ya tenemos la foto del producto equivocado, así que NO le pidas ninguna foto."
+      );
+    }
+    if (body.hayStock) {
+      extras.push(
+        "- SÍ tenemos stock del producto correcto: dile que **se lo enviamos hoy mismo**. 📦"
+      );
+    } else {
+      extras.push(
+        "- NO tenemos stock del producto correcto ahora mismo: NO prometas que sale hoy; dile que se lo enviamos en cuanto vuelva a entrar en stock / lo repongamos, lo antes posible."
+      );
+    }
+  }
+  const instruccionesExtra = extras.join("\n");
+
   const genAI = new GoogleGenerativeAI(apiKey);
 
   try {
     const texto = await llamarGemini(
       genAI,
-      systemPrompt(tipo, canal, regaloPorTardanza),
+      systemPrompt(tipo, canal, instruccionesExtra),
       buildUserContent(body)
     );
     return NextResponse.json({ texto, regaloPorTardanza });
