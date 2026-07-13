@@ -4,13 +4,20 @@ import { useState } from "react";
 import Link from "next/link";
 
 type Canal = "whatsapp" | "email";
-type Tipo = "extraviado" | "sin_stock" | "roto" | "equivocado" | "otro";
+type Tipo =
+  | "extraviado"
+  | "sin_stock"
+  | "roto"
+  | "equivocado"
+  | "descatalogado"
+  | "otro";
 
 const TIPOS: { value: Tipo; label: string }[] = [
   { value: "extraviado", label: "Envío extraviado / no llega" },
   { value: "sin_stock", label: "No ha salido de almacén (rotura de stock)" },
   { value: "roto", label: "Producto llegado roto / dañado" },
   { value: "equivocado", label: "Producto equivocado (enviado mal)" },
+  { value: "descatalogado", label: "Producto descatalogado (ofrecer otro)" },
   { value: "otro", label: "Otro" },
 ];
 
@@ -22,6 +29,8 @@ export default function ReclamacionesPage() {
   const [fechaCompra, setFechaCompra] = useState("");
   const [productoPendiente, setProductoPendiente] = useState("");
   const [variosProductos, setVariosProductos] = useState<"si" | "no">("si");
+  const [productoDescatalogado, setProductoDescatalogado] = useState("");
+  const [productoAlternativo, setProductoAlternativo] = useState("");
   const [fotoRecibida, setFotoRecibida] = useState<"si" | "no">("no");
   const [hayStock, setHayStock] = useState<"si" | "no">("si");
   const [fechaLlegada, setFechaLlegada] = useState("");
@@ -51,6 +60,14 @@ export default function ReclamacionesPage() {
           productoPendiente:
             tipo === "sin_stock" ? productoPendiente.trim() || undefined : undefined,
           variosProductos: tipo === "sin_stock" ? variosProductos === "si" : undefined,
+          productoDescatalogado:
+            tipo === "descatalogado"
+              ? productoDescatalogado.trim() || undefined
+              : undefined,
+          productoAlternativo:
+            tipo === "descatalogado"
+              ? productoAlternativo.trim() || undefined
+              : undefined,
           fotoRecibida: pideFoto ? fotoRecibida === "si" : undefined,
           hayStock: pideStock ? hayStock === "si" : undefined,
           fechaLlegada:
@@ -181,6 +198,42 @@ export default function ReclamacionesPage() {
               </option>
             ))}
           </select>
+
+          {tipo === "descatalogado" && (
+            <>
+              <label>
+                Producto descatalogado{" "}
+                <span style={{ fontWeight: 400, color: "var(--muted)" }}>
+                  (opcional)
+                </span>
+              </label>
+              <input
+                type="text"
+                placeholder="Ej: Crema Hidratante XYZ 50 ml"
+                value={productoDescatalogado}
+                onChange={(e) => setProductoDescatalogado(e.target.value)}
+              />
+
+              <label>
+                Producto alternativo que ofrecemos{" "}
+                <span style={{ fontWeight: 400, color: "var(--muted)" }}>
+                  (opcional)
+                </span>
+              </label>
+              <input
+                type="text"
+                placeholder="Ej: Crema Hidratante ABC 50 ml"
+                value={productoAlternativo}
+                onChange={(e) => setProductoAlternativo(e.target.value)}
+              />
+              <div
+                style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}
+              >
+                Si dejas el alternativo vacío, no se inventa ninguno: se ofrece
+                buscar una alternativa o el reembolso.
+              </div>
+            </>
+          )}
 
           {pideFoto && (
             <>

@@ -45,6 +45,12 @@ La Tienda de Cosméticos`,
       "Nos hemos equivocado y le hemos enviado un producto distinto al que pidió. La culpa es nuestra: hay que reconocerlo con naturalidad, disculparse y darle solución (enviarle el correcto ya mismo y decirle que se quede el equivocado o que gestionamos la recogida, sin coste para él).",
     plantillaEjemplo: `Ay {nombre}, la hemos liado nosotros con tu pedido **{pedido}** 🙈 Te hemos mandado el producto equivocado, ¡mil perdones! 😔 Ahora mismo te enviamos el **correcto sin que tengas que pagar nada** 📦 Y el que te llegó por error **quédatelo** o si prefieres te organizamos la recogida, tú tranqui, no te preocupes de nada 💜 Perdona el despiste!`,
   },
+  descatalogado: {
+    etiqueta: "Producto descatalogado (ofrecer otro)",
+    contexto:
+      "El producto que pidió el cliente está descatalogado / ya no está disponible y no va a volver. Hay que disculparse, explicárselo con naturalidad y ofrecerle un producto alternativo parecido; si no le encaja, devolverle el dinero.",
+    plantillaEjemplo: `Hola {nombre}! 😔 Tenemos que darte una noticia regular sobre tu pedido **{pedido}**: el producto que pediste ({producto descatalogado}) lo han **descatalogado** y ya no nos vuelve a entrar, una pena 😩 Como alternativa te podemos ofrecer **{producto alternativo}**, que es muy parecido y va genial ✨ Si te encaja te lo enviamos ya mismo y si prefieres te **devolvemos el dinero** sin ningún problema 💜 Dime qué prefieres!`,
+  },
   otro: {
     etiqueta: "Otro / reclamación general",
     contexto:
@@ -103,6 +109,8 @@ function buildUserContent(body: {
   nombre?: string;
   pedido?: string;
   productoPendiente?: string;
+  productoDescatalogado?: string;
+  productoAlternativo?: string;
   mensajeCliente?: string;
 }) {
   const lineas: string[] = [];
@@ -110,6 +118,10 @@ function buildUserContent(body: {
   if (body.pedido?.trim()) lineas.push(`Número de pedido: ${body.pedido.trim()}`);
   if (body.productoPendiente?.trim())
     lineas.push(`Producto pendiente / que falta (causa del retraso): ${body.productoPendiente.trim()}`);
+  if (body.productoDescatalogado?.trim())
+    lineas.push(`Producto descatalogado que pidió: ${body.productoDescatalogado.trim()}`);
+  if (body.productoAlternativo?.trim())
+    lineas.push(`Producto alternativo que le ofrecemos: ${body.productoAlternativo.trim()}`);
   const mensaje = body.mensajeCliente?.trim();
   if (mensaje) {
     lineas.push(`Lo que ha escrito el cliente:\n${mensaje}`);
@@ -189,6 +201,11 @@ export async function POST(req: NextRequest) {
   if (regaloPorTardanza) {
     extras.push(
       "- Han pasado más de 5 días laborables desde la compra: además de disculparte por el retraso, dile que como agradecimiento por su paciencia, cuando reciba el paquete encontrará un **regalo/detalle** de nuestra parte. Con naturalidad y cariño."
+    );
+  }
+  if (tipo === "descatalogado" && !body.productoAlternativo?.trim()) {
+    extras.push(
+      "- No se ha indicado un producto alternativo concreto: NO te inventes un nombre de producto. Dile que le buscamos/proponemos una alternativa parecida (sin nombrarla) y que, si prefiere, le devolvemos el dinero."
     );
   }
   const pideFoto = tipo === "equivocado" || tipo === "roto";
