@@ -354,7 +354,7 @@ export default function ReclamacionesPage() {
                   : "Primera vez: se le ofrece reenviarlo otra vez por contrarreembolso."}
               </div>
 
-              <label>¿Qué indica el transporte? {opcional}</label>
+              <label>¿Por qué ha vuelto? (qué indica el transporte) {opcional}</label>
               <textarea
                 rows={2}
                 placeholder="Ej: no pudo entregarse / fue rechazado / no había nadie en el domicilio"
