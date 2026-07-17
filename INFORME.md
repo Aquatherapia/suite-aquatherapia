@@ -5,6 +5,7 @@
 Una suite de herramientas con IA para latiendadecosmeticos.com, construida con Next.js. Tiene **9 agentes**:
 
 1. **Generador de fichas de producto** — Rellenas los datos y la IA redacta la ficha completa
+1b. **Generador de fichas de packs** — Igual que las fichas pero para packs/sets: indicas los productos que contiene con su enlace y la IA los enlaza automáticamente en la descripción y el modo de uso
 2. **Vigilar precios en Cosméticos24h** — Detecta descuentos en tus marcas y avisa si cambian
 3. **Post para Google Business Profile** — Convierte ideas/posts en texto listo para publicar (2 negocios)
 4. **Vigilar competidores** — Detecta descuentos en las webs de competidores que tú elijas
@@ -90,6 +91,52 @@ Luego abrir **http://localhost:3000** en el navegador.
 ### API routes
 - `POST /api/generate` → genera la ficha completa
 - `POST /api/regenerate` → regenera una sección (acepta `longitud`: "largo" | "corto")
+
+---
+
+## Agente 1b — Generador de fichas de packs
+
+### URL: `/ficha-pack`
+
+Igual que el generador de fichas, pero para **packs / sets** (varios productos que se venden juntos). La diferencia clave: gestiona la lista de productos que componen el pack y **los enlaza automáticamente**.
+
+### Campos del formulario
+- **Nombre del pack** * (ej: `Set Firmeza Global`)
+- **Línea / gama** (ej: `Timexpert Lift_IN`)
+- **Marca** (ej: `Germaine`)
+- **Productos del pack** — lista dinámica (botón "+ Añadir producto" / "✕" para quitar). Cada fila: **nombre exacto** (con su formato en ml, ej: `Contorno de ojos 15ml`) + **enlace** a la ficha de ese producto.
+- **Descripción / contexto del pack** (opcional)
+- **Casilla "Incluir principios activos"** (por defecto DESACTIVADA)
+- **Casilla "Incluir ingredientes"** (por defecto DESACTIVADA; al activarla aparece el campo INCI)
+
+### Estructura de la ficha generada
+1. **Título (H1)** — `Nombre del pack | producto1 + producto2 + producto3 - Línea - Marca ®` (los productos, con su ml, unidos con " + ")
+2. **Descripción** — H2 + 3 párrafos de venta; menciona los productos **enlazados**
+3. **¿Qué contiene el pack?** — lista de los productos, cada uno **enlazado** (esta sección se construye **en código**, no la escribe la IA → los enlaces son siempre correctos)
+4. **Beneficios y propiedades**
+5. **Principios activos** *(solo si se marca la casilla)*
+6. **Ingredientes** *(solo si se marca la casilla)*
+7. **Modo de utilización** — un bloque por producto (nombre en negrita **enlazado** + cómo se usa)
+8. **[NOMBRE DEL PACK] IDEAL PARA:**
+9. **Meta title / Meta description**
+
+### Enlazado automático de productos (clave)
+Cada vez que se menciona el **nombre exacto** de un producto del pack en la descripción o el modo de uso, se envuelve en un `<a href>` al enlace que indicaste. Se hace **por código** (no depende de que la IA acierte):
+- Prioriza el nombre **más largo** (así "Crema Firmeza 50ml" gana a "Crema Firmeza").
+- **Nunca crea enlaces anidados** (si un texto ya está dentro de un `<a>`, lo respeta).
+- Los enlaces abren en pestaña nueva (`target="_blank"`).
+- Para que funcione, la IA menciona los productos por su nombre **exacto** tal como los escribes (por eso conviene poner el nombre completo con su ml).
+
+### Botones (igual que fichas)
+Regenerar / Más corto / Más largo / Editar en Descripción, Beneficios y Modo de utilización. Título y Metas: regenerar + editar. Copiar por sección y **Copiar ficha completa**. Las secciones "¿Qué contiene el pack?", activos, ingredientes e ideal son fijas.
+
+### Límites (gratis)
+Solo usa **Gemini** (1 petición por generación o por regeneración de sección). No usa Upstash.
+
+### API route
+- `POST /api/pack`
+  - Body de generación: `{ nombre, linea, marca, descripcion, ingredientes, productos: [{nombre, url}], incluirIngredientes, incluirActivos }` → devuelve todas las secciones.
+  - Body de regeneración de una sección: lo mismo + `{ seccion, longitud? }` → devuelve `{ html }` (con los productos ya enlazados si es descripción o modo).
 
 ---
 
@@ -440,6 +487,7 @@ suite-aquatherapia/
 │   ├── globals.css                    ← Estilos globales
 │   ├── layout.tsx
 │   ├── ficha-producto/page.tsx        ← Agente 1: generador de fichas
+│   ├── ficha-pack/page.tsx            ← Agente 1b: generador de fichas de packs
 │   ├── vigilar-precios/page.tsx       ← Agente 2: monitor de precios
 │   ├── google-business/page.tsx       ← Agente 3: posts Google Business
 │   ├── vigilar-competidores/page.tsx  ← Agente 4: monitor de competidores
@@ -452,6 +500,7 @@ suite-aquatherapia/
 │       ├── gemini.ts                  ← Lógica compartida Gemini
 │       ├── generate/route.ts          ← Generación de ficha completa
 │       ├── regenerate/route.ts        ← Regeneración por sección
+│       ├── pack/route.ts              ← Fichas de packs (genera/regenera + enlazado de productos)
 │       ├── google-business/route.ts   ← API posts Google Business
 │       ├── vigilar/route.ts           ← API del monitor de precios
 │       ├── vigilar-comp/route.ts      ← API del monitor de competidores

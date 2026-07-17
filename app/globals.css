@@ -192,6 +192,102 @@ button:disabled {
   margin: 3px 0;
 }
 
+.output a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* ---- Fichas de packs: productos, opciones ---- */
+.pack-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+
+.pack-productos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pack-fila {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.pack-fila-num {
+  flex: 0 0 22px;
+  height: 22px;
+  margin-top: 9px;
+  border-radius: 50%;
+  background: #f0ede7;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pack-fila-inputs {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pack-quitar {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  background: #fff;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.pack-quitar:disabled {
+  opacity: 0.35;
+}
+
+.pack-add {
+  width: auto;
+  margin: 10px 0 0;
+  padding: 8px 14px;
+  background: #fff;
+  color: var(--accent);
+  border: 1px dashed var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pack-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.pack-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pack-check input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
 .copy-row {
   display: flex;
   gap: 10px;

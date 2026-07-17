@@ -50,6 +50,19 @@ export default async function Home() {
           <span className="agente-arrow">→</span>
         </Link>
 
+        <Link href="/ficha-pack" className="agente-card">
+          <span className="agente-icono">❋</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Generador de fichas de packs</div>
+            <div className="agente-desc">
+              Igual que las fichas, pero para packs y sets: indica los productos
+              que contiene con su enlace y la IA monta la ficha enlazándolos en
+              la descripción y el modo de uso.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
+
         <Link href="/vigilar-precios" className="agente-card">
           <span className="agente-icono">◎</span>
           <div className="agente-info">
