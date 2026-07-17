@@ -362,6 +362,10 @@ export async function POST(req: NextRequest) {
   if (body.action === "mapear") {
     const marca = config.marcas.find(m => m.slug === body.slug);
     let { miUrl, suUrl } = body as { miUrl: string; suUrl: string };
+    // Fila que se estaba editando (para poder cambiar las DOS urls a la vez sin dejarla duplicada)
+    const { miUrlPrevio, suUrlPrevio } = body as { miUrlPrevio?: string; suUrlPrevio?: string };
+    const previoMi = (miUrlPrevio || "").trim();
+    const previoSu = (suUrlPrevio || "").trim();
     if (!marca) return NextResponse.json({ error: "Marca no encontrada." }, { status: 400 });
     miUrl = (miUrl || "").trim();
     suUrl = (suUrl || "").trim().split("?")[0].replace(/\/$/, "");
@@ -403,8 +407,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No pude leer el precio de tu producto. Revisa la URL de tu web." }, { status: 502 });
     }
 
-    // Guardar el enlace (reemplaza cualquiera previo de ese producto tuyo o suyo)
-    const lista = (config.mapeos[marca.slug] ?? []).filter(f => f.miUrl !== miUrl && f.suUrl !== suUrl);
+    // Guardar el enlace (reemplaza cualquiera previo de ese producto tuyo o suyo, y el de la fila editada)
+    const esViejo = (u: string, esMi: boolean) =>
+      (esMi ? u === miUrl || (!!previoMi && u === previoMi) : u === suUrl || (!!previoSu && u === previoSu));
+    const lista = (config.mapeos[marca.slug] ?? []).filter(f => !esViejo(f.miUrl, true) && !esViejo(f.suUrl, false));
     lista.push({ miUrl, suUrl });
     config.mapeos[marca.slug] = lista;
     // Que no quede oculto ese producto suyo
@@ -413,9 +419,9 @@ export async function POST(req: NextRequest) {
     // Actualizar el resultado al momento
     if (r) {
       const nombre = (miUrl.split("/es/")[1] ?? "").replace(/-p\d+$/, "").replace(/-/g, " ");
-      r.comparaciones = r.comparaciones.filter(c => c.miUrl !== miUrl && c.suUrl !== suUrl);
+      r.comparaciones = r.comparaciones.filter(c => !esViejo(c.miUrl, true) && !esViejo(c.suUrl, false));
       r.soloEllos = r.soloEllos.filter(s => s.url !== suUrl);
-      r.misSinEmparejar = (r.misSinEmparejar ?? []).filter(m => m.url !== miUrl);
+      r.misSinEmparejar = (r.misSinEmparejar ?? []).filter(m => !esViejo(m.url, true));
       const nombreOverride = (config.nombres[marca.slug] ?? []).find(n => n.suUrl === suUrl)?.nombre;
       r.comparaciones.push({
         nombre: nombreOverride || sp.titulo || nombre, miPrecio, suPrecio: sp.precio, suPrecioTachado: sp.tachado,

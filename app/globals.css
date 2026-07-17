@@ -1207,6 +1207,12 @@ button:disabled {
 }
 .cp-editor-lbl { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
 .cp-editor-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+/* Fila etiqueta + input, para editar por separado mi URL y la de C24h */
+.cp-editor-campo { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.cp-editor-tag {
+  flex: 0 0 42px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--muted); text-align: right;
+}
 .cp-editor-input {
   flex: 1; min-width: 180px; width: auto; font-size: 12px; padding: 5px 8px;
   border: 1px solid var(--border, #ccc); border-radius: 5px;

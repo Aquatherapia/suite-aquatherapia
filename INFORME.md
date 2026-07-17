@@ -375,7 +375,10 @@ El precio que se compara es el **precio de venta actual de cada uno**. Si Cosmé
 
 ### Enlazar productos a mano (corrige los fallos de emparejamiento)
 Como el cruce es por nombre, a veces enlaza mal o no encuentra el equivalente. Se puede **forzar el enlace correcto** y queda guardado (tiene prioridad sobre el automático y sobrevive a las revisiones):
-- **Fila mal emparejada** → botón **✎** en la fila: pegas la **URL de Cosméticos24h** correcta y se re-enlaza. La fila queda con etiqueta verde **"✓ manual"**. Desde el mismo editor se puede **"Quitar enlace manual"** (vuelve al automático).
+- **Fila mal emparejada** → botón **✎** en la fila: se abren **DOS casillas** con las URLs actuales ya rellenas — **"Tú"** (latiendadecosmeticos.com) y **"C24h"** (cosmeticos24h.com). Puedes corregir **una o las dos**: sirve tanto si el producto mal emparejado es el suyo como si **el equivocado es el tuyo**. La fila queda con etiqueta verde **"✓ manual"**. Desde el mismo editor se puede **"Quitar enlace manual"** (vuelve al automático).
+  - Si cambias tu URL por una ficha que no estaba en los resultados, la app **lee el precio de esa ficha** de tu web al momento.
+  - Si cambias **las dos** a la vez, se envían también las URLs anteriores (`miUrlPrevio`/`suUrlPrevio`) para borrar la fila vieja y que no quede duplicada.
+  - Valida cada casilla: la de "Tú" debe ser de `latiendadecosmeticos.com` y la de "C24h" debe ser `cosmeticos24h.com/products/…`; si no, avisa con un error claro.
 - **Producto tuyo que no encuentra** → sección desplegable **"Tus productos sin emparejar (N)"**: lista tus productos de esa marca que no cruzaron con ninguno suyo; en cada uno pegas su **URL de C24h** para enlazarlos.
 - **En "Tienen ellos y tú no" y en "Packs que tienen ellos y tú no"** → cada fila tiene botón **✎** ("Ya lo tengo"): como aquí el ancla es el producto SUYO, pegas la **URL de TU web** (latiendadecosmeticos.com) y se enlazan. Útil porque muchos de esos "no los tienes" en realidad sí los tienes con otro nombre. Valida que la URL sea de latiendadecosmeticos.com.
 - Al enlazar, la app lee ese producto de la API de C24h y crea la comparación **al instante** (sin re-escanear toda tu web). Se guarda en Upstash (`mapeos`, por marca). Si pegas una URL que no es de C24h o de otra marca, avisa con un error claro.
@@ -405,7 +408,7 @@ Solo usa **scraping propio + API pública de Cosméticos24h + Upstash + Vercel**
 
 ### API route
 - `GET /api/comparar-precios` → config actual
-- `POST /api/comparar-precios` con `action`: `addMarca` (nombre, slug, miToken?), `deleteMarca` (slug), `revisar` (requiere slug; sin slug → HTTP 400), `excluir` (slug, item{suUrl,titulo,tipo,miPrecio?,suPrecio?,miUrl?} → oculta un producto guardando sus precios), `motivo` (slug, suUrl, motivo → fija el motivo de ocultación), `incluir` (slug, suUrl → lo restaura), `mapear` (slug, miUrl, suUrl → enlaza a mano tu producto con el suyo; actualiza al instante), `desmapear` (slug, miUrl → deshace el enlace manual)
+- `POST /api/comparar-precios` con `action`: `addMarca` (nombre, slug, miToken?), `deleteMarca` (slug), `revisar` (requiere slug; sin slug → HTTP 400), `excluir` (slug, item{suUrl,titulo,tipo,miPrecio?,suPrecio?,miUrl?} → oculta un producto guardando sus precios), `motivo` (slug, suUrl, motivo → fija el motivo de ocultación), `incluir` (slug, suUrl → lo restaura), `mapear` (slug, miUrl, suUrl, miUrlPrevio?, suUrlPrevio? → enlaza a mano tu producto con el suyo; los `Previo` identifican la fila que se estaba editando para poder cambiar las dos urls a la vez sin duplicarla; actualiza al instante), `desmapear` (slug, miUrl → deshace el enlace manual)
 
 ---
 

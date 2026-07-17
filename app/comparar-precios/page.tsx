@@ -154,7 +154,7 @@ function MarcaBloque({
   onExcluir: (item: Excluido) => void;
   onIncluir: (suUrl: string) => void;
   onMotivo: (suUrl: string, motivo: string) => void;
-  onMapear: (miUrl: string, suUrl: string) => Promise<void>;
+  onMapear: (miUrl: string, suUrl: string, previos?: { miUrlPrevio?: string; suUrlPrevio?: string }) => Promise<void>;
   onDesmapear: (miUrl: string) => void;
   onVerificar: (suUrl: string) => void;
   onDesverificar: (suUrl: string) => void;
@@ -164,24 +164,26 @@ function MarcaBloque({
   const [verOcultos, setVerOcultos] = useState(false);
   const [verSinEmp, setVerSinEmp] = useState(false);
   const [editando, setEditando] = useState<string | null>(null); // suUrl de la fila en edición
-  const [urlInput, setUrlInput] = useState("");
+  const [urlInput, setUrlInput] = useState("");     // URL de Cosméticos24h
+  const [miUrlInput, setMiUrlInput] = useState(""); // URL de mi web (latiendadecosmeticos.com)
   const [guardando, setGuardando] = useState(false);
   const [errLink, setErrLink] = useState("");
 
-  async function guardarEnlace(miUrl: string) {
-    if (!urlInput.trim()) return;
+  // Guarda la fila corrigiendo las DOS urls: la mía y la de Cosméticos24h
+  async function guardarEnlace(miUrlPrevio: string, suUrlPrevio: string) {
+    if (!urlInput.trim() || !miUrlInput.trim()) return;
     setGuardando(true); setErrLink("");
     try {
-      await onMapear(miUrl, urlInput.trim());
-      setEditando(null); setUrlInput("");
+      await onMapear(miUrlInput.trim(), urlInput.trim(), { miUrlPrevio, suUrlPrevio });
+      setEditando(null); setUrlInput(""); setMiUrlInput("");
     } catch (e) {
       setErrLink(e instanceof Error ? e.message : String(e));
     } finally {
       setGuardando(false);
     }
   }
-  function abrirEditor(filaId: string, suUrlActual: string) {
-    setEditando(filaId); setUrlInput(suUrlActual); setErrLink("");
+  function abrirEditor(filaId: string, suUrlActual: string, miUrlActual = "") {
+    setEditando(filaId); setUrlInput(suUrlActual); setMiUrlInput(miUrlActual); setErrLink("");
   }
 
   // Editor del nombre mostrado del producto
@@ -336,7 +338,7 @@ function MarcaBloque({
                           ✓
                         </button>
                         <button className="cp-renombrar" title="Editar el nombre mostrado" onClick={() => abrirEditorNombre(c.suUrl, c.nombre)}>Aa</button>
-                        <button className="cp-editar" title="Corregir el enlace: pegar la URL correcta de Cosméticos24h" onClick={() => abrirEditor(c.suUrl, c.suUrl)}>✎</button>
+                        <button className="cp-editar" title="Corregir el enlace: tu URL y/o la de Cosméticos24h" onClick={() => abrirEditor(c.suUrl, c.suUrl, c.miUrl)}>✎</button>
                         <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecio, miUrl: c.miUrl })}>×</button>
                       </div>
                     </div>
@@ -364,17 +366,30 @@ function MarcaBloque({
                     )}
                     {editando === c.suUrl && (
                       <div className="cp-editor">
-                        <div className="cp-editor-lbl">Pega la URL correcta de este producto en Cosméticos24h:</div>
-                        <div className="cp-editor-row">
+                        <div className="cp-editor-lbl">Corrige las URLs de esta fila (puedes cambiar una o las dos):</div>
+                        <div className="cp-editor-campo">
+                          <span className="cp-editor-tag">Tú</span>
+                          <input
+                            className="cp-editor-input"
+                            value={miUrlInput}
+                            onChange={e => setMiUrlInput(e.target.value)}
+                            onKeyDown={e => e.key === "Enter" && guardarEnlace(c.miUrl, c.suUrl)}
+                            placeholder="https://www.latiendadecosmeticos.com/es/…"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="cp-editor-campo">
+                          <span className="cp-editor-tag">C24h</span>
                           <input
                             className="cp-editor-input"
                             value={urlInput}
                             onChange={e => setUrlInput(e.target.value)}
-                            onKeyDown={e => e.key === "Enter" && guardarEnlace(c.miUrl)}
+                            onKeyDown={e => e.key === "Enter" && guardarEnlace(c.miUrl, c.suUrl)}
                             placeholder="https://cosmeticos24h.com/products/…"
-                            autoFocus
                           />
-                          <button className="cp-editor-save" disabled={guardando} onClick={() => guardarEnlace(c.miUrl)}>
+                        </div>
+                        <div className="cp-editor-row">
+                          <button className="cp-editor-save" disabled={guardando} onClick={() => guardarEnlace(c.miUrl, c.suUrl)}>
                             {guardando ? "…" : "Enlazar"}
                           </button>
                           <button className="cp-editor-cancel" onClick={() => { setEditando(null); setErrLink(""); }}>Cancelar</button>
@@ -603,10 +618,10 @@ export default function CompararPrecios() {
     setConfig(await res.json());
   }
 
-  async function mapear(slug: string, miUrl: string, suUrl: string) {
+  async function mapear(slug: string, miUrl: string, suUrl: string, previos?: { miUrlPrevio?: string; suUrlPrevio?: string }) {
     const res = await fetch("/api/comparar-precios", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "mapear", slug, miUrl, suUrl }),
+      body: JSON.stringify({ action: "mapear", slug, miUrl, suUrl, ...previos }),
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -770,7 +785,7 @@ export default function CompararPrecios() {
               onExcluir={(item) => excluir(r.slug, item)}
               onIncluir={(suUrl) => incluir(r.slug, suUrl)}
               onMotivo={(suUrl, motivo) => cambiarMotivo(r.slug, suUrl, motivo)}
-              onMapear={(miUrl, suUrl) => mapear(r.slug, miUrl, suUrl)}
+              onMapear={(miUrl, suUrl, previos) => mapear(r.slug, miUrl, suUrl, previos)}
               onDesmapear={(miUrl) => desmapear(r.slug, miUrl)}
               onVerificar={(suUrl) => verificar(r.slug, suUrl)}
               onDesverificar={(suUrl) => desverificar(r.slug, suUrl)}
