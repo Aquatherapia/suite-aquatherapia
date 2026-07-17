@@ -400,8 +400,13 @@ Compara precio de venta contra precio de venta. El **coste de compra no es públ
 ### Rendimiento y límite de Vercel
 Leer tu web es 1 petición por producto (en paralelo, de 10 en 10). La función usa `maxDuration = 60` (Vercel Hobby lo permite **gratis**; el defecto son 10s). La revisión es **siempre marca a marca** (una sola): cada marca tiene su botón "Revisar" en la columna izquierda. No hay "Revisar todas" a propósito, para evitar esperas largas y no saturar la web propia; la API rechaza cualquier revisión sin marca (HTTP 400). Nota: este agente **no usa Gemini/IA**, así que revisar no consume tokens de ningún tipo — el motivo del límite es solo tiempo/carga.
 
+### Fecha de revisión: por marca (no global)
+Como la revisión es **marca a marca**, cada marca guarda su propia fecha (`revisadoEn` dentro de su resultado) y la muestra **en su cabecera**: "Revisada el [fecha] a las [hora] · hace X". Antes solo había una fecha global arriba ("Análisis actualizado el…"), que daba a entender que todas las marcas se habían revisado a la vez; esa cabecera global se quitó (jul 2026).
+
+> Las marcas revisadas **antes** de este cambio no tienen `revisadoEn` guardado y no muestran fecha hasta que las vuelvas a revisar una vez.
+
 ### Persistencia
-Upstash KV, clave `comparar-precios-config`. En local cae a `data/comparar-precios-config.json`. Guarda `{ marcas: [{nombre, slug, miToken}], ultimaRevision, resultados, excluidos, mapeos }`. Al revisar una marca concreta, solo se reemplaza esa (las demás se conservan). `mapeos` (enlaces manuales) y `excluidos` (ocultos) se conservan siempre.
+Upstash KV, clave `comparar-precios-config`. En local cae a `data/comparar-precios-config.json`. Guarda `{ marcas: [{nombre, slug, miToken}], ultimaRevision, resultados (cada uno con su revisadoEn), excluidos, mapeos }`. Al revisar una marca concreta, solo se reemplaza esa (las demás se conservan). `mapeos` (enlaces manuales) y `excluidos` (ocultos) se conservan siempre.
 
 ### Límites (gratis)
 Solo usa **scraping propio + API pública de Cosméticos24h + Upstash + Vercel**. **No usa Gemini.** Solo cubre marcas que Cosméticos24h también venda.

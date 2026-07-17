@@ -61,6 +61,9 @@ type ResultadoMarca = {
   misSinEmparejar: MiSinEmparejar[];
   misProductos: number;
   susProductos: number;
+  // Cuándo se revisó ESTA marca (la revisión es marca a marca).
+  // Opcional: los resultados guardados antes de existir este campo no lo tienen.
+  revisadoEn?: string;
 };
 
 type Excluido = {
@@ -475,7 +478,7 @@ export async function POST(req: NextRequest) {
         // 1) Sus productos (cosmeticos24h) — incluidos ocultos, para el backfill
         const suProdsAll = await leerSusProductos(marca.slug, marca.nombre);
         if ("error" in suProdsAll) {
-          nuevos.push({ marca: marca.nombre, slug: marca.slug, error: suProdsAll.error, comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0 });
+          nuevos.push({ marca: marca.nombre, slug: marca.slug, error: suProdsAll.error, comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() });
           continue;
         }
         const suPorUrl = new Map(suProdsAll.map(s => [s.url, s]));
@@ -561,9 +564,10 @@ export async function POST(req: NextRequest) {
           marca: marca.nombre, slug: marca.slug,
           comparaciones, soloEllos, misSinEmparejar,
           misProductos: mis.length, susProductos: suProdsAll.length,
+          revisadoEn: new Date().toISOString(),
         });
       } catch (e) {
-        nuevos.push({ marca: marca.nombre, slug: marca.slug, error: String(e), comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0 });
+        nuevos.push({ marca: marca.nombre, slug: marca.slug, error: String(e), comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() });
       }
     }
 

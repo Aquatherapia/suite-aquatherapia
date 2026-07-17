@@ -14,6 +14,7 @@ type ResultadoMarca = {
   marca: string; slug: string; error?: string;
   comparaciones: Comparacion[]; soloEllos: SoloEllos[]; misSinEmparejar: MiSinEmparejar[];
   misProductos: number; susProductos: number;
+  revisadoEn?: string; // cuándo se revisó ESTA marca (falta en resultados guardados antes)
 };
 
 function nombreDesdeUrl(url: string) {
@@ -275,7 +276,14 @@ function MarcaBloque({
   return (
     <div className="vp-accordion">
       <div className="vp-accordion-header" onClick={onToggle} role="button" tabIndex={0}>
-        <span className="vp-accordion-marca">{r.marca}</span>
+        <span className="vp-accordion-marca">
+          {r.marca}
+          {r.revisadoEn && (
+            <span className="cp-revisado" title={`Esta marca se revisó el ${fechaExacta(r.revisadoEn)}`}>
+              Revisada el {fechaExacta(r.revisadoEn)} · {tiempoDesde(r.revisadoEn)}
+            </span>
+          )}
+        </span>
         <div className="vp-accordion-right">
           {masCaro.length > 0 && (
             <span className="vp-pill vp-pill-nuevo">{masCaro.length} caro{masCaro.length !== 1 ? "s" : ""}</span>
@@ -752,21 +760,8 @@ export default function CompararPrecios() {
 
         {/* ── Columna derecha ── */}
         <div className="right-col">
-          <div className="vp-revision-header">
-            <div className="vp-revision-time">
-              {config?.ultimaRevision ? (
-                <>
-                  Análisis actualizado el {fechaExacta(config.ultimaRevision)}
-                  <span style={{ display: "block", fontSize: 11, color: "var(--muted)", fontWeight: 400, marginTop: 2 }}>
-                    {tiempoDesde(config.ultimaRevision)}
-                  </span>
-                </>
-              ) : "Sin revisar aún"}
-            </div>
-          </div>
-
           <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-            <span>La revisión es <strong>marca a marca</strong>: usa el botón "Revisar" de cada marca (columna izquierda). Así es rápido y no satura tu web.</span>
+            <span>La revisión es <strong>marca a marca</strong>: usa el botón "Revisar" de cada marca (columna izquierda). Cada marca muestra <strong>su propia fecha</strong> de revisión.</span>
           </div>
 
           {error && <div className="error">{error}</div>}

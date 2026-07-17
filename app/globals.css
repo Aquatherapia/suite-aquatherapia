@@ -871,6 +871,15 @@ button:disabled {
   transition: color .12s;
 }
 
+/* Fecha de revisión de cada marca (la revisión es marca a marca) */
+.cp-revisado {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .vp-accordion-right {
   display: flex;
   align-items: center;
