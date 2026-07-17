@@ -239,6 +239,26 @@ button:disabled {
   min-width: 0;
 }
 
+.pack-nf {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pack-nf-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pack-nf-formato {
+  flex: 0 0 110px;
+  width: 110px;
+}
+
+.pack-cajetilla {
+  margin-top: 8px;
+}
+
 .pack-quitar {
   flex: 0 0 auto;
   width: auto;

@@ -16,7 +16,7 @@ type Secciones = {
   metaDesc: string;
 };
 
-type Producto = { nombre: string; url: string };
+type Producto = { nombre: string; formato: string; url: string };
 
 const SECCION_LABEL: Record<string, string> = {
   descripcion: "Descripción",
@@ -31,10 +31,11 @@ export default function FichaPack() {
     marca: "",
     descripcion: "",
     ingredientes: "",
+    activosContexto: "",
   });
   const [productos, setProductos] = useState<Producto[]>([
-    { nombre: "", url: "" },
-    { nombre: "", url: "" },
+    { nombre: "", formato: "", url: "" },
+    { nombre: "", formato: "", url: "" },
   ]);
   const [incluirIngredientes, setIncluirIngredientes] = useState(false);
   const [incluirActivos, setIncluirActivos] = useState(false);
@@ -55,7 +56,7 @@ export default function FichaPack() {
     setProductos((ps) => ps.map((p, idx) => (idx === i ? { ...p, [field]: value } : p)));
   }
   function addProducto() {
-    setProductos((ps) => [...ps, { nombre: "", url: "" }]);
+    setProductos((ps) => [...ps, { nombre: "", formato: "", url: "" }]);
   }
   function removeProducto(i: number) {
     setProductos((ps) => (ps.length > 1 ? ps.filter((_, idx) => idx !== i) : ps));
@@ -64,7 +65,13 @@ export default function FichaPack() {
   function payload() {
     return {
       ...form,
-      productos: productos.filter((p) => p.nombre.trim()),
+      productos: productos
+        .filter((p) => p.nombre.trim())
+        .map((p) => ({
+          // el nombre que se usa en el título y en el enlazado = nombre + formato
+          nombre: [p.nombre.trim(), p.formato.trim()].filter(Boolean).join(" "),
+          url: p.url.trim(),
+        })),
       incluirIngredientes,
       incluirActivos,
     };
@@ -157,8 +164,8 @@ export default function FichaPack() {
 
   const fichaHtml = [
     secciones.descripcion,
-    secciones.contenido,
     secciones.beneficios,
+    secciones.contenido,
     secciones.activos,
     secciones.ingredientes,
     secciones.modo,
@@ -202,8 +209,8 @@ export default function FichaPack() {
 
           <label>Productos del pack</label>
           <p className="pack-hint">
-            Nombre exacto (con su formato en ml) y el enlace de cada producto. Se enlazarán
-            automáticamente en la descripción, el modo de uso y el apartado &laquo;¿Qué contiene el
+            Nombre, formato y enlace de cada producto. Se enlazarán automáticamente (nombre +
+            formato) en la descripción, el modo de uso y el apartado &laquo;¿Qué contiene el
             pack?&raquo;.
           </p>
           <div className="pack-productos">
@@ -211,11 +218,20 @@ export default function FichaPack() {
               <div className="pack-fila" key={i}>
                 <div className="pack-fila-num">{i + 1}</div>
                 <div className="pack-fila-inputs">
-                  <input
-                    value={p.nombre}
-                    onChange={(e) => updateProducto(i, "nombre", e.target.value)}
-                    placeholder="Nombre — Ej: Contorno de ojos 15ml"
-                  />
+                  <div className="pack-nf">
+                    <input
+                      className="pack-nf-nombre"
+                      value={p.nombre}
+                      onChange={(e) => updateProducto(i, "nombre", e.target.value)}
+                      placeholder="Nombre — Ej: Contorno de ojos"
+                    />
+                    <input
+                      className="pack-nf-formato"
+                      value={p.formato}
+                      onChange={(e) => updateProducto(i, "formato", e.target.value)}
+                      placeholder="Formato — Ej: 15ml"
+                    />
+                  </div>
                   <input
                     value={p.url}
                     onChange={(e) => updateProducto(i, "url", e.target.value)}
@@ -255,6 +271,15 @@ export default function FichaPack() {
               />
               Incluir apartado de principios activos
             </label>
+            {incluirActivos && (
+              <textarea
+                className="pack-cajetilla"
+                rows={4}
+                value={form.activosContexto}
+                onChange={(e) => update("activosContexto", e.target.value)}
+                placeholder="Principios activos (opcional) — si lo dejas vacío, la IA los redacta a partir de la descripción..."
+              />
+            )}
             <label className="pack-check">
               <input
                 type="checkbox"
@@ -263,19 +288,16 @@ export default function FichaPack() {
               />
               Incluir apartado de ingredientes
             </label>
-          </div>
-
-          {incluirIngredientes && (
-            <>
-              <label>Ingredientes (INCI)</label>
+            {incluirIngredientes && (
               <textarea
+                className="pack-cajetilla"
                 rows={4}
                 value={form.ingredientes}
                 onChange={(e) => update("ingredientes", e.target.value)}
-                placeholder="Pega aquí la lista de ingredientes..."
+                placeholder="Ingredientes (INCI) — pega aquí la lista de ingredientes..."
               />
-            </>
-          )}
+            )}
+          </div>
 
           <button onClick={generar} disabled={!puedeGenerar}>
             {loading && <span className="spinner" />}
@@ -438,16 +460,6 @@ export default function FichaPack() {
                 />
               )}
 
-              {/* ¿Qué contiene el pack? (fija, enlaces garantizados) */}
-              {secciones.contenido && (
-                <div className="seccion-bloque seccion-fija">
-                  <div className="seccion-header">
-                    <span className="seccion-tag">¿Qué contiene el pack?</span>
-                  </div>
-                  <div className="output" dangerouslySetInnerHTML={{ __html: secciones.contenido }} />
-                </div>
-              )}
-
               {/* Beneficios (regenerable) */}
               {secciones.beneficios && (
                 <SeccionRegenerable
@@ -464,6 +476,16 @@ export default function FichaPack() {
                   onGuardar={guardarEdicion}
                   onCancelar={() => setEditando("")}
                 />
+              )}
+
+              {/* ¿Qué contiene el pack? (fija, enlaces garantizados) — debajo de beneficios */}
+              {secciones.contenido && (
+                <div className="seccion-bloque seccion-fija">
+                  <div className="seccion-header">
+                    <span className="seccion-tag">¿Qué contiene el pack?</span>
+                  </div>
+                  <div className="output" dangerouslySetInnerHTML={{ __html: secciones.contenido }} />
+                </div>
               )}
 
               {/* Activos (fija, opcional) */}

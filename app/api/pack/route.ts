@@ -132,10 +132,14 @@ ${
   }
 [MODO]
 <h2>MODO DE UTILIZACIÓN</h2>
-<p>Un sub-bloque por cada producto del pack. Para cada uno: el nombre EXACTO del producto en <strong>, y debajo cómo se usa.</p>
-<p><strong>[Nombre exacto del producto]</strong><br>Instrucción de uso.</p>
+<ol>
+<li><strong>[Nombre exacto del producto]:</strong> cuándo y cómo se aplica.</li>
+... (un paso por cada producto del pack)
+</ol>
 [/MODO]
-Regla del MODO: incluye TODOS los productos del pack, cada uno con su nombre exacto y su modo de aplicación.
+Reglas del MODO:
+- Usa una lista NUMERADA (<ol>): cada paso es un producto, en el ORDEN correcto de aplicación de la rutina (lo que se usa primero, primero).
+- Incluye TODOS los productos del pack, cada uno con su nombre EXACTO al principio del paso.
 
 [IDEAL]
 <h2>[NOMBRE DEL PACK EN MAYÚSCULAS] IDEAL PARA:</h2>
@@ -215,11 +219,13 @@ Redacta SOLO la sección MODO DE UTILIZACIÓN con este formato exacto:
 
 [MODO]
 <h2>MODO DE UTILIZACIÓN</h2>
-<p><strong>[Nombre exacto del producto]</strong><br>Instrucción de uso.</p>
-... (un sub-bloque por cada producto del pack)
+<ol>
+<li><strong>[Nombre exacto del producto]:</strong> cuándo y cómo se aplica.</li>
+... (un paso por cada producto del pack)
+</ol>
 [/MODO]
 
-Incluye TODOS los productos del pack, cada uno con su nombre EXACTO.
+Usa una lista NUMERADA (<ol>): cada paso es un producto, en el ORDEN correcto de aplicación (lo que se usa primero, primero). Incluye TODOS los productos con su nombre EXACTO al principio del paso.
 
 {{LONGITUD}}
 
@@ -255,6 +261,7 @@ export async function POST(req: Request) {
       marca,
       descripcion,
       ingredientes,
+      activosContexto,
       productos = [],
       incluirIngredientes = false,
       incluirActivos = false,
@@ -266,6 +273,7 @@ export async function POST(req: Request) {
       marca?: string;
       descripcion?: string;
       ingredientes?: string;
+      activosContexto?: string;
       productos?: Producto[];
       incluirIngredientes?: boolean;
       incluirActivos?: boolean;
@@ -289,6 +297,7 @@ export async function POST(req: Request) {
 - Productos del pack:
 ${listaProductos(productos)}
 - Descripción / contexto: ${descripcion || "(no indicada)"}
+- Principios activos aportados: ${activosContexto || "(no indicados — puedes deducirlos de la descripción)"}
 - Ingredientes: ${ingredientes || "(no indicados)"}`;
 
     // ----- Regenerar una sola sección -----

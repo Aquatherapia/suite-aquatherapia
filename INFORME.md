@@ -104,19 +104,19 @@ Igual que el generador de fichas, pero para **packs / sets** (varios productos q
 - **Nombre del pack** * (ej: `Set Firmeza Global`)
 - **Línea / gama** (ej: `Timexpert Lift_IN`)
 - **Marca** (ej: `Germaine`)
-- **Productos del pack** — lista dinámica (botón "+ Añadir producto" / "✕" para quitar). Cada fila: **nombre exacto** (con su formato en ml, ej: `Contorno de ojos 15ml`) + **enlace** a la ficha de ese producto.
+- **Productos del pack** — lista dinámica (botón "+ Añadir producto" / "✕" para quitar). Cada fila tiene **3 casillas**: **Nombre** (ej: `Contorno de ojos`), **Formato** (ej: `15ml`) y **Enlace** a la ficha. El nombre + formato se combinan (`Contorno de ojos 15ml`) para el título y el enlazado → así nunca se olvida poner el tamaño.
 - **Descripción / contexto del pack** (opcional)
-- **Casilla "Incluir principios activos"** (por defecto DESACTIVADA)
-- **Casilla "Incluir ingredientes"** (por defecto DESACTIVADA; al activarla aparece el campo INCI)
+- **Casilla "Incluir principios activos"** (por defecto DESACTIVADA; al marcarla se despliega una cajetilla opcional: si la dejas vacía, la IA los redacta a partir de la descripción)
+- **Casilla "Incluir ingredientes"** (por defecto DESACTIVADA; al marcarla se despliega una cajetilla para pegar la lista INCI). Ambas casillas funcionan de forma simétrica.
 
 ### Estructura de la ficha generada
 1. **Título (H1)** — `Nombre del pack | producto1 + producto2 + producto3 - Línea - Marca ®` (los productos, con su ml, unidos con " + ")
 2. **Descripción** — H2 + 3 párrafos de venta; menciona los productos **enlazados**
-3. **¿Qué contiene el pack?** — lista de los productos, cada uno **enlazado** (esta sección se construye **en código**, no la escribe la IA → los enlaces son siempre correctos)
-4. **Beneficios y propiedades**
+3. **Beneficios y propiedades**
+4. **¿Qué contiene el pack?** — lista de los productos, cada uno **enlazado** (va **debajo de beneficios**; se construye **en código**, no la escribe la IA → los enlaces son siempre correctos)
 5. **Principios activos** *(solo si se marca la casilla)*
 6. **Ingredientes** *(solo si se marca la casilla)*
-7. **Modo de utilización** — un bloque por producto (nombre en negrita **enlazado** + cómo se usa)
+7. **Modo de utilización** — lista **numerada** (`<ol>`), un **paso por producto en el orden de aplicación** (nombre **enlazado** al principio del paso + cómo se usa)
 8. **[NOMBRE DEL PACK] IDEAL PARA:**
 9. **Meta title / Meta description**
 
@@ -135,7 +135,7 @@ Solo usa **Gemini** (1 petición por generación o por regeneración de sección
 
 ### API route
 - `POST /api/pack`
-  - Body de generación: `{ nombre, linea, marca, descripcion, ingredientes, productos: [{nombre, url}], incluirIngredientes, incluirActivos }` → devuelve todas las secciones.
+  - Body de generación: `{ nombre, linea, marca, descripcion, ingredientes, activosContexto, productos: [{nombre, url}], incluirIngredientes, incluirActivos }` → devuelve todas las secciones. (El frontend combina nombre + formato en el `nombre` de cada producto antes de enviar.)
   - Body de regeneración de una sección: lo mismo + `{ seccion, longitud? }` → devuelve `{ html }` (con los productos ya enlazados si es descripción o modo).
 
 ---
