@@ -4,23 +4,36 @@ import { llamarGemini } from "../gemini";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type Producto = { nombre: string; url: string };
+type Producto = { nombre: string; formato?: string; url: string };
+
+// Nombre completo del producto: "Contorno de ojos" + "15ml" → "Contorno de ojos 15ml"
+function etiqueta(p: Producto): string {
+  return [p.nombre?.trim(), p.formato?.trim()].filter(Boolean).join(" ");
+}
+
+// Formas en que la IA puede nombrar al producto y que deben enlazarse igual:
+// con formato ("Leche Limpiadora 200ml") y sin él ("Leche Limpiadora"), porque
+// en un texto de rutina lo natural es escribirlo sin el ml.
+function aliasDe(p: Producto): string[] {
+  return [...new Set([etiqueta(p), p.nombre?.trim() ?? ""])].filter(Boolean);
+}
 
 // ------- Enlazado automático de los productos del pack -------
 function escapeReg(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Envuelve cada mención EXACTA del nombre de un producto en un <a href>,
+// Envuelve cada mención del nombre de un producto en un <a href>,
 // sin tocar el texto que ya esté dentro de otro <a> (evita enlaces anidados).
 function enlazarProductos(html: string, productos: Producto[]): string {
-  const prods = productos
+  const alias = productos
     .filter((p) => p.nombre?.trim() && p.url?.trim())
-    // los nombres más largos primero, para que "Crema Firmeza 50ml" gane a "Crema Firmeza"
-    .sort((a, b) => b.nombre.trim().length - a.nombre.trim().length);
-  if (!prods.length) return html;
+    .flatMap((p) => aliasDe(p).map((a) => ({ alias: a, url: p.url.trim() })))
+    // los alias más largos primero, para que "Crema Firmeza 50ml" gane a "Crema Firmeza"
+    .sort((a, b) => b.alias.length - a.alias.length);
+  if (!alias.length) return html;
 
-  const alternacion = prods.map((p) => escapeReg(p.nombre.trim())).join("|");
+  const alternacion = alias.map((a) => escapeReg(a.alias)).join("|");
   const re = new RegExp(`(${alternacion})`, "g");
 
   // Separa etiquetas de texto y solo enlaza en el texto que está fuera de un <a>
@@ -35,9 +48,9 @@ function enlazarProductos(html: string, productos: Producto[]): string {
       }
       if (dentroDeA > 0 || !seg) return seg;
       return seg.replace(re, (match) => {
-        const p = prods.find((pp) => pp.nombre.trim() === match);
-        if (!p) return match;
-        return `<a href="${p.url.trim()}" target="_blank" rel="noopener">${match}</a>`;
+        const a = alias.find((x) => x.alias === match);
+        if (!a) return match;
+        return `<a href="${a.url}" target="_blank" rel="noopener">${match}</a>`;
       });
     })
     .join("");
@@ -49,11 +62,11 @@ function construirContenido(productos: Producto[]): string {
     .filter((p) => p.nombre?.trim() && p.url?.trim())
     .map(
       (p) =>
-        `<li><a href="${p.url.trim()}" target="_blank" rel="noopener">${p.nombre.trim()}</a></li>`
+        `<li><a href="${p.url.trim()}" target="_blank" rel="noopener">${etiqueta(p)}</a></li>`
     )
     .join("\n");
   if (!items) return "";
-  return `<h2>¿QUÉ CONTIENE EL PACK?</h2>\n<ul>\n${items}\n</ul>`;
+  return `<h3>¿QUÉ CONTIENE EL PACK?</h3>\n<ul>\n${items}\n</ul>`;
 }
 
 function extraer(raw: string, tag: string) {
@@ -71,11 +84,11 @@ function extraer(raw: string, tag: string) {
 function listaProductos(productos: Producto[]) {
   const validos = productos.filter((p) => p.nombre?.trim());
   if (!validos.length) return "(no indicados)";
-  return validos.map((p) => `• ${p.nombre.trim()}`).join("\n");
+  return validos.map((p) => `• ${etiqueta(p)}`).join("\n");
 }
 
 // ------- Prompts -------
-const REGLAS_LINK = `IMPORTANTE — Menciona los productos que componen el pack SIEMPRE por su nombre EXACTO tal como aparece en la lista "Productos del pack". No los abrevies ni los reformules (usa "Contorno de ojos 15ml", no "el contorno"). NO añadas etiquetas <a> ni enlaces tú mismo: los enlaces se insertan automáticamente después.`;
+const REGLAS_LINK = `IMPORTANTE — Menciona los productos que componen el pack SIEMPRE por su nombre EXACTO tal como aparece en la lista "Productos del pack". No los abrevies ni los reformules (di "Leche Limpiadora L'Arcou", no "la leche" ni "el limpiador"). Puedes escribirlos con el formato ("Leche Limpiadora L'Arcou 200ml") o sin él ("Leche Limpiadora L'Arcou"), lo que quede más natural en la frase: ambas formas se enlazan igual. NO añadas etiquetas <a> ni enlaces tú mismo: los enlaces se insertan automáticamente después.`;
 
 function systemPromptFull(incluirIngredientes: boolean, incluirActivos: boolean) {
   return `Eres el redactor de fichas de producto de "La Tienda de Cosméticos" (latiendadecosmeticos.com), una tienda online de cosmética profesional. Escribes en español de España, con un tono profesional, cercano y orientado a la venta, sin exageraciones ni promesas médicas.
@@ -103,7 +116,7 @@ Reglas del H1:
 Regla del H2: SIEMPRE incluye un adjetivo que describa la propiedad principal (reafirmante, hidratante, iluminador, antiedad...). Nunca lo dejes solo con el tipo a secas.
 
 [BENEFICIOS]
-<h2>BENEFICIOS Y PROPIEDADES</h2>
+<h3>BENEFICIOS Y PROPIEDADES</h3>
 <ul>
 <li>Beneficio 1.</li>
 ... (4-7 puntos)
@@ -113,7 +126,7 @@ ${
   incluirActivos
     ? `
 [ACTIVOS]
-<h2>PRINCIPIOS ACTIVOS</h2>
+<h3>PRINCIPIOS ACTIVOS</h3>
 <ul>
 <li><strong>Activo:</strong> función en una frase.</li>
 </ul>
@@ -124,25 +137,36 @@ ${
     incluirIngredientes
       ? `
 [INGREDIENTES]
-<h2>INGREDIENTES</h2>
+<h3>INGREDIENTES</h3>
 <p>Lista INCI o "Consultar el envase de cada producto."</p>
 [/INGREDIENTES]
 `
       : ""
   }
 [MODO]
-<h2>MODO DE UTILIZACIÓN</h2>
+<h3>MODO DE UTILIZACIÓN</h3>
+<p><strong>[Nombre del bloque]:</strong></p>
+<p>Frase que introduce ese bloque de la rutina.</p>
 <ol>
-<li><strong>[Nombre exacto del producto]:</strong> cuándo y cómo se aplica.</li>
-... (un paso por cada producto del pack)
+<li><strong>[Nombre del paso]:</strong> qué hacer, mencionando el/los productos por su nombre.</li>
+</ol>
+<p><strong>[Nombre del siguiente bloque]:</strong></p>
+<p>Frase que introduce ese bloque.</p>
+<ol>
+<li><strong>[Nombre del paso]:</strong> qué hacer, mencionando el/los productos por su nombre.</li>
 </ol>
 [/MODO]
-Reglas del MODO:
-- Usa una lista NUMERADA (<ol>): cada paso es un producto, en el ORDEN correcto de aplicación de la rutina (lo que se usa primero, primero).
-- Incluye TODOS los productos del pack, cada uno con su nombre EXACTO al principio del paso.
+Reglas del MODO (IMPORTANTE):
+- Es la RUTINA COMPLETA, no una ficha producto por producto. Describe el ritual de cuidado paso a paso, en el orden real de aplicación.
+- Un mismo producto PUEDE aparecer en varios pasos (p. ej. la leche limpiadora se usa mañana y noche), y un paso puede usar varios productos. No fuerces "un paso = un producto".
+- Divide en bloques SOLO si la rutina lo pide de verdad (p. ej. mañana y noche con pasos distintos). Cada bloque lleva su nombre en <p><strong>…:</strong></p>, su frase de introducción y su propia lista <ol> numerada empezando por 1.
+- Si la rutina es ÚNICA, o si de mañana y de noche se hace LO MISMO: NO la partas en bloques. Pon una sola lista <ol> y, si hace falta, indica dentro del paso cuándo se aplica (p. ej. "mañana y noche").
+- NUNCA uses encabezados (<h4>, <h3>…) para los nombres de los bloques: van en <p><strong>…</strong></p>.
+- Cada paso empieza con un nombre de paso corto en <strong> y dos puntos (p. ej. "<strong>Limpieza Refrescante:</strong>"), seguido de la instrucción redactada en tono cercano.
+- Usa TODOS los productos del pack en algún paso.
 
 [IDEAL]
-<h2>[NOMBRE DEL PACK EN MAYÚSCULAS] IDEAL PARA:</h2>
+<h3>[NOMBRE DEL PACK EN MAYÚSCULAS] IDEAL PARA:</h3>
 <p>Tipos de piel y condiciones indicadas para este pack.</p>
 [/IDEAL]
 
@@ -155,7 +179,7 @@ Meta description de máximo 160 caracteres (nunca los superes). Resume el benefi
 [/META_DESC]
 
 Reglas generales:
-- Usa solo: <h1>, <h2>, <h3>, <p>, <ul>, <ol>, <li>, <strong>, <br>. Sin Markdown, sin bloques de código.
+- Usa solo: <h1>, <h2>, <h3>, <p>, <ul>, <ol>, <li>, <strong>, <br>. Sin Markdown, sin bloques de código. NUNCA uses <h4>.
 - No incluyas claims médicos ni terapéuticos.
 - Sé fiel a la información aportada.`;
 }
@@ -200,7 +224,7 @@ Devuelve ÚNICAMENTE ese bloque, sin nada más.`,
 Redacta SOLO la sección BENEFICIOS Y PROPIEDADES con este formato exacto:
 
 [BENEFICIOS]
-<h2>BENEFICIOS Y PROPIEDADES</h2>
+<h3>BENEFICIOS Y PROPIEDADES</h3>
 <ul>
 <li>Beneficio 1.</li>
 ... (4-7 puntos)
@@ -218,14 +242,28 @@ ${REGLAS_LINK}
 Redacta SOLO la sección MODO DE UTILIZACIÓN con este formato exacto:
 
 [MODO]
-<h2>MODO DE UTILIZACIÓN</h2>
+<h3>MODO DE UTILIZACIÓN</h3>
+<p><strong>[Nombre del bloque]:</strong></p>
+<p>Frase que introduce ese bloque de la rutina.</p>
 <ol>
-<li><strong>[Nombre exacto del producto]:</strong> cuándo y cómo se aplica.</li>
-... (un paso por cada producto del pack)
+<li><strong>[Nombre del paso]:</strong> qué hacer, mencionando el/los productos por su nombre.</li>
+</ol>
+<p><strong>[Nombre del siguiente bloque]:</strong></p>
+<p>Frase que introduce ese bloque.</p>
+<ol>
+<li><strong>[Nombre del paso]:</strong> qué hacer, mencionando el/los productos por su nombre.</li>
 </ol>
 [/MODO]
 
-Usa una lista NUMERADA (<ol>): cada paso es un producto, en el ORDEN correcto de aplicación (lo que se usa primero, primero). Incluye TODOS los productos con su nombre EXACTO al principio del paso.
+Reglas (IMPORTANTE):
+- Es la RUTINA COMPLETA, no una ficha producto por producto. Describe el ritual paso a paso en el orden real de aplicación.
+- Un mismo producto PUEDE aparecer en varios pasos, y un paso puede usar varios productos. No fuerces "un paso = un producto".
+- Divide en bloques SOLO si la rutina lo pide de verdad (p. ej. mañana y noche con pasos distintos). Cada bloque lleva su nombre en <p><strong>…:</strong></p>, su frase de introducción y su propia lista <ol> empezando por 1.
+- Si la rutina es ÚNICA, o si de mañana y de noche se hace LO MISMO: NO la partas en bloques. Pon una sola lista <ol> y, si hace falta, indica dentro del paso cuándo se aplica (p. ej. "mañana y noche").
+- NUNCA uses encabezados (<h4>, <h3>…) para los nombres de los bloques: van en <p><strong>…</strong></p>.
+- Cada paso empieza con un nombre de paso corto en <strong> y dos puntos, seguido de la instrucción.
+- Usa TODOS los productos del pack en algún paso.
+- Usa solo: <h3>, <p>, <ol>, <li>, <strong>.
 
 {{LONGITUD}}
 

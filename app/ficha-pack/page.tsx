@@ -65,13 +65,10 @@ export default function FichaPack() {
   function payload() {
     return {
       ...form,
+      // La API combina nombre + formato y enlaza ambas formas (con y sin el ml)
       productos: productos
         .filter((p) => p.nombre.trim())
-        .map((p) => ({
-          // el nombre que se usa en el título y en el enlazado = nombre + formato
-          nombre: [p.nombre.trim(), p.formato.trim()].filter(Boolean).join(" "),
-          url: p.url.trim(),
-        })),
+        .map((p) => ({ nombre: p.nombre.trim(), formato: p.formato.trim(), url: p.url.trim() })),
       incluirIngredientes,
       incluirActivos,
     };

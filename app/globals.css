@@ -178,6 +178,12 @@ button:disabled {
   margin: 20px 0 6px;
 }
 
+.output h3 {
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  margin: 18px 0 6px;
+}
+
 .output p {
   margin: 0 0 10px;
 }

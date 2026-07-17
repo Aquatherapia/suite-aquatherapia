@@ -111,21 +111,31 @@ Igual que el generador de fichas, pero para **packs / sets** (varios productos q
 
 ### Estructura de la ficha generada
 1. **Título (H1)** — `Nombre del pack | producto1 + producto2 + producto3 - Línea - Marca ®` (los productos, con su ml, unidos con " + ")
-2. **Descripción** — H2 + 3 párrafos de venta; menciona los productos **enlazados**
-3. **Beneficios y propiedades**
-4. **¿Qué contiene el pack?** — lista de los productos, cada uno **enlazado** (va **debajo de beneficios**; se construye **en código**, no la escribe la IA → los enlaces son siempre correctos)
-5. **Principios activos** *(solo si se marca la casilla)*
-6. **Ingredientes** *(solo si se marca la casilla)*
-7. **Modo de utilización** — lista **numerada** (`<ol>`), un **paso por producto en el orden de aplicación** (nombre **enlazado** al principio del paso + cómo se usa)
-8. **[NOMBRE DEL PACK] IDEAL PARA:**
+2. **Descripción** — **H2** + 3 párrafos de venta; menciona los productos **enlazados**
+3. **BENEFICIOS Y PROPIEDADES** — H3
+4. **¿QUÉ CONTIENE EL PACK?** — H3. Lista de los productos, cada uno **enlazado** (va **debajo de beneficios**; se construye **en código**, no la escribe la IA → los enlaces son siempre correctos)
+5. **PRINCIPIOS ACTIVOS** — H3 *(solo si se marca la casilla)*
+6. **INGREDIENTES** — H3 *(solo si se marca la casilla)*
+7. **MODO DE UTILIZACIÓN** — H3. Ver abajo.
+8. **[NOMBRE DEL PACK] IDEAL PARA:** — H3
 9. **Meta title / Meta description**
 
+> **Jerarquía de encabezados:** H1 el título · **H2 solo la descripción** · **H3 todos los demás apartados**. **No se usa H4 en ninguna parte** (los bloques de la rutina van en negrita, no como encabezado).
+
+### Modo de utilización = la RUTINA COMPLETA (no producto por producto)
+No es una ficha por producto: es el ritual de cuidado paso a paso, en el orden real de aplicación. Un mismo producto **puede repetirse en varios pasos** (p. ej. la leche limpiadora se usa mañana y noche) y un paso puede usar varios productos.
+- **Solo se divide en bloques si la rutina lo pide de verdad** (mañana y noche con pasos distintos). Cada bloque lleva su nombre en **negrita dentro de un párrafo** (`<p><strong>Rutina de Mañana:</strong></p>`), su frase de introducción y su propia lista `<ol>` numerada desde 1.
+- **Si la rutina es única, o si de mañana y de noche se hace lo mismo** → NO se parte en bloques: una sola lista `<ol>`, indicando dentro del paso cuándo aplicar ("por la mañana y por la noche"). Es el caso más habitual.
+- Cada paso empieza con un **nombre de paso corto en negrita** ("**Limpieza Purificante:**") y luego la instrucción.
+
 ### Enlazado automático de productos (clave)
-Cada vez que se menciona el **nombre exacto** de un producto del pack en la descripción o el modo de uso, se envuelve en un `<a href>` al enlace que indicaste. Se hace **por código** (no depende de que la IA acierte):
-- Prioriza el nombre **más largo** (así "Crema Firmeza 50ml" gana a "Crema Firmeza").
+Cada vez que se menciona un producto del pack en la descripción o el modo de uso, se envuelve en un `<a href>` al enlace que indicaste. Se hace **por código** (no depende de que la IA acierte):
+- Enlaza **con formato y sin él**: tanto "Leche Limpiadora L'Arcou 200ml" como "Leche Limpiadora L'Arcou" llevan al mismo sitio. Es necesario porque en un texto de rutina lo natural es escribir el nombre sin el ml.
+- Prioriza el nombre **más largo** (así "Crema Firmeza 50ml" gana a "Crema Firmeza", y el alias corto no re-enlaza dentro del largo).
 - **Nunca crea enlaces anidados** (si un texto ya está dentro de un `<a>`, lo respeta).
+- Enlaza **todas** las menciones, así que un producto que se usa mañana y noche queda enlazado en ambos pasos.
 - Los enlaces abren en pestaña nueva (`target="_blank"`).
-- Para que funcione, la IA menciona los productos por su nombre **exacto** tal como los escribes (por eso conviene poner el nombre completo con su ml).
+- Para que funcione, la IA menciona los productos por su nombre tal como los escribes (sin abreviarlos: "Leche Limpiadora L'Arcou", no "la leche").
 
 ### Botones (igual que fichas)
 Regenerar / Más corto / Más largo / Editar en Descripción, Beneficios y Modo de utilización. Título y Metas: regenerar + editar. Copiar por sección y **Copiar ficha completa**. Las secciones "¿Qué contiene el pack?", activos, ingredientes e ideal son fijas.
