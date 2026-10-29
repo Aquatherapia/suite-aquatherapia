@@ -200,7 +200,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const CAB = 5;
   const titulos: Record<typeof COLS[number], string> = {
     ean: "EAN", producto: "PRODUCTO", pvp: "PVP", limite: descuento != null ? `CON DTO. AUTORIZADO (−${pct})` : "CON DTO. AUTORIZADO", precio: "PRECIO FINAL", dto: "DTO.",
-    suPvp: "PVP", suWeb: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", suDtoWeb: "DTO.", suFinal: cuponTexto, suDto: "DTO. TOTAL", diff: "DIFERENCIA", barato: "MÁS BARATO", igualar: "¿PODEMOS IGUALAR?", ficha: "COSMÉTICOS24H",
+    suPvp: "PVP", suWeb: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", suDtoWeb: "DTO.", suFinal: cuponTexto, suDto: hayCupon ? "DTO. TOTAL" : "DTO.", diff: "DIFERENCIA", barato: "MÁS BARATO", igualar: "¿PODEMOS IGUALAR?", ficha: "COSMÉTICOS24H",
   };
   filaCabecera(ws, CAB, COLS.map(k => titulos[k]));
   // La cabecera de su grupo, en su rosa
@@ -322,7 +322,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       `Solo en Cosméticos24h · ${marca}`,
       `Productos que venden ellos y no tienen nuestro mismo EAN · ${fechaCorta(fecha)}`,
       `${soloEllos.length} productos`);
-    filaCabecera(ws2, 5, ["EAN", "PRODUCTO", "PVP", hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", ...(hayCupon ? [cuponTexto] : []), "DTO. TOTAL"]);
+    filaCabecera(ws2, 5, ["EAN", "PRODUCTO", "PVP", hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", ...(hayCupon ? [cuponTexto] : []), hayCupon ? "DTO. TOTAL" : "DTO."]);
     for (let c = 1; c <= cols2; c++) ws2.getRow(5).getCell(c).fill = relleno(c <= 2 ? AZUL : ROSA);
     if (hayCupon && cupon!.condiciones) ws2.getRow(5).getCell(5).note = cupon!.condiciones;
     soloEllos.forEach((s, idx) => {
