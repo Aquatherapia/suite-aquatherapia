@@ -5,7 +5,7 @@ import { calcularFila, type CuponExcel, type FilaExcel } from "./excel";
 
 export type FilaMarca = {
   ean: string; producto: string; miUrl: string; suUrl: string;
-  pvp: number; minimo: number; suPvp: number; suWeb: number; suFinal: number; suDto: number;
+  pvp: number; minimo: number; suPvp: number; suWeb: number; suDtoWeb: number; suFinal: number; suDto: number;
   dtoSobrePvp: number; // lo que rebajan sobre nuestro PVP (el oficial de la marca)
   porDebajo: number;   // € por debajo del precio mínimo autorizado
 };
@@ -18,7 +18,7 @@ export function filasParaMarca(filas: FilaExcel[], descuento: number | null): Fi
     .filter(({ k }) => k.bajoMinimo.suyo && !k.esPack && k.limite != null)
     .map(({ f, k }) => ({
       ean: f.ean ?? "", producto: f.nombre, miUrl: f.miUrl, suUrl: f.suUrl,
-      pvp: k.pvp, minimo: k.limite!, suPvp: k.suPvp, suWeb: k.suWeb, suFinal: f.suPrecio, suDto: k.suDto,
+      pvp: k.pvp, minimo: k.limite!, suPvp: k.suPvp, suWeb: k.suWeb, suDtoWeb: k.suDtoWeb, suFinal: f.suPrecio, suDto: k.suDto,
       dtoSobrePvp: k.pvp > 0 ? 1 - f.suPrecio / k.pvp : 0,
       porDebajo: Math.round((k.limite! - f.suPrecio) * 100) / 100,
     }))
@@ -66,7 +66,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
     { t: "PRECIO MÍNIMO AUTORIZADO", w: 14, grupo: "nos", v: f => f.minimo, fmt: EUROS },
     { t: "PVP", w: 11, grupo: "ellos", v: f => f.suPvp, fmt: EUROS },
     { t: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", w: 13, grupo: "ellos", v: f => f.suWeb, fmt: EUROS },
-    ...(hayCupon ? [{ t: textoCupon(cupon), w: 18, grupo: "ellos" as const, v: (f: FilaMarca) => f.suFinal, fmt: EUROS }] : []),
+    ...(hayCupon ? [{ t: "DTO.", w: 8, grupo: "ellos" as const, v: (f: FilaMarca) => f.suDtoWeb, fmt: PORC }, { t: textoCupon(cupon), w: 18, grupo: "ellos" as const, v: (f: FilaMarca) => f.suFinal, fmt: EUROS }] : []),
     { t: "DTO. TOTAL", w: 10, grupo: "ellos", v: f => f.suDto, fmt: PORC },
     { t: "DTO. SOBRE PVP", w: 11, grupo: "fin", v: f => f.dtoSobrePvp, fmt: PORC },
     { t: "POR DEBAJO DEL MÍNIMO", w: 14, grupo: "fin", v: f => f.porDebajo, fmt: EUROS },
@@ -156,7 +156,7 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
   const colEnlaceC24 = 5 + nEllos + 2, colEnlaceMia = colEnlaceC24 + 1;
   const cuerpo = datos.map(f => [
     f.ean, f.producto, eur(f.pvp), pct(descuento / 100), eur(f.minimo),
-    eur(f.suPvp), eur(f.suWeb), ...(hayCupon ? [eur(f.suFinal)] : []), pct(f.suDto),
+    eur(f.suPvp), f.suDtoWeb > 0.0005 ? `${eur(f.suWeb)}\n-${pct(f.suDtoWeb)}` : eur(f.suWeb), ...(hayCupon ? [eur(f.suFinal)] : []), pct(f.suDto),
     pct(f.dtoSobrePvp), eur(f.porDebajo), "Ver >", "Ver >",
   ]);
   const cab = (t: string, color: RGB) => ({ content: t, styles: { fillColor: color } });

@@ -185,18 +185,18 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const ws = wb.addWorksheet(marca.replace(/[\\/?*[\]:]/g, " ").slice(0, 31));
   preparar(ws);
   // Columnas: EAN · producto · nosotros (PVP, con dto. autorizado, precio final, dto.)
-  //          Cosméticos24h (PVP, precio web, precio final con cupón, dto. total) · diferencia · más barato · ¿podemos igualar?
+  //          Cosméticos24h (PVP, precio con dto., su dto. y precio final si hay cupón, dto. total) · diferencia · más barato · ¿podemos igualar?
   // Sin cupón, su precio final es el mismo que el precio web: esa columna no sale.
   const hayCupon = !!cupon && cupon.pct > 0;
   const factorCupon = hayCupon ? 1 - cupon!.pct / 100 : 1;
   const cuponTexto = hayCupon
     ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} −${coma(cupon!.pct, 1).replace(/,0$/, "")} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""}${cupon!.hasta ? `, HASTA ${cupon!.hasta.slice(8, 10)}/${cupon!.hasta.slice(5, 7)}` : ""})`
     : "";
-  const COLS = ["ean", "producto", "pvp", "limite", "precio", "dto", "suPvp", "suWeb", ...(hayCupon ? ["suFinal"] : []), "suDto", "diff", "barato", "igualar", "ficha"] as const;
+  const COLS = ["ean", "producto", "pvp", "limite", "precio", "dto", "suPvp", "suWeb", ...(hayCupon ? ["suDtoWeb", "suFinal"] : []), "suDto", "diff", "barato", "igualar", "ficha"] as const;
   const col = (k: typeof COLS[number]) => COLS.indexOf(k) + 1;
   const letra = (k: typeof COLS[number]) => String.fromCharCode(64 + col(k));
   const ultimaCol = String.fromCharCode(64 + COLS.length);
-  const anchos: Record<typeof COLS[number], number> = { ean: 16, producto: 52, pvp: 12, limite: 12, precio: 12, dto: 8, suPvp: 11, suWeb: 12, suFinal: 16, suDto: 10, diff: 14, barato: 15, igualar: 32, ficha: 16 };
+  const anchos: Record<typeof COLS[number], number> = { ean: 16, producto: 52, pvp: 12, limite: 12, precio: 12, dto: 8, suPvp: 11, suWeb: 12, suDtoWeb: 8, suFinal: 16, suDto: 10, diff: 14, barato: 15, igualar: 32, ficha: 16 };
   ws.columns = COLS.map(k => ({ width: anchos[k] }));
   encabezado(ws, ultimaCol,
     `Comparativa de precios · ${marca}`,
@@ -221,7 +221,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const CAB = 5;
   const titulos: Record<typeof COLS[number], string> = {
     ean: "EAN", producto: "PRODUCTO", pvp: "PVP", limite: descuento != null ? `CON DTO. AUTORIZADO (−${pct})` : "CON DTO. AUTORIZADO", precio: "PRECIO FINAL", dto: "DTO.",
-    suPvp: "PVP", suWeb: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", suFinal: cuponTexto, suDto: "DTO. TOTAL", diff: "DIFERENCIA", barato: "MÁS BARATO", igualar: "¿PODEMOS IGUALAR?", ficha: "COSMÉTICOS24H",
+    suPvp: "PVP", suWeb: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", suDtoWeb: "DTO.", suFinal: cuponTexto, suDto: "DTO. TOTAL", diff: "DIFERENCIA", barato: "MÁS BARATO", igualar: "¿PODEMOS IGUALAR?", ficha: "COSMÉTICOS24H",
   };
   filaCabecera(ws, CAB, COLS.map(k => titulos[k]));
   // La cabecera de su grupo, en su rosa
@@ -245,6 +245,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       dto: { formula: `IF(${L.pvp}${n}>0,1-${L.precio}${n}/${L.pvp}${n},0)`, result: miDto },
       suPvp,
       suWeb,
+      suDtoWeb: { formula: `IF(${L.suPvp}${n}>0,1-${L.suWeb}${n}/${L.suPvp}${n},0)`, result: k.suDtoWeb },
       suFinal: { formula: `ROUND(${suWeb}*${factorCupon},2)`, result: f.suPrecio },
       suDto: { formula: `IF(${L.suPvp}${n}>0,1-${L.suFin}${n}/${L.suPvp}${n},0)`, result: suDto },
       diff: { formula: `${L.precio}${n}-${L.suFin}${n}`, result: Math.round(f.diff * 100) / 100 },
@@ -276,7 +277,11 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
     c("suPvp").font = fuente({ color: { argb: ROSA } });
     c("suWeb").font = fuente({ color: { argb: ROSA } });
     c("ficha").font = fuente({ size: 9, underline: true, color: { argb: ROSA } });
-    if (hayCupon) c("suFinal").font = fuente({ bold: true, color: { argb: ROSA } });
+    if (hayCupon) {
+      c("suDtoWeb").numFmt = PORCENTAJE;
+      c("suDtoWeb").font = fuente({ size: 9, color: { argb: ROSA } });
+      c("suFinal").font = fuente({ bold: true, color: { argb: ROSA } });
+    }
     c("suDto").font = fuente({ size: 9, bold: true, color: { argb: ROSA } });
 
     // Mismos resaltados que la web, con la explicación como nota (sale al pasar el ratón)
