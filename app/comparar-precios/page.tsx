@@ -248,7 +248,10 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                   {f.descatalogado && <EtiquetaDescat stock={f.stock} />}
                   {f.deAntes && <span className="cp-deantes-tag" title={`Nuestra ficha no se pudo leer en esta revisión: precios de la revisión del ${fechaCorta(f.deAntes)}`}>dato anterior</span>}
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
-                  <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
+                  <span className="cp-enlaces">
+                    <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
+                    <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-enlace-ltc">Ver en La Tienda de Cosméticos ↗</a>
+                  </span>
                 </td>
                 <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-azul"} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. autorizado ni se compara el PVP." : k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>
                   {eur(k.pvp)}{k.revisarPvp && <span className="cp-revisar-pvp">(revisar precio)</span>}
