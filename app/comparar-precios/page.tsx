@@ -316,7 +316,6 @@ function MarcaBloque({
 
 
   const masCaro = r.comparaciones.filter(c => c.diff > 0.01);
-  const verificados = r.comparaciones.filter(c => c.verificado);
   const conPvpDistinto = r.comparaciones.filter(pvpDistinto);
   const conBajoMinimo = r.comparaciones.filter(c => bajoMinimo(c, descuento));
   const paraDesactivar = [...r.comparaciones, ...(r.misSinEmparejar ?? [])].filter(x => x.descatalogado && x.stock === 0).length;
@@ -362,9 +361,6 @@ function MarcaBloque({
           {paraDesactivar > 0 && <span className="vp-pill cp-pill-desactivar" title="Descatalogados sin unidades: conviene desactivar la ficha">{paraDesactivar} para desactivar</span>}
           {conPvpDistinto.length > 0 && (
             <span className="vp-pill cp-pill-pvp" title="El PVP sin descuento no coincide: puede que una tarifa no esté actualizada">{conPvpDistinto.length} PVP distinto{conPvpDistinto.length !== 1 ? "s" : ""}</span>
-          )}
-          {verificados.length > 0 && (
-            <span className="vp-pill vp-pill-verificado" title="Productos que has comprobado a mano">✓ {verificados.length} verificado{verificados.length !== 1 ? "s" : ""}</span>
           )}
           <span className="vp-accordion-count">
             {r.comparaciones.length} comparados · {soloEllosReal.length} solo ellos
