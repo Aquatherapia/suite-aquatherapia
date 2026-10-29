@@ -75,7 +75,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       ],
       [
         cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `MÍNIMO (-${dto})` : "MÍNIMO"), cab("PRECIO"), cab("DTO."),
-        cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `CON CUPÓN (-${cuponTxt})` : "CON CUPÓN (no hay)", true), cab("DTO. TOTAL", true),
+        cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %)` : "PRECIO FINAL (sin cupón)", true), cab("DTO. TOTAL", true),
         cab("DIFERENCIA"), cab("MÁS BARATO"), cab("¿PODEMOS IGUALAR?"), cab("FICHA C24H"),
       ],
     ],
@@ -83,7 +83,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       const k = calc[i];
       return [
         f.ean ?? "", f.nombre, eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
-        eur(k.suPvp), eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
+        eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
         `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}`, k.masBarato, k.igualar.replace(/−/g, "-"), "Ver ficha",
       ];
     }),
@@ -132,7 +132,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     y += 5.5;
   }
   doc.setFont("helvetica", "italic"); doc.setTextColor(...TEXTO_SUAVE);
-  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Mínimo: PVP menos el descuento máximo de la marca (Boardfy o el puesto en la app). Precio web: el de su web. Con cupón: su precio con el descuento que aplican en el carrito. Dto. total: lo que rebajan sobre su PVP contando el cupón. Diferencia: nuestro precio menos su precio final.", 277), M, y);
+  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Mínimo: PVP menos el descuento máximo de la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP. Precio final: el de su web con el cupón que aplican en el carrito. Dto. total: lo que rebajan sobre su PVP contando el cupón. Diferencia: nuestro precio menos su precio final.", 277), M, y);
 
   // Lo que tienen ellos y nosotros no
   if (soloEllos.length > 0) {

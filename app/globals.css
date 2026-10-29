@@ -1497,6 +1497,7 @@ button:disabled {
 .cp-informe td.cp-ambar { background: #fef6e7 !important; color: #b45309; font-weight: 700; }
 .cp-informe .cp-enlace-c24 { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #b5655f; text-decoration: none; }
 .cp-informe .cp-precio-enlace { color: inherit; text-decoration: underline; text-decoration-color: rgba(181, 101, 95, 0.4); }
+.cp-informe .cp-dto-celda { display: block; font-size: 10px; font-weight: 700; margin-top: 1px; }
 .cp-informe .cp-ficha { color: #b5655f; font-size: 11px; text-decoration: underline; }
 @media (max-width: 640px) {
   .cp-wrap .vp-accordion-header { flex-wrap: wrap; gap: 8px; }
@@ -1508,4 +1509,19 @@ button:disabled {
   .cp-informe tbody tr:nth-child(even) td:nth-child(2) { background: #f8fafc; }
   .cp-informe td.cp-izq:nth-child(2) { min-width: 170px; max-width: 170px; }
   .cp-informe .cp-informe-grupos th:nth-child(1) { position: sticky; left: 0; background: #fff; }
+}
+
+/* Cabecera de cada marca: Revisar, descuento máximo y quitar */
+.cp-revisar-btn { background: #1270b6; color: #fff; border-color: #1270b6; }
+.cp-revisar-btn:hover:not(:disabled) { background: #0f5f9b; }
+.cp-borrar-confirmar { width: auto; padding: 4px 8px; font-size: 11px; font-weight: 700; color: #b00020; background: #fff0f0; }
+.cp-suave-txt { color: var(--muted); }
+.cp-wrap .vp-accordion-marca .cp-dto { margin-top: 6px; }
+.cp-layout .left-col { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 8px 32px; align-items: start; }
+.cp-layout .left-col > .vp-section-title:nth-of-type(2) { grid-column: 2; grid-row: 1; }
+.cp-layout .left-col > .cp-cupon { grid-column: 1; grid-row: 2; }
+.cp-layout .left-col > .vp-add-form { grid-column: 2; grid-row: 2; margin-top: 0; }
+@media (max-width: 640px) {
+  .cp-layout .left-col { grid-template-columns: 1fr; }
+  .cp-layout .left-col > * { grid-column: 1 !important; grid-row: auto !important; }
 }

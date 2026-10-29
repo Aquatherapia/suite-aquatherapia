@@ -125,8 +125,8 @@ const pctW = (frac: number) => `${(Math.round(frac * 1000) / 10).toFixed(1).repl
 function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descuento: number | null; cupon: CuponExcel }) {
   const pct = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
   const conCupon = cupon && cupon.pct > 0
-    ? `Con cupón (−${String(cupon.pct).replace(".", ",")} %${cupon.codigo ? ` ${cupon.codigo}` : ""})`
-    : "Con cupón (no hay)";
+    ? `Precio final (${cupon.codigo ?? "cupón"} −${String(cupon.pct).replace(".", ",")} %)`
+    : "Precio final (sin cupón)";
   return (
     <div className="cp-informe-scroll">
       <table className="cp-informe">
@@ -159,7 +159,7 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                 <td className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")}>{eur(f.miPrecio)}</td>
                 <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
                 <td className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"}>{eur(k.suPvp)}</td>
-                <td className="cp-rosa">{eur(k.suWeb)}</td>
+                <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
                 <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-rojo-fondo" : "cp-rosa")}><a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-precio-enlace" title="Ver su ficha">{eur(f.suPrecio)}</a></td>
                 <td className={"cp-fuerte cp-pequena " + (k.bajoMinimo.suyo ? "cp-rojo" : "cp-rosa")}>{pctW(k.suDto)}</td>
                 <td className={"cp-fuerte " + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>{f.diff > 0.005 ? "+" : ""}{eur(f.diff)}</td>
@@ -176,9 +176,11 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
 }
 
 function MarcaBloque({
-  r, descuento, deBoardfy, cupon, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onVerificar, onDesverificar, onRenombrar, onRestaurarNombre,
+  r, descuento, deBoardfy, cupon, marca, revisando, ocupado, onRevisar, onBorrar, onGuardarDescuento, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onVerificar, onDesverificar, onRenombrar, onRestaurarNombre,
 }: {
   r: ResultadoMarca; descuento: number | null; deBoardfy: boolean; cupon: CuponExcel;
+  marca: Marca; revisando: boolean; ocupado: boolean;
+  onRevisar: () => void; onBorrar: () => void; onGuardarDescuento: (valor: string) => void;
   ocultos: Excluido[]; expandido: boolean; onToggle: () => void;
   mostrarTodos: boolean; onToggleMostrar: () => void;
   onExcluir: (item: Excluido) => void;
@@ -190,6 +192,8 @@ function MarcaBloque({
   onRestaurarNombre: (suUrl: string) => void;
 }) {
   const [verOcultos, setVerOcultos] = useState(false);
+  // Quitar la marca pide un segundo clic: borra también sus resultados
+  const [confirmarBorrar, setConfirmarBorrar] = useState(false);
   const [verSinEmp, setVerSinEmp] = useState(false);
 
   // Editor del nombre mostrado del producto
@@ -236,9 +240,21 @@ function MarcaBloque({
               Revisada el {fechaExacta(r.revisadoEn)} · {tiempoDesde(r.revisadoEn)}
             </span>
           )}
-          <span className="cp-revisado" title={deBoardfy ? "Descuento máximo de la regla de Boardfy (cámbialo en la columna de marcas)" : "Descuento máximo puesto a mano"}>
-            Dto. máx. {descuento != null ? `${String(descuento).replace(".", ",")} %` : "sin límite"}{deBoardfy && descuento != null ? " (Boardfy)" : ""}
-          </span>
+          {!r.revisadoEn && <span className="cp-revisado">Sin revisar todavía</span>}
+          <label className="cp-dto" title="Descuento máximo sobre el PVP. Vacío = el de la regla de Boardfy" onClick={e => e.stopPropagation()}>
+            Dto. máx.
+            <input
+              key={`${marca.slug}-${marca.descuentoMax ?? "b"}`}
+              className="cp-dto-input"
+              inputMode="decimal"
+              defaultValue={marca.descuentoMax != null ? String(marca.descuentoMax).replace(".", ",") : ""}
+              placeholder={descuentoBoardfy(marca.nombre) != null ? String(descuentoBoardfy(marca.nombre)).replace(".", ",") : "—"}
+              onBlur={e => { if (e.target.value !== (marca.descuentoMax != null ? String(marca.descuentoMax).replace(".", ",") : "")) onGuardarDescuento(e.target.value); }}
+              onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            />
+            %{deBoardfy && descuento != null && <span className="cp-dto-fuente">Boardfy</span>}
+            {descuento == null && <span className="cp-dto-fuente cp-suave-txt">sin límite</span>}
+          </label>
         </span>
         <div className="vp-accordion-right">
           {masCaro.length > 0 && (
@@ -257,12 +273,24 @@ function MarcaBloque({
             {r.comparaciones.length} comparados · {soloEllosReal.length} solo ellos
           </span>
           <button
+            className="regen-btn cp-revisar-btn"
+            onClick={e => { e.stopPropagation(); onRevisar(); }}
+            disabled={ocupado}
+            title="Volver a leer los precios de esta marca en las dos webs"
+          >
+            {revisando ? "Revisando…" : "Revisar"}
+          </button>
+          <button
             className="regen-btn"
+            disabled={r.comparaciones.length === 0}
             onClick={e => { e.stopPropagation(); descargarPdf(r, descuento, cupon); }}
             title="Descargar el informe de esta marca en PDF"
           >
             PDF
           </button>
+          {confirmarBorrar
+            ? <button className="vp-delete-btn cp-borrar-confirmar" onClick={e => { e.stopPropagation(); onBorrar(); }} onBlur={() => setConfirmarBorrar(false)} autoFocus>¿Quitar marca?</button>
+            : <button className="vp-delete-btn" title="Quitar esta marca" onClick={e => { e.stopPropagation(); setConfirmarBorrar(true); }}>×</button>}
           <span className="vp-chevron">{expandido ? "▲" : "▼"}</span>
         </div>
       </div>
@@ -578,46 +606,7 @@ export default function CompararPrecios() {
             %{!config?.cupon?.manual && config?.cupon?.pct != null && <span className="cp-dto-fuente cp-cupon-fuente">{config.cupon.codigo ?? "su web"}</span>}
           </label>
 
-          <div className="vp-section-title">Marcas a comparar</div>
-          {config?.marcas && config.marcas.length > 0 ? (
-            <ul className="vp-marcas-list">
-              {config.marcas.map(m => (
-                <li key={m.slug} className="vp-marca-item">
-                  <div>
-                    <div className="vp-marca-nombre">{m.nombre}</div>
-                    <div className="vp-marca-slug">/collections/{m.slug}</div>
-                    <label className="cp-dto" title="Descuento máximo sobre el PVP. Vacío = el de la regla de Boardfy">
-                      Dto. máx.
-                      <input
-                        key={`${m.slug}-${m.descuentoMax ?? "b"}`}
-                        className="cp-dto-input"
-                        inputMode="decimal"
-                        defaultValue={m.descuentoMax != null ? String(m.descuentoMax).replace(".", ",") : ""}
-                        placeholder={descuentoBoardfy(m.nombre) != null ? String(descuentoBoardfy(m.nombre)).replace(".", ",") : "—"}
-                        onBlur={e => { if (e.target.value !== (m.descuentoMax != null ? String(m.descuentoMax).replace(".", ",") : "")) guardarDescuento(m.slug, e.target.value); }}
-                        onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-                      />
-                      %{m.descuentoMax == null && descuentoBoardfy(m.nombre) != null && <span className="cp-dto-fuente">Boardfy</span>}
-                    </label>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <button
-                      className="regen-btn"
-                      onClick={() => revisar(m.slug)}
-                      disabled={revisando !== null}
-                      title="Revisar solo esta marca"
-                    >
-                      {revisando === m.slug ? "…" : "Revisar"}
-                    </button>
-                    <button className="vp-delete-btn" onClick={() => deleteMarca(m.slug)}>×</button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="vp-empty">Sin marcas añadidas</p>
-          )}
-
+          <div className="vp-section-title">Añadir marca</div>
           <div className="vp-add-form">
             <input
               value={nuevaMarca}
@@ -645,22 +634,29 @@ export default function CompararPrecios() {
         {/* ── Columna derecha ── */}
         <div className="right-col">
           <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-            <span>La revisión es <strong>marca a marca</strong>: usa el botón "Revisar" de cada marca (arriba). Cada marca muestra <strong>su propia fecha</strong> de revisión.</span>
+            <span>La revisión es <strong>marca a marca</strong>: usa el botón "Revisar" de cada marca. Cada marca muestra <strong>su propia fecha</strong> de revisión.</span>
           </div>
 
           {error && <div className="error">{error}</div>}
 
-          {resultados.length === 0 && !revisando && (
+          {(config?.marcas.length ?? 0) === 0 && !revisando && (
             <p style={{ color: "var(--muted)", fontSize: 14, marginTop: 20 }}>
               Añade una marca y pulsa "Revisar" para comparar precios.
             </p>
           )}
 
-          {resultados.map(r => (
+          {(config?.marcas ?? []).map(m => {
+            // Una marca recién añadida aún no tiene resultados: se muestra igual, para poder revisarla
+            const r: ResultadoMarca = resultados.find(x => x.slug === m.slug)
+              ?? { marca: m.nombre, slug: m.slug, comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0 };
+            return (
             <MarcaBloque
               key={r.slug} r={aplicarCupon(r, cuponActivo)} cupon={cuponActivo}
-              descuento={descuentoDe(config?.marcas.find(m => m.slug === r.slug)).pct}
-              deBoardfy={descuentoDe(config?.marcas.find(m => m.slug === r.slug)).deBoardfy}
+              marca={m} revisando={revisando === m.slug} ocupado={revisando !== null}
+              onRevisar={() => revisar(m.slug)} onBorrar={() => deleteMarca(m.slug)}
+              onGuardarDescuento={(valor) => guardarDescuento(m.slug, valor)}
+              descuento={descuentoDe(m).pct}
+              deBoardfy={descuentoDe(m).deBoardfy}
               ocultos={config?.excluidos?.[r.slug] ?? []}
               expandido={expandidos.has(r.slug)} onToggle={() => toggle(r.slug)}
               mostrarTodos={mostrarTodos.has(r.slug)} onToggleMostrar={() => toggleMostrar(r.slug)}
@@ -672,7 +668,8 @@ export default function CompararPrecios() {
               onRenombrar={(suUrl, nombre) => renombrar(r.slug, suUrl, nombre)}
               onRestaurarNombre={(suUrl) => restaurarNombre(r.slug, suUrl)}
             />
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
