@@ -11,9 +11,17 @@ export type FilaExcel = {
   descatalogado?: boolean;
   stock?: number;
   esPack?: boolean;
+  deAntes?: string; // nuestra ficha no se pudo leer: precios de la revisión anterior
 };
 export type CuponExcel = { pct: number; codigo?: string; directo?: boolean; hasta?: string; condiciones?: string } | null;
-export type SoloEllosExcel = { titulo: string; precio: number; url: string; esPack: boolean; ean?: string };
+export type SoloEllosExcel = { titulo: string; precio: number; tachado?: number; url: string; esPack: boolean; ean?: string };
+
+// Lo que tienen ellos y nosotros no: PVP, precio web, precio final con cupón y dto. total (como en la web)
+export function filaSoloEllos(s: SoloEllosExcel, cupon: CuponExcel) {
+  const pvp = s.tachado && s.tachado > s.precio ? s.tachado : s.precio;
+  const final = cupon && cupon.pct > 0 ? Math.round(s.precio * (1 - cupon.pct / 100) * 100) / 100 : s.precio;
+  return { pvp, web: s.precio, dtoWeb: pvp > 0 ? 1 - s.precio / pvp : 0, final, dto: pvp > 0 ? 1 - final / pvp : 0 };
+}
 
 // Colores del logo (azul #1270B6, azul claro #1C9CD9) y neutros
 const AZUL = "FF1270B6";
@@ -30,6 +38,8 @@ const ROJO_FONDO = "FFFDECEC";
 const AMBAR = "FFB45309";
 const AMBAR_FONDO = "FFFEF6E7";
 const VERDE = "FF067647";
+const MORADO = "FF6B3FB5";
+const MORADO_FONDO = "FFF1EBFB";
 const EUROS = '#,##0.00 "€"';
 const PORCENTAJE = '0.0 %';
 const EUROS_SIGNO = '+#,##0.00 "€";-#,##0.00 "€";0.00 "€"';
@@ -158,26 +168,35 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const pvpDistintos = orden.filter(f => f.suPvp != null && Math.abs(f.suPvp - pvpDe(f)) > 0.01).length;
   const bajoLimite = orden.filter(f => { const l = limiteDe(f); return l != null && f.suPrecio < l - 0.005; }).length;
 
-  // ── Hoja 1: comparación por EAN ──
+  // ── Hoja 1: comparación por EAN, con las mismas columnas y colores que la tabla de la web ──
   const ws = wb.addWorksheet(marca.replace(/[\\/?*[\]:]/g, " ").slice(0, 31));
   preparar(ws);
-  // Columnas: A EAN · B producto · C-F nosotros (PVP, mínimo, precio, dto.)
-  //          G-J Cosméticos24h (PVP, precio en su web, con cupón de carrito, dto. total)
-  //          K diferencia · L más barato · M ¿podemos igualar? · N ficha en Cosméticos24h
-  const factorCupon = cupon && cupon.pct > 0 ? 1 - cupon.pct / 100 : 1;
-  const cuponTexto = cupon && cupon.pct > 0 ? `CON CUPÓN (−${coma(cupon.pct, 1).replace(/,0$/, "")} %${cupon.codigo ? ` ${cupon.codigo}` : ""})` : "CON CUPÓN (no hay)";
-  ws.columns = [16, 50, 11, 12, 12, 9, 11, 12, 14, 10, 13, 15, 30, 16].map(width => ({ width }));
-  encabezado(ws, "N",
+  // Columnas: EAN · producto · nosotros (PVP, con dto. máx., precio final, dto.)
+  //          Cosméticos24h (PVP, precio web, precio final con cupón, dto. total) · diferencia · más barato · ¿podemos igualar?
+  // Sin cupón, su precio final es el mismo que el precio web: esa columna no sale.
+  const hayCupon = !!cupon && cupon.pct > 0;
+  const factorCupon = hayCupon ? 1 - cupon!.pct / 100 : 1;
+  const cuponTexto = hayCupon
+    ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} −${coma(cupon!.pct, 1).replace(/,0$/, "")} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""}${cupon!.hasta ? `, HASTA ${cupon!.hasta.slice(8, 10)}/${cupon!.hasta.slice(5, 7)}` : ""})`
+    : "";
+  const COLS = ["ean", "producto", "pvp", "limite", "precio", "dto", "suPvp", "suWeb", ...(hayCupon ? ["suFinal"] : []), "suDto", "diff", "barato", "igualar"] as const;
+  const col = (k: typeof COLS[number]) => COLS.indexOf(k) + 1;
+  const letra = (k: typeof COLS[number]) => String.fromCharCode(64 + col(k));
+  const ultimaCol = String.fromCharCode(64 + COLS.length);
+  const anchos: Record<typeof COLS[number], number> = { ean: 16, producto: 52, pvp: 14, limite: 12, precio: 12, dto: 8, suPvp: 11, suWeb: 12, suFinal: 16, suDto: 10, diff: 14, barato: 15, igualar: 32 };
+  ws.columns = COLS.map(k => ({ width: anchos[k] }));
+  encabezado(ws, ultimaCol,
     `Comparativa de precios · ${marca}`,
     `La Tienda de Cosméticos frente a Cosméticos24h · emparejado por EAN · ${fechaCorta(fecha)}` +
-    (cupon && cupon.pct > 0 ? ` · su precio final lleva el cupón de carrito del ${coma(cupon.pct, 1).replace(/,0$/, "")} %${cupon.codigo ? ` (${cupon.codigo})` : ""}` : ""),
+    (hayCupon ? ` · su precio final lleva el cupón de carrito del ${coma(cupon!.pct, 1).replace(/,0$/, "")} %${cupon!.codigo ? ` (${cupon!.codigo})` : ""}` : ""),
     `${orden.length} productos comparados  ·  ${masCaros} en los que vamos más caros  ·  ` +
-    (descuento != null ? `${bajoLimite} que Cosméticos24h vende por debajo de nuestro mínimo (PVP −${pct})  ·  ` : "") +
+    (descuento != null ? `${bajoLimite} que Cosméticos24h vende más barato que nuestro dto. máx. (PVP −${pct})  ·  ` : "") +
     `${pvpDistintos} con PVP distinto`);
 
   // Fila 4: grupos de columnas
-  ws.mergeCells("C4:F4"); ws.mergeCells("G4:J4");
-  for (const [celda, texto, fondo, color] of [["C4", "NOSOTROS", FONDO_NOSOTROS, AZUL], ["G4", "COSMÉTICOS24H", FONDO_ELLOS, ROSA]] as const) {
+  const grupoEllos = `${letra("suPvp")}4:${letra("suDto")}4`;
+  ws.mergeCells(`${letra("pvp")}4:${letra("dto")}4`); ws.mergeCells(grupoEllos);
+  for (const [celda, texto, fondo, color] of [[`${letra("pvp")}4`, "NOSOTROS", FONDO_NOSOTROS, AZUL], [`${letra("suPvp")}4`, "COSMÉTICOS24H", FONDO_ELLOS, ROSA]] as const) {
     const c = ws.getCell(celda);
     c.value = texto;
     c.font = fuente({ bold: true, size: 9, color: { argb: color } });
@@ -187,82 +206,100 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   ws.getRow(4).height = 18;
 
   const CAB = 5;
-  filaCabecera(ws, CAB, ["EAN", "PRODUCTO", "PVP", descuento != null ? `MÍNIMO (−${pct})` : "MÍNIMO", "PRECIO", "DTO.", "PVP", "PRECIO WEB", cuponTexto, "DTO. TOTAL", "DIFERENCIA", "MÁS BARATO", "¿PODEMOS IGUALAR?", "FICHA COSMÉTICOS24H"]);
+  const titulos: Record<typeof COLS[number], string> = {
+    ean: "EAN", producto: "PRODUCTO", pvp: "PVP", limite: descuento != null ? `CON DTO. MÁX. (−${pct})` : "CON DTO. MÁX.", precio: "PRECIO FINAL", dto: "DTO.",
+    suPvp: "PVP", suWeb: "PRECIO WEB", suFinal: cuponTexto, suDto: "DTO. TOTAL", diff: "DIFERENCIA", barato: "MÁS BARATO", igualar: "¿PODEMOS IGUALAR?",
+  };
+  filaCabecera(ws, CAB, COLS.map(k => titulos[k]));
   // La cabecera de su grupo, en su rosa
-  for (let c = 7; c <= 10; c++) ws.getRow(CAB).getCell(c).fill = relleno(ROSA);
+  for (let c = col("suPvp"); c <= col("suDto"); c++) ws.getRow(CAB).getCell(c).fill = relleno(ROSA);
+  if (hayCupon && cupon!.condiciones) ws.getRow(CAB).getCell(col("suFinal")).note = cupon!.condiciones;
 
+  const L = { pvp: letra("pvp"), precio: letra("precio"), suPvp: letra("suPvp"), suWeb: letra("suWeb"), suFin: hayCupon ? letra("suFinal") : letra("suWeb") };
   orden.forEach((f, idx) => {
     const n = CAB + 1 + idx;
-    const { pvp, suPvp, suWeb, limite, miDto, suDto, masBarato, igualar } = calcularFila(f, descuento);
-    const fila = ws.getRow(n);
-    fila.values = [
-      f.ean ?? "",
-      { text: f.nombre, hyperlink: f.miUrl },
+    const k = calcularFila(f, descuento);
+    const { pvp, suPvp, suWeb, limite, miDto, suDto, masBarato, igualar } = k;
+    const descat = (f.descatalogado ? `DESCATALOGADO${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}\n` : "")
+      + (f.deAntes ? "DATO ANTERIOR (no se pudo leer nuestra ficha)\n" : "");
+    const valores: Record<typeof COLS[number], ExcelJS.CellValue> = {
+      ean: f.ean ?? "",
+      producto: { text: descat + f.nombre, hyperlink: f.miUrl },
       pvp,
-      factor != null && limite != null ? { formula: `ROUND(C${n}*${factor},2)`, result: limite } : "—",
-      f.miPrecio,
-      { formula: `IF(C${n}>0,1-E${n}/C${n},0)`, result: miDto },
+      limite: limite != null ? { formula: `ROUND(${L.pvp}${n}*${1 - descuento! / 100},2)`, result: limite } : "—",
+      precio: f.miPrecio,
+      dto: { formula: `IF(${L.pvp}${n}>0,1-${L.precio}${n}/${L.pvp}${n},0)`, result: miDto },
       suPvp,
-      suWeb,
-      { formula: `ROUND(H${n}*${factorCupon},2)`, result: f.suPrecio },
-      { formula: `IF(G${n}>0,1-I${n}/G${n},0)`, result: suDto },
-      { formula: `E${n}-I${n}`, result: Math.round(f.diff * 100) / 100 },
-      masBarato,
+      suWeb: { text: coma(suWeb) + " €", hyperlink: f.suUrl },
+      suFinal: { formula: `ROUND(${suWeb}*${factorCupon},2)`, result: f.suPrecio },
+      suDto: { formula: `IF(${L.suPvp}${n}>0,1-${L.suFin}${n}/${L.suPvp}${n},0)`, result: suDto },
+      diff: { formula: `${L.precio}${n}-${L.suFin}${n}`, result: Math.round(f.diff * 100) / 100 },
+      barato: masBarato,
       igualar,
-      { text: "Ver ficha", hyperlink: f.suUrl },
-    ];
-    fila.height = 22;
-    for (let c = 1; c <= 14; c++) {
-      const cel = fila.getCell(c);
+    };
+    // Sin columna de cupón, el precio web es un número (la fórmula de la diferencia lo usa)
+    if (!hayCupon) valores.suWeb = suWeb;
+    const fila = ws.getRow(n);
+    fila.values = COLS.map(c => valores[c]);
+    fila.height = descat ? 30 : 22;
+    COLS.forEach((key, i) => {
+      const cel = fila.getCell(i + 1);
       cel.font = fuente();
       cel.border = lineaAbajo;
-      cel.alignment = { vertical: "middle", horizontal: c <= 2 || c === 13 ? "left" : c === 12 || c === 14 ? "center" : "right", wrapText: c === 2 };
+      cel.alignment = { vertical: "middle", horizontal: key === "ean" || key === "producto" || key === "igualar" ? "left" : key === "barato" ? "center" : "right", wrapText: key === "producto" || key === "igualar" };
       if (idx % 2 === 1) cel.fill = relleno(CEBRA);
-      if ([3, 4, 5, 7, 8, 9].includes(c)) cel.numFmt = EUROS;
-    }
-    fila.getCell(1).numFmt = "@";
-    fila.getCell(6).numFmt = PORCENTAJE;
-    fila.getCell(10).numFmt = PORCENTAJE;
-    fila.getCell(11).numFmt = EUROS_SIGNO;
-    fila.getCell(1).font = fuente({ color: { argb: TEXTO_SUAVE } });
-    fila.getCell(4).font = fuente({ color: { argb: TEXTO_SUAVE } });
-    fila.getCell(5).font = fuente({ bold: true });
-    fila.getCell(6).font = fuente({ size: 9, color: { argb: AZUL } });
-    fila.getCell(7).font = fuente({ color: { argb: ROSA } });
-    fila.getCell(8).font = fuente({ color: { argb: ROSA } });
-    fila.getCell(9).font = fuente({ bold: true, color: { argb: ROSA } });
-    fila.getCell(10).font = fuente({ size: 9, bold: true, color: { argb: ROSA } });
-    fila.getCell(14).font = fuente({ size: 9, underline: true, color: { argb: ROSA } });
+      if (["pvp", "limite", "precio", "suPvp", "suWeb", "suFinal"].includes(key)) cel.numFmt = EUROS;
+    });
+    const c = (key: typeof COLS[number]) => fila.getCell(col(key));
+    c("ean").numFmt = "@";
+    c("dto").numFmt = PORCENTAJE;
+    c("suDto").numFmt = PORCENTAJE;
+    c("diff").numFmt = EUROS_SIGNO;
+    c("ean").font = fuente({ color: { argb: TEXTO_SUAVE } });
+    c("producto").font = fuente({ underline: true, color: { argb: f.descatalogado ? ROJO : TEXTO } });
+    c("limite").font = fuente({ color: { argb: TEXTO_SUAVE } });
+    c("precio").font = fuente({ bold: true });
+    c("dto").font = fuente({ size: 9, color: { argb: AZUL } });
+    c("suPvp").font = fuente({ color: { argb: ROSA } });
+    c("suWeb").font = fuente({ color: { argb: ROSA }, underline: hayCupon });
+    if (hayCupon) c("suFinal").font = fuente({ bold: true, color: { argb: ROSA } });
+    c("suDto").font = fuente({ size: 9, bold: true, color: { argb: ROSA } });
 
-    // Resaltado, como en los informes de marca: precio por debajo de nuestro mínimo
-    for (const [c, precio] of [[5, f.miPrecio], [9, f.suPrecio]] as const) {
-      if (limite != null && precio < limite - 0.005) {
-        fila.getCell(c).fill = relleno(ROJO_FONDO);
-        fila.getCell(c).font = fuente({ bold: true, color: { argb: ROJO } });
-        fila.getCell(c + 1).font = fuente({ size: 9, bold: true, color: { argb: ROJO } });
+    // Mismos resaltados que la web, con la explicación como nota (sale al pasar el ratón)
+    if (k.esPack) c("pvp").note = "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. máx. ni se compara el PVP.";
+    // Sigue siendo un número (la columna «con dto. máx.» lo usa): el aviso va en el formato
+    if (k.revisarPvp) c("pvp").numFmt = '#,##0.00 "€ (revisar precio)"';
+    if (k.pvpDistinto) {
+      for (const key of ["pvp", "suPvp"] as const) {
+        c(key).fill = relleno(AMBAR_FONDO);
+        if (!(key === "pvp" && k.revisarPvp)) c(key).font = fuente({ bold: true, color: { argb: AMBAR } });
       }
+      c("pvp").alignment = { ...c("pvp").alignment, wrapText: true };
+      c("pvp").note = `PVP distinto: nuestro ${coma(pvp)} €, el suyo ${coma(suPvp)} €. ¿Tarifa sin actualizar?`;
     }
-    // PVP distinto en las dos webs (¿tarifa sin actualizar?)
-    if (f.suPvp != null && Math.abs(f.suPvp - pvp) > 0.01) {
-      for (const c of [3, 7]) {
-        fila.getCell(c).fill = relleno(AMBAR_FONDO);
-        fila.getCell(c).font = fuente({ bold: true, color: { argb: AMBAR } });
-      }
+    if (k.bajoMinimo.mio && limite != null) {
+      c("precio").fill = relleno(ROJO_FONDO);
+      c("precio").font = fuente({ bold: true, color: { argb: ROJO } });
+      c("dto").font = fuente({ size: 9, bold: true, color: { argb: ROJO } });
+      c("precio").note = `Nuestro precio está por debajo del PVP con el dto. máx. (${coma(limite)} €).`;
     }
-    if (f.diff > 0.01) fila.getCell(11).font = fuente({ bold: true, color: { argb: ROJO } });
-    else if (f.diff < -0.01) fila.getCell(11).font = fuente({ bold: true, color: { argb: VERDE } });
-    fila.getCell(12).font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE } });
-    fila.getCell(13).font = fuente({ size: 9, bold: igualar.startsWith("No"), color: { argb: igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
+    const explica = explicaDtoMaxLarga(f, k, descuento);
+    if (k.bajoMinimo.suyo) c("diff").fill = relleno(MORADO_FONDO);
+    if (explica) c("diff").note = explica;
+    c("diff").font = fuente({ bold: true, color: { argb: f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO } });
+    c("barato").font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE } });
+    c("igualar").font = fuente({ size: 9, bold: igualar.startsWith("No"), color: { argb: igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
   });
 
   const ultima = CAB + orden.length;
   ws.views = [{ state: "frozen", xSplit: 2, ySplit: CAB, showGridLines: false }];
-  ws.autoFilter = { from: `A${CAB}`, to: `N${Math.max(ultima, CAB)}` };
+  ws.autoFilter = { from: `A${CAB}`, to: `${ultimaCol}${Math.max(ultima, CAB)}` };
 
   // Leyenda
   const ley = ultima + 2;
   const leyenda: [string, string, string][] = [
-    [ROJO_FONDO, ROJO, descuento != null ? `Precio por debajo de nuestro mínimo (PVP −${pct}, descuento máximo de la marca)` : "Precio por debajo de nuestro mínimo (esta marca no tiene descuento máximo)"],
+    [MORADO_FONDO, MORADO, descuento != null ? `Más allá de nuestro dto. máx.: venden por debajo de nuestro PVP −${pct} y no podemos igualarlos` : "Esta marca no tiene descuento máximo"],
+    [ROJO_FONDO, ROJO, "Nuestro precio está por debajo del PVP con el descuento máximo"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?)"],
   ];
   leyenda.forEach(([fondo, color, texto], i) => {
@@ -274,35 +311,43 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
     t.font = fuente({ size: 9, color: { argb: color } });
   });
   const nota = ws.getCell(`B${ley + leyenda.length}`);
-  nota.value = "PVP: precio sin descuento. Mínimo: PVP menos el descuento máximo de la marca (Boardfy o el puesto en la app). Precio: precio de venta actual. Con cupón: su precio con el descuento que aplican en el carrito. Dto. total: lo que rebajan sobre su PVP contando el cupón. Diferencia: nuestro precio menos su precio final.";
+  nota.value = "PVP: precio sin descuento. Con dto. máx.: nuestro PVP con el descuento máximo al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP (enlace a su ficha). " +
+    (hayCupon ? "Precio final: el de su web con el cupón que aplican en el carrito. " : "") +
+    "Dto. total: lo que rebajan sobre su PVP. Diferencia: nuestro precio menos su precio final. Las celdas con un triángulo rojo llevan una nota con la explicación.";
   nota.font = fuente({ size: 9, italic: true, color: { argb: TEXTO_SUAVE } });
 
   // ── Hoja 2: lo que tienen ellos y nosotros no ──
   if (soloEllos.length > 0) {
     const ws2 = wb.addWorksheet("Solo Cosméticos24h");
     preparar(ws2);
-    ws2.columns = [70, 14, 12].map(width => ({ width }));
-    encabezado(ws2, "C",
+    const cols2 = hayCupon ? 6 : 5;
+    const ult2 = String.fromCharCode(64 + cols2);
+    ws2.columns = (hayCupon ? [16, 60, 12, 12, 16, 11] : [16, 60, 12, 12, 11]).map(width => ({ width }));
+    encabezado(ws2, ult2,
       `Solo en Cosméticos24h · ${marca}`,
       `Productos que venden ellos y no tienen nuestro mismo EAN · ${fechaCorta(fecha)}`,
       `${soloEllos.length} productos`);
-    filaCabecera(ws2, 5, ["PRODUCTO", "PRECIO", "TIPO"]);
-    for (let c = 1; c <= 3; c++) ws2.getRow(5).getCell(c).fill = relleno(ROSA);
+    filaCabecera(ws2, 5, ["EAN", "PRODUCTO", "PVP", "PRECIO WEB", ...(hayCupon ? [cuponTexto] : []), "DTO. TOTAL"]);
+    for (let c = 1; c <= cols2; c++) ws2.getRow(5).getCell(c).fill = relleno(c <= 2 ? AZUL : ROSA);
+    if (hayCupon && cupon!.condiciones) ws2.getRow(5).getCell(5).note = cupon!.condiciones;
     soloEllos.forEach((s, idx) => {
       const fila = ws2.getRow(6 + idx);
-      fila.values = [{ text: s.titulo, hyperlink: s.url }, s.precio, s.esPack ? "Pack" : "Producto"];
+      const k = filaSoloEllos(s, cupon);
+      fila.values = [s.ean ?? "", { text: (s.esPack ? "PACK · " : "") + s.titulo, hyperlink: s.url }, k.pvp, k.web, ...(hayCupon ? [k.final] : []), k.dto];
       fila.height = 20;
-      for (let c = 1; c <= 3; c++) {
+      for (let c = 1; c <= cols2; c++) {
         const cel = fila.getCell(c);
-        cel.font = fuente({ color: { argb: c === 3 ? TEXTO_SUAVE : TEXTO } });
+        cel.font = fuente({ color: { argb: c === 1 ? TEXTO_SUAVE : c >= 3 ? ROSA : TEXTO }, bold: c === cols2 || (hayCupon && c === 5), underline: c === 2 });
         cel.border = lineaAbajo;
-        cel.alignment = { vertical: "middle", horizontal: c === 1 ? "left" : c === 2 ? "right" : "center" };
+        cel.alignment = { vertical: "middle", horizontal: c <= 2 ? "left" : "right" };
         if (idx % 2 === 1) cel.fill = relleno(CEBRA);
+        if (c >= 3 && c < cols2) cel.numFmt = EUROS;
       }
-      fila.getCell(2).numFmt = EUROS;
+      fila.getCell(1).numFmt = "@";
+      fila.getCell(cols2).numFmt = PORCENTAJE;
     });
     ws2.views = [{ state: "frozen", ySplit: 5, showGridLines: false }];
-    ws2.autoFilter = { from: "A5", to: `C${5 + soloEllos.length}` };
+    ws2.autoFilter = { from: "A5", to: `${ult2}${5 + soloEllos.length}` };
   }
 
   return wb.xlsx.writeBuffer() as Promise<ArrayBuffer>;

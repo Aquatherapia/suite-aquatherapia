@@ -5,7 +5,8 @@ const COOKIE_NAME = "suite_auth";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (pathname === "/login" || pathname === "/api/login") {
+  // La revisión diaria la lanza Vercel Cron sin cookie: la ruta comprueba su propia clave
+  if (pathname === "/login" || pathname === "/api/login" || pathname.startsWith("/api/cron/")) {
     return NextResponse.next();
   }
 

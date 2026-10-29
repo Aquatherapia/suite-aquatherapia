@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 
-// Vercel Hobby permite hasta 60s (gratis). Leer las fichas de una marca
-// puede tardar más de los 10s por defecto, así que lo subimos.
-export const maxDuration = 60;
+// Leer las fichas de una marca despacio (para que nuestra web no corte) tarda varios minutos.
+// Con Fluid compute, Vercel Hobby permite hasta 300 s.
+export const maxDuration = 300;
 
 const CONFIG_PATH = path.join(process.cwd(), "data", "comparar-precios-config.json");
 const USE_KV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
@@ -42,6 +42,7 @@ type Comparacion = {
   ean?: string;        // EAN con el que se emparejó
   descatalogado?: boolean; // tu ficha está marcada como descatalogada en tu web
   stock?: number;          // unidades que quedan (solo se guarda si está descatalogada)
+  deAntes?: string;        // la ficha no se pudo leer: fila de la revisión de esa fecha
 };
 
 type SoloEllos = {
@@ -82,6 +83,7 @@ type ResultadoMarca = {
   // Productos suyos cuyo EAN aún no se ha leído (se leen en la siguiente revisión)
   eanPendientes?: number;
   misFallidas?: number; // fichas nuestras que no se pudieron leer en esta revisión
+  cambios?: Cambios;    // qué ha cambiado respecto a la revisión anterior
 };
 
 type Excluido = {
@@ -184,7 +186,7 @@ function normalizar(s: string): string {
 
 // ── Utilidades de red ──────────────────────────────────────────────────
 async function fetchTexto(url: string): Promise<string> {
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
 }
@@ -291,14 +293,16 @@ function suPvp(s: { precio: number; tachado?: number }): number {
 }
 
 // Ejecuta tareas con concurrencia limitada
-async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promise<R>, pausaMs = 0): Promise<R[]> {
   const out: R[] = [];
   for (let i = 0; i < items.length; i += limite) {
+    if (i > 0 && pausaMs) await esperar(pausaMs);
     const lote = items.slice(i, i + limite);
     out.push(...await Promise.all(lote.map(fn)));
   }
   return out;
 }
+const esperar = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 // Una ficha con varios formatos (50 ml / 30 ml) da un MiProducto por formato: mismo url, cada uno con su precio.
 // La web solo publica el EAN del primer formato (el que sale marcado); los demás van sin EAN.
@@ -410,8 +414,51 @@ async function varianteDescatalogada(url: string, propiedades: string): Promise<
   }
 }
 
-// Enumera y lee los productos de una marca en la tienda propia
-async function leerMisProductos(miToken: string, sitemapXml: string): Promise<{ productos: MiProducto[]; fallidas: number }> {
+// Qué ha cambiado desde la revisión anterior de la marca: lo que pasa a ser más caro en nuestra web,
+// lo que deja de serlo y los productos nuevos que solo tienen ellos
+type Cambios = { desde: string; nuevosCaros: string[]; yaNoCaros: string[]; novedades: string[] };
+function cambiosDesde(antes: ResultadoMarca, comparaciones: Comparacion[], soloEllos: SoloEllos[]): Cambios {
+  const clave = (c: Comparacion) => `${c.suUrl}|${c.nombre}`;
+  const caroAntes = new Map(antes.comparaciones.map(c => [clave(c), c.diff > 0.01]));
+  const caroAhora = new Map(comparaciones.map(c => [clave(c), c.diff > 0.01]));
+  const nombres = new Map([...antes.comparaciones, ...comparaciones].map(c => [clave(c), c.nombre]));
+  const conocidos = new Set([...antes.soloEllos.map(s => s.url), ...antes.comparaciones.map(c => c.suUrl)]);
+  return {
+    desde: antes.revisadoEn ?? "",
+    nuevosCaros: [...caroAhora].filter(([k, v]) => v && caroAntes.get(k) === false).map(([k]) => nombres.get(k)!),
+    yaNoCaros: [...caroAhora].filter(([k, v]) => !v && caroAntes.get(k) === true).map(([k]) => nombres.get(k)!),
+    novedades: soloEllos.filter(s => !conocidos.has(s.url)).map(s => s.titulo),
+  };
+}
+
+// Lee una ficha de la tienda propia (un MiProducto por formato). Lanza un error si la web no responde.
+async function leerMiFicha(url: string): Promise<MiProducto[] | null> {
+  const html = await fetchTexto(url);
+  const precio = precioDesdeHtml(html);
+  if (precio === null) return null;
+  const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
+  const nombre = slug.replace(/-/g, " ");
+  const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
+  const ean = eanDesdeHtml(html);
+  const formatos = formatosDesdeHtml(html);
+  if (formatos.length >= 2) {
+    // El precio del JSON-LD es el más bajo de todos los formatos: se pide el de cada uno
+    const estados: Awaited<ReturnType<typeof estadoVariante>>[] = [];
+    for (const f of formatos) estados.push(await estadoVariante(url, f.id));
+    if (estados.every(e => e !== null)) {
+      return formatos.map((f, i): MiProducto => ({
+        nombre: `${nombre} · ${f.titulo}`, url, precio: estados[i]!.precio, pvp: estados[i]!.pvp ?? estados[i]!.precio, esPack,
+        ean: i === 0 ? ean : null, propiedades: [f.id], formato: f.titulo, clave: `${url}#${f.id}`, descatalogado: estados[i]!.descatalogado, stock: estados[i]!.stock,
+      }));
+    }
+  }
+  return [{ nombre, url, precio, pvp: pvpDesdeHtml(html) ?? precio, esPack, ean, propiedades: propiedadesDesdeHtml(html), clave: url }];
+}
+
+// Enumera y lee los productos de una marca en la tienda propia.
+// Se lee despacio (pocas a la vez y con pausas): con 10 a la vez nuestra web cortaba y se perdían fichas.
+// Cada ficha se intenta 3 veces; las que siguen fallando se reintentan una a una al final, si queda tiempo.
+async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: number): Promise<{ productos: MiProducto[]; fallidas: string[] }> {
   const tokLower = normalizar(miToken);
   const urls = new Set<string>();
   const re = /<loc>([^<]+-p\d+)<\/loc>/gi;
@@ -423,33 +470,23 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<{ 
   }
 
   const lista = Array.from(urls).slice(0, 300); // cota de seguridad
-  const productos = await enLotes(lista, 10, async (url): Promise<MiProducto[] | null> => {
-    try {
-      // Un segundo intento si la web tarda o falla: si no, la ficha desaparece de la comparación
-      const html = await fetchTexto(url).catch(() => new Promise<string>(r => setTimeout(r, 800)).then(() => fetchTexto(url)));
-      const precio = precioDesdeHtml(html);
-      if (precio === null) return null;
-      const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
-      const nombre = slug.replace(/-/g, " ");
-      const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
-      const ean = eanDesdeHtml(html);
-      const formatos = formatosDesdeHtml(html);
-      if (formatos.length >= 2) {
-        // El precio del JSON-LD es el más bajo de todos los formatos: se pide el de cada uno
-        const estados = await Promise.all(formatos.map(f => estadoVariante(url, f.id)));
-        if (estados.every(e => e !== null)) {
-          return formatos.map((f, i): MiProducto => ({
-            nombre: `${nombre} · ${f.titulo}`, url, precio: estados[i]!.precio, pvp: estados[i]!.pvp ?? estados[i]!.precio, esPack,
-            ean: i === 0 ? ean : null, propiedades: [f.id], formato: f.titulo, clave: `${url}#${f.id}`, descatalogado: estados[i]!.descatalogado, stock: estados[i]!.stock,
-          }));
-        }
-      }
-      return [{ nombre, url, precio, pvp: pvpDesdeHtml(html) ?? precio, esPack, ean, propiedades: propiedadesDesdeHtml(html), clave: url }];
-    } catch {
-      return null;
+  const leidas = new Map<string, MiProducto[] | null>(); // null = la ficha no tiene precio
+  const intentar = async (url: string, pausas: number[]) => {
+    for (let n = 0; n <= pausas.length; n++) {
+      if (n > 0) { if (Date.now() + pausas[n - 1] > limiteMs) return; await esperar(pausas[n - 1]); }
+      try { leidas.set(url, await leerMiFicha(url)); return; } catch { /* la web tardó o falló */ }
     }
-  });
-  return { productos: productos.flatMap(p => p ?? []), fallidas: productos.filter(p => p === null).length };
+  };
+  await enLotes(lista, 5, url => Date.now() < limiteMs ? intentar(url, [1_500, 4_000]) : Promise.resolve(), 250);
+  for (const url of lista) {
+    if (leidas.has(url) || Date.now() > limiteMs) continue;
+    await esperar(1_000);
+    await intentar(url, [3_000]);
+  }
+  return {
+    productos: lista.flatMap(u => leidas.get(u) ?? []),
+    fallidas: lista.filter(u => !leidas.has(u)),
+  };
 }
 
 type Variante = { titulo: string; precio: number; tachado?: number };
@@ -657,8 +694,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Revisa las marcas de una en una (falta el slug de la marca)." }, { status: 400 });
     }
     const objetivo: Marca[] = config.marcas.filter(m => m.slug === body.slug);
-    // Margen de seguridad respecto a maxDuration (60 s) para guardar a tiempo
-    const limiteEans = Date.now() + 45_000;
+    // Margen de seguridad respecto a maxDuration (300 s) para guardar a tiempo
+    const inicio = Date.now();
+    const limiteMis = inicio + 190_000;
+    const limiteEans = inicio + 235_000;
 
     let sitemapXml = "";
     try {
@@ -691,7 +730,7 @@ export async function POST(req: NextRequest) {
         const suPorUrl = new Map(suProdsAll.map(s => [s.url, s]));
 
         // 2) Mis productos (tienda propia)
-        const { productos: mis, fallidas: misFallidas } = await leerMisProductos(marca.miToken, sitemapXml);
+        const { productos: mis, fallidas } = await leerMisProductos(marca.miToken, sitemapXml, limiteMis);
 
         // 2a) EAN de sus productos (de la caché; los nuevos se leen ahora)
         const eanPendientes = await leerSusEans(suProdsAll.map(s => s.url), config.eanVariantes, limiteEans);
@@ -799,6 +838,19 @@ export async function POST(req: NextRequest) {
           });
         }
 
+        // 4b) Las fichas que no se pudieron leer conservan su fila de la revisión anterior (marcada),
+        // para que no desaparezcan de la comparación
+        const anterior = config.resultados.find(r => r.slug === marca.slug);
+        const fallidasSet = new Set(fallidas);
+        const suYa = new Set(comparaciones.map(c => c.suUrl));
+        for (const c of anterior?.comparaciones ?? []) {
+          if (!fallidasSet.has(c.miUrl) || suYa.has(c.suUrl) || ocultos.has(c.suUrl)) continue;
+          comparaciones.push({ ...c, deAntes: c.deAntes ?? anterior?.revisadoEn ?? new Date().toISOString() });
+        }
+        const conFila = new Set(comparaciones.map(c => c.suUrl));
+        for (let i = soloEllos.length - 1; i >= 0; i--) if (conFila.has(soloEllos[i].url)) soloEllos.splice(i, 1);
+        const misFallidas = fallidas.length;
+
         // Ordenar: tú más caro primero; el resto por nombre
         comparaciones.sort((a, b) => b.diff - a.diff);
         soloEllos.sort((a, b) => Number(a.esPack) - Number(b.esPack));
@@ -810,21 +862,27 @@ export async function POST(req: NextRequest) {
           misProductos: mis.length, susProductos: suProdsAll.length,
           revisadoEn: new Date().toISOString(),
           eanPendientes, misFallidas,
+          cambios: anterior && !anterior.error ? cambiosDesde(anterior, comparaciones, soloEllos) : undefined,
         });
       } catch (e) {
         nuevos.push({ marca: marca.nombre, slug: marca.slug, error: String(e), comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() });
       }
     }
 
-    // Fusionar: reemplaza solo las marcas revisadas, conserva el resto
+    // Fusionar: reemplaza solo las marcas revisadas, conserva el resto.
+    // La revisión tarda minutos: se guarda sobre la configuración de ahora, por si mientras tanto
+    // se ha cambiado algo en la app o se ha revisado otra marca (la revisión diaria va sola).
     const revisadas = new Set(nuevos.map(r => r.slug));
-    config.resultados = [
-      ...config.resultados.filter(r => !revisadas.has(r.slug)),
+    const actual = await leerConfig();
+    actual.resultados = [
+      ...actual.resultados.filter(r => !revisadas.has(r.slug)),
       ...nuevos,
     ];
-    config.ultimaRevision = new Date().toISOString();
-    await guardarConfig(config);
-    return NextResponse.json(config);
+    actual.eanVariantes = { ...actual.eanVariantes, ...config.eanVariantes };
+    if (!actual.cupon?.manual) actual.cupon = config.cupon;
+    actual.ultimaRevision = new Date().toISOString();
+    await guardarConfig(actual);
+    return NextResponse.json(actual);
   }
 
   return NextResponse.json({ error: "Acción no válida" }, { status: 400 });
