@@ -37,10 +37,11 @@ export const nombreMarcaPdf = (marca: string, fecha = new Date()) => `${limpio(m
 
 const num = (n: number) => String(n).replace(".", ",");
 const textoCupon = (cupon: CuponExcel) => cupon && cupon.pct > 0 ? `PRECIO FINAL (${cupon.codigo ?? "cupón"} -${num(cupon.pct)} % EN CARRITO)` : "";
-const titulo = (marca: string) => `${marca}: precios por debajo del descuento autorizado`;
+// Sin descuento autorizado (0 %) el mínimo es el propio PVP
+const titulo = (marca: string, descuento: number) => `${marca}: precios por debajo ${descuento > 0 ? "del descuento autorizado" : "del PVP"}`;
 const subtitulo = (descuento: number, fecha: Date) =>
-  `Cosméticos24h (cosmeticos24h.com) · precios consultados el ${fechaCorta(fecha)} · descuento autorizado: ${num(descuento)} % sobre el PVP`;
-const resumen = (n: number) => `${n} producto${n !== 1 ? "s" : ""} por debajo del precio mínimo autorizado (PVP menos el descuento autorizado).`;
+  `Cosméticos24h (cosmeticos24h.com) · precios consultados el ${fechaCorta(fecha)} · ${descuento > 0 ? `descuento autorizado: ${num(descuento)} % sobre el PVP` : "sin descuento autorizado: el precio mínimo es el PVP"}`;
+const resumen = (n: number, descuento: number) => `${n} producto${n !== 1 ? "s" : ""} por debajo del precio mínimo autorizado (${descuento > 0 ? "PVP menos el descuento autorizado" : "el PVP"}).`;
 // ── Excel ──
 const AZUL = "FF1270B6", ROSA = "FFC2367E", GRIS = "FF4B5563", TEXTO = "FF1F2933", SUAVE = "FF6B7280", ROJO = "FFB42318";
 const FONDO_AZUL = "FFEEF5FC", FONDO_ROSA = "FFFDEEF6", FONDO_GRIS = "FFF6F7F9", LINEA = "FFE5E7EB";
@@ -77,9 +78,9 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
   const fuente = (extra: object = {}) => ({ name: "Calibri", size: 10, color: { argb: TEXTO }, ...extra });
   const relleno = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
 
-  ws.mergeCells(`A1:${ult}1`); ws.getCell("A1").value = titulo(marca); ws.getCell("A1").font = fuente({ size: 16, bold: true, color: { argb: AZUL } }); ws.getRow(1).height = 28;
+  ws.mergeCells(`A1:${ult}1`); ws.getCell("A1").value = titulo(marca, descuento); ws.getCell("A1").font = fuente({ size: 16, bold: true, color: { argb: AZUL } }); ws.getRow(1).height = 28;
   ws.mergeCells(`A2:${ult}2`); ws.getCell("A2").value = subtitulo(descuento, fecha); ws.getCell("A2").font = fuente({ color: { argb: SUAVE } });
-  ws.mergeCells(`A3:${ult}3`); ws.getCell("A3").value = resumen(datos.length); ws.getCell("A3").font = fuente({ bold: true });
+  ws.mergeCells(`A3:${ult}3`); ws.getCell("A3").value = resumen(datos.length, descuento); ws.getCell("A3").font = fuente({ bold: true });
 
   // Fila 5: bloques; fila 6: cabeceras
   const grupos: Record<Col["grupo"], [string, string, string]> = {
@@ -143,11 +144,11 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
   const hayCupon = !!cupon && cupon.pct > 0;
 
   doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(...P_AZUL);
-  doc.text(titulo(marca), M, 14);
+  doc.text(titulo(marca, descuento), M, 14);
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...P_SUAVE);
   doc.text(subtitulo(descuento, fecha), M, 20);
   doc.setFont("helvetica", "bold"); doc.setTextColor(...P_TEXTO);
-  doc.text(resumen(datos.length), M, 26);
+  doc.text(resumen(datos.length, descuento), M, 26);
 
   // Bloques: base (2) · marca (3) · Cosméticos24h (2 o 3) · por debajo del mínimo (1)
   // Su dto. va bajo cada precio; bajo el precio final, el dto. total.
