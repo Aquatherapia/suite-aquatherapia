@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { calcularFila, esPackFila, explicaDtoMaxLarga, explicaPvp, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
 import { construirPdf, nombrePdf } from "./pdf";
+import { construirExcelMarca, construirPdfMarca, filasParaMarca, nombreMarcaExcel, nombreMarcaPdf } from "./informe-marca";
 import { descuentoBoardfy, reglaBoardfyInactiva } from "./boardfy";
 
 type Comparacion = {
@@ -152,6 +153,40 @@ function bajar(blob: Blob, nombre: string) {
 
 async function descargarPdf(r: ResultadoMarca, descuento: number | null, cupon: CuponExcel) {
   bajar(await construirPdf(r.marca, r.comparaciones, r.soloEllos, descuento, cupon), nombrePdf(r.marca));
+}
+
+// Informe para enviar a la marca: lo que Cosméticos24h vende por debajo del dto. autorizado
+async function descargarParaMarca(r: ResultadoMarca, descuento: number, cupon: CuponExcel, formato: "pdf" | "excel") {
+  if (formato === "pdf") bajar(await construirPdfMarca(r.marca, r.comparaciones, descuento, cupon), nombreMarcaPdf(r.marca));
+  else bajar(new Blob([await construirExcelMarca(r.marca, r.comparaciones, descuento, cupon)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nombreMarcaExcel(r.marca));
+}
+
+// Botón «Para la marca»: elige PDF o Excel. Desactivado si no hay descuento autorizado o nada por debajo
+function ParaMarca({ r, descuento, cupon }: { r: ResultadoMarca; descuento: number | null; cupon: CuponExcel }) {
+  const [abierto, setAbierto] = useState(false);
+  const n = filasParaMarca(r.comparaciones, descuento).length;
+  const bajar = (formato: "pdf" | "excel") => {
+    setAbierto(false);
+    descargarParaMarca(r, descuento!, cupon, formato).catch(err => alert("No se pudo crear el informe: " + err));
+  };
+  return (
+    <span className="cp-para-marca" onClick={e => e.stopPropagation()}>
+      <button
+        className="regen-btn"
+        disabled={n === 0}
+        onClick={() => setAbierto(a => !a)}
+        title={descuento == null ? "Esta marca no tiene descuento autorizado" : n === 0 ? "Cosméticos24h no vende nada por debajo del descuento autorizado" : `Informe para enviar a la marca: ${n} producto${n !== 1 ? "s" : ""} de Cosméticos24h por debajo del descuento autorizado`}
+      >
+        Para la marca{n > 0 ? ` (${n})` : ""}
+      </button>
+      {abierto && (
+        <span className="cp-para-marca-menu">
+          <button className="regen-btn" onClick={() => bajar("pdf")}>PDF</button>
+          <button className="regen-btn" onClick={() => bajar("excel")}>Excel</button>
+        </span>
+      )}
+    </span>
+  );
 }
 
 // Celda con explicación al pasar por encima (en vez de texto debajo, para que la tabla no crezca)
@@ -417,6 +452,7 @@ function MarcaBloque({
           >
             Excel
           </button>
+          <ParaMarca r={r} descuento={descuento} cupon={cupon} />
           {confirmarBorrar
             ? <button className="vp-delete-btn cp-borrar-confirmar" onClick={e => { e.stopPropagation(); onBorrar(); }} onBlur={() => setConfirmarBorrar(false)} autoFocus>¿Quitar marca?</button>
             : <button className="vp-delete-btn" title="Quitar esta marca" onClick={e => { e.stopPropagation(); setConfirmarBorrar(true); }}>×</button>}

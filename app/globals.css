@@ -1601,3 +1601,7 @@ button:disabled {
 .cp-ean-aviso.cp-aviso-rojo ul { margin: 4px 0 0 18px; padding: 0; }
 .cp-ean-aviso.cp-aviso-rojo a { color: #b42318; }
 .cp-informe .cp-ambar-texto { color: #b45309; }
+
+/* Botón «Para la marca» con su menú PDF / Excel */
+.cp-para-marca { position: relative; display: inline-flex; }
+.cp-para-marca-menu { position: absolute; top: 100%; right: 0; z-index: 5; display: flex; gap: 4px; margin-top: 4px; padding: 4px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12); }
