@@ -68,7 +68,6 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
     { t: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", w: 13, grupo: "ellos", v: f => f.suWeb, fmt: EUROS },
     ...(hayCupon ? [{ t: "DTO.", w: 8, grupo: "ellos" as const, v: (f: FilaMarca) => f.suDtoWeb, fmt: PORC }, { t: textoCupon(cupon), w: 18, grupo: "ellos" as const, v: (f: FilaMarca) => f.suFinal, fmt: EUROS }] : []),
     { t: "DTO. TOTAL", w: 10, grupo: "ellos", v: f => f.suDto, fmt: PORC },
-    { t: "DTO. SOBRE PVP", w: 11, grupo: "fin", v: f => f.dtoSobrePvp, fmt: PORC },
     { t: "POR DEBAJO DEL MÍNIMO", w: 14, grupo: "fin", v: f => f.porDebajo, fmt: EUROS },
     { t: "FICHA EN COSMÉTICOS24H", w: 23, grupo: "fin", v: f => ({ text: "Ver en Cosméticos24h ↗", hyperlink: f.suUrl }) },
     { t: "FICHA EN LA TIENDA DE COSMÉTICOS", w: 21, grupo: "fin", v: f => ({ text: "Ver nuestra ficha ↗", hyperlink: f.miUrl }) },
@@ -113,7 +112,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
       cel.value = c.v(f);
       if (c.fmt) cel.numFmt = c.fmt;
       const enlace = typeof cel.value === "object";
-      const rojo = c.t === "POR DEBAJO DEL MÍNIMO" || c.t === "DTO. SOBRE PVP";
+      const rojo = c.t === "POR DEBAJO DEL MÍNIMO";
       cel.font = fuente({
         color: { argb: enlace ? (i === cols.length - 2 ? ROSA : AZUL) : rojo ? ROJO : c.grupo === "ellos" ? ROSA : i === 0 ? SUAVE : TEXTO },
         bold: rojo || c.t === "PRECIO MÍNIMO AUTORIZADO", underline: enlace,
@@ -150,14 +149,15 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
   doc.setFont("helvetica", "bold"); doc.setTextColor(...P_TEXTO);
   doc.text(resumen(datos.length), M, 26);
 
-  // Bloques: base (2) · marca (3) · Cosméticos24h (3 o 4) · diferencia y enlaces (4)
-  const nEllos = hayCupon ? 4 : 3;
+  // Bloques: base (2) · marca (3) · Cosméticos24h (2 o 3) · diferencia y enlaces (3)
+  // Su dto. va bajo cada precio; bajo el precio final, el dto. total
+  const nEllos = hayCupon ? 3 : 2;
   const grupoDe = (c: number): "base" | "nos" | "ellos" | "fin" => c < 2 ? "base" : c < 5 ? "nos" : c < 5 + nEllos ? "ellos" : "fin";
-  const colEnlaceC24 = 5 + nEllos + 2, colEnlaceMia = colEnlaceC24 + 1;
+  const colEnlaceC24 = 5 + nEllos + 1, colEnlaceMia = colEnlaceC24 + 1;
   const cuerpo = datos.map(f => [
     f.ean, f.producto, eur(f.pvp), pct(descuento / 100), eur(f.minimo),
-    eur(f.suPvp), f.suDtoWeb > 0.0005 ? `${eur(f.suWeb)}\n-${pct(f.suDtoWeb)}` : eur(f.suWeb), ...(hayCupon ? [eur(f.suFinal)] : []), pct(f.suDto),
-    pct(f.dtoSobrePvp), eur(f.porDebajo), "Ver >", "Ver >",
+    eur(f.suPvp), f.suDtoWeb > 0.0005 ? `${eur(f.suWeb)}\n-${pct(f.suDtoWeb)}` : eur(f.suWeb), ...(hayCupon ? [`${eur(f.suFinal)}\n-${pct(f.suDto)}`] : []),
+    eur(f.porDebajo), "Ver >", "Ver >",
   ]);
   const cab = (t: string, color: RGB) => ({ content: t, styles: { fillColor: color } });
   autoTable(doc, {
@@ -171,21 +171,21 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
         { content: "", colSpan: 2, styles: { fillColor: [255, 255, 255] } },
         { content: "MARCA (PVP Y DTO. AUTORIZADO)", colSpan: 3, styles: { fillColor: P_F_AZUL, textColor: P_AZUL } },
         { content: "COSMÉTICOS24H", colSpan: nEllos, styles: { fillColor: P_F_ROSA, textColor: P_ROSA } },
-        { content: "DIFERENCIA Y ENLACES", colSpan: 4, styles: { fillColor: P_F_GRIS, textColor: P_GRIS } },
+        { content: "DIFERENCIA Y ENLACES", colSpan: 3, styles: { fillColor: P_F_GRIS, textColor: P_GRIS } },
       ],
       [
         cab("EAN", P_AZUL), cab("PRODUCTO", P_AZUL),
         cab("PVP", P_AZUL), cab("DTO.\nAUTORIZADO", P_AZUL), cab("PRECIO MÍNIMO\nAUTORIZADO", P_AZUL),
-        cab("PVP", P_ROSA), cab(hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", P_ROSA), ...(hayCupon ? [cab(textoCupon(cupon), P_ROSA)] : []), cab("DTO. TOTAL", P_ROSA),
-        cab("DTO. SOBRE PVP", P_GRIS), cab("POR DEBAJO DEL MÍNIMO", P_GRIS), cab("FICHA\nCOSMÉTICOS24H", P_GRIS), cab("NUESTRA\nFICHA", P_GRIS),
+        cab("PVP", P_ROSA), cab(hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", P_ROSA), ...(hayCupon ? [cab(textoCupon(cupon), P_ROSA)] : []),
+        cab("POR DEBAJO DEL MÍNIMO", P_GRIS), cab("FICHA\nCOSMÉTICOS24H", P_GRIS), cab("NUESTRA\nFICHA", P_GRIS),
       ],
     ],
     body: cuerpo,
     // Anchos fijos para que los importes no se partan; el producto se queda con el resto
     columnStyles: Object.fromEntries([
-      [0, { cellWidth: 22, halign: "left", textColor: P_SUAVE }], [1, { cellWidth: hayCupon ? 61 : 77, halign: "left" }],
+      [0, { cellWidth: 22, halign: "left", textColor: P_SUAVE }], [1, { cellWidth: hayCupon ? 93 : 109, halign: "left" }],
       ...Array.from({ length: 3 + nEllos }, (_, i) => [2 + i, { cellWidth: i === 1 || i === 2 ? 19 : 16 }]),
-      [5 + nEllos, { cellWidth: 16 }], [6 + nEllos, { cellWidth: 18 }], [colEnlaceC24, { cellWidth: 24 }], [colEnlaceMia, { cellWidth: 18 }],
+      [5 + nEllos, { cellWidth: 18 }], [colEnlaceC24, { cellWidth: 24 }], [colEnlaceMia, { cellWidth: 18 }],
     ]),
     didParseCell: d => {
       if (d.section !== "body") return;
@@ -195,7 +195,7 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
       s.lineColor = [229, 231, 235];
       if (g === "ellos") s.textColor = P_ROSA;
       if (c === 4) s.fontStyle = "bold";
-      if (c === colEnlaceC24 - 2 || c === colEnlaceC24 - 1) { s.textColor = P_ROJO; s.fontStyle = "bold"; }
+      if (c === colEnlaceC24 - 1) { s.textColor = P_ROJO; s.fontStyle = "bold"; }
       if (c === colEnlaceC24 || c === colEnlaceMia) { s.halign = "center"; s.fontStyle = "bold"; s.textColor = c === colEnlaceC24 ? P_ROSA : P_AZUL; }
     },
     didDrawCell: d => {
