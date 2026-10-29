@@ -64,7 +64,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     (hayCupon ? ` · su precio final lleva el cupón de carrito del ${cuponTxt}` : ""), M, 21);
   doc.setFont("helvetica", "bold"); doc.setTextColor(...TEXTO);
   doc.text(`${orden.length} productos comparados  ·  ${masCaros} en los que vamos más caros  ·  ` +
-    (descuento != null ? `${bajo} que Cosméticos24h vende más barato que nuestro dto. máx. (PVP -${dto})  ·  ` : "") +
+    (descuento != null ? `${bajo} que Cosméticos24h vende más barato que nuestro dto. autorizado (PVP -${dto})  ·  ` : "") +
     `${pvpDist} con PVP distinto`, M, 27);
 
   const cab = (t: string, ellos = false) => ({ content: t, styles: { fillColor: ellos ? ROSA : AZUL } });
@@ -102,7 +102,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
         { content: "", colSpan: 3, styles: { fillColor: [255, 255, 255] } },
       ],
       [
-        cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. MÁX. (-${dto})` : "CON DTO. MÁX."), cab("PRECIO FINAL"), cab("DTO."),
+        cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. AUTORIZADO (-${dto})` : "CON DTO. AUTORIZADO"), cab("PRECIO FINAL"), cab("DTO."),
         cab("PVP", true), cab("PRECIO WEB", true),
         ...(hayCupon ? [cab(`PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""}${cupon!.hasta ? `, HASTA ${cupon!.hasta.slice(8, 10)}/${cupon!.hasta.slice(5, 7)}` : ""})`, true)] : []),
         cab("DTO. TOTAL", true),
@@ -152,8 +152,8 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
   // Leyenda
   let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   const leyenda: [RGB, RGB, string][] = [
-    [MORADO_FONDO, MORADO, descuento != null ? `Más allá de nuestro dto. máx.: venden por debajo de nuestro PVP -${dto} y no podemos igualarlos` : "Esta marca no tiene descuento máximo"],
-    [ROJO_FONDO, ROJO, "Nuestro precio está por debajo del PVP con el descuento máximo"],
+    [MORADO_FONDO, MORADO, descuento != null ? `Más allá de nuestro dto. autorizado: venden por debajo de nuestro PVP -${dto} y no podemos igualarlos` : "Esta marca no tiene descuento autorizado"],
+    [ROJO_FONDO, ROJO, "Nuestro precio está por debajo del PVP con el descuento autorizado"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?)"],
   ];
   doc.setFontSize(7.5); doc.setFont("helvetica", "normal");
@@ -164,7 +164,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     y += 5.5;
   }
   doc.setFont("helvetica", "italic"); doc.setTextColor(...TEXTO_SUAVE);
-  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Con dto. máx.: nuestro PVP con el descuento máximo al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP. Precio final: el de su web con el cupón que aplican en el carrito. Dto. total: lo que rebajan sobre su PVP contando el cupón. Diferencia: nuestro precio menos su precio final.", 277), M, y);
+  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP. Precio final: el de su web con el cupón que aplican en el carrito. Dto. total: lo que rebajan sobre su PVP contando el cupón. Diferencia: nuestro precio menos su precio final.", 277), M, y);
 
   // Lo que tienen ellos y nosotros no
   if (soloEllos.length > 0) {

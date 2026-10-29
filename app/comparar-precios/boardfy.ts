@@ -1,5 +1,5 @@
-// Descuento máximo por marca sacado de las reglas de Boardfy (29/10/2026), regla «Soy Más Caro» (solo las activas):
-// «Limite 0.90 PVR» = el precio no baja del 90 % del PVP = 10 % de descuento máximo.
+// Descuento autorizado por marca sacado de las reglas de Boardfy (29/10/2026), regla «Soy Más Caro» (solo las activas):
+// «Limite 0.90 PVR» = el precio no baja del 90 % del PVP = 10 % de descuento autorizado.
 // Los packs, outlet y descontinuados tienen reglas propias en Boardfy y no están aquí.
 // Es el valor por defecto: en la app se puede cambiar marca a marca.
 const LIMITES: Record<string, number> = {
@@ -17,7 +17,7 @@ const LIMITES: Record<string, number> = {
 };
 
 // Marcas cuya regla «Soy Más Caro» está desactivada en Boardfy (comprobado el 29/10/2026):
-// Boardfy no les cambia el precio, así que no hay descuento máximo que aplicar.
+// Boardfy no les cambia el precio, así que no hay descuento autorizado que aplicar.
 const INACTIVAS = new Set([
   "advanced nutrition", "aroms nature", "atache", "bruno vassari", "byoode", "casmara", "conceptikal",
   "eberling", "endor", "germaine de capuccini", "gernetic", "massada", "medik8", "mesoestetic",
@@ -28,7 +28,7 @@ function normalizar(s: string): string {
   return s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-// Descuento máximo (en %) de Boardfy para una marca, o null si no tiene límite
+// Descuento autorizado (en %) de Boardfy para una marca, o null si no tiene límite
 export function descuentoBoardfy(marca: string): number | null {
   const n = normalizar(marca);
   if (reglaBoardfyInactiva(marca)) return null;

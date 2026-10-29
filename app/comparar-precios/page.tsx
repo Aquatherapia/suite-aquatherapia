@@ -54,7 +54,7 @@ function aplicarCupon(r: ResultadoMarca, cupon: CuponExcel): ResultadoMarca {
   };
 }
 
-// Nuestro precio mínimo: PVP menos el descuento máximo de la marca
+// Nuestro precio mínimo: PVP menos el descuento autorizado de la marca
 function precioMinimo(c: Comparacion, descuento: number | null): number | null {
   if (descuento == null) return null;
   return Math.round((c.miPvp ?? c.miPrecio) * (1 - descuento / 100) * 100) / 100;
@@ -71,7 +71,7 @@ function nombreDesdeUrl(url: string) {
 }
 type Marca = { nombre: string; slug: string; miToken: string; descuentoMax?: number | null };
 
-// Descuento máximo de la marca: el puesto a mano en la app o, si no, el de Boardfy
+// Descuento autorizado de la marca: el puesto a mano en la app o, si no, el de Boardfy
 function descuentoDe(m?: Marca): { pct: number | null; deBoardfy: boolean } {
   if (!m) return { pct: null, deBoardfy: false };
   if (m.descuentoMax != null) return { pct: m.descuentoMax, deBoardfy: false };
@@ -198,7 +198,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
-            <th>PVP</th><th>{descuento != null ? `Con dto. máx. (−${pct})` : "Con dto. máx."}</th><th>Precio final</th><th>Dto.</th>
+            <th>PVP</th><th className="cp-tip" data-tip="Nuestro PVP con el descuento autorizado de la marca: el de la regla de Boardfy, o el puesto a mano junto al nombre de la marca">{descuento != null ? `Con dto. autorizado (−${pct})` : "Con dto. autorizado"}</th><th>Precio final</th><th>Dto.</th>
             <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th>{conCupon && <th className={"cp-h-ellos" + (cupon?.condiciones ? " cp-tip" : "")} data-tip={cupon?.condiciones}>{conCupon}</th>}<th className="cp-h-ellos">Dto. total</th>
             <th>Diferencia</th><th>Más barato</th><th className="cp-izq">¿Podemos igualar?</th>
           </tr>
@@ -215,11 +215,11 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
-                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. máx. ni se compara el PVP." : k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. autorizado ni se compara el PVP." : k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>
                   {eur(k.pvp)}{k.revisarPvp && <span className="cp-revisar-pvp">(revisar precio)</span>}
                 </Celda>
                 <td className="cp-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
-                <Celda className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. máx. (${eur(k.limite)}).` : undefined}>{eur(f.miPrecio)}</Celda>
+                <Celda className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. autorizado (${eur(k.limite)}).` : undefined}>{eur(f.miPrecio)}</Celda>
                 <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
                 <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
@@ -356,8 +356,8 @@ function MarcaBloque({
             </span>
           )}
           {!r.revisadoEn && <span className="cp-revisado">Sin revisar todavía</span>}
-          <label className="cp-dto" title="Descuento máximo sobre el PVP. Vacío = el de la regla de Boardfy" onClick={e => e.stopPropagation()}>
-            Dto. máx.
+          <label className="cp-dto" title="Descuento autorizado sobre el PVP. Vacío = el de la regla de Boardfy" onClick={e => e.stopPropagation()}>
+            Dto. autorizado
             <input
               key={`${marca.slug}-${marca.descuentoMax ?? "b"}`}
               className="cp-dto-input"
@@ -368,7 +368,7 @@ function MarcaBloque({
               onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
             />
             %{deBoardfy && descuento != null && <span className="cp-dto-fuente">Boardfy</span>}
-            {deBoardfy && descuento == null && reglaBoardfyInactiva(marca.nombre) && <span className="cp-dto-fuente cp-dto-inactiva" title="La regla «Soy Más Caro» de esta marca está desactivada en Boardfy: no hay descuento máximo. Puedes poner uno a mano.">Boardfy: regla desactivada</span>}
+            {deBoardfy && descuento == null && reglaBoardfyInactiva(marca.nombre) && <span className="cp-dto-fuente cp-dto-inactiva" title="La regla «Soy Más Caro» de esta marca está desactivada en Boardfy: no hay descuento autorizado. Puedes poner uno a mano.">Boardfy: regla desactivada</span>}
             {descuento == null && <span className="cp-dto-fuente cp-suave-txt">sin límite</span>}
           </label>
         </span>
@@ -377,7 +377,7 @@ function MarcaBloque({
             <span className="vp-pill vp-pill-nuevo">{masCaro.length} caro{masCaro.length !== 1 ? "s" : ""}</span>
           )}
           {conBajoMinimo.length > 0 && (
-            <span className="vp-pill cp-pill-minimo" title={`Cosméticos24h vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento máximo`}>{conBajoMinimo.length} más allá de nuestro dto. máx.</span>
+            <span className="vp-pill cp-pill-minimo" title={`Cosméticos24h vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento autorizado`}>{conBajoMinimo.length} más allá de nuestro dto. autorizado</span>
           )}
           {paraDesactivar > 0 && <span className="vp-pill cp-pill-desactivar" title="Descatalogados sin unidades: conviene desactivar la ficha">{paraDesactivar} para desactivar</span>}
           {conPvpDistinto.length > 0 && (
