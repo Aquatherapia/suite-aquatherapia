@@ -221,7 +221,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const CAB = 5;
   const titulos: Record<typeof COLS[number], string> = {
     ean: "EAN", producto: "PRODUCTO", pvp: "PVP", limite: descuento != null ? `CON DTO. AUTORIZADO (−${pct})` : "CON DTO. AUTORIZADO", precio: "PRECIO FINAL", dto: "DTO.",
-    suPvp: "PVP", suWeb: "PRECIO WEB", suFinal: cuponTexto, suDto: "DTO. TOTAL", diff: "DIFERENCIA", barato: "MÁS BARATO", igualar: "¿PODEMOS IGUALAR?", ficha: "COSMÉTICOS24H",
+    suPvp: "PVP", suWeb: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", suFinal: cuponTexto, suDto: "DTO. TOTAL", diff: "DIFERENCIA", barato: "MÁS BARATO", igualar: "¿PODEMOS IGUALAR?", ficha: "COSMÉTICOS24H",
   };
   filaCabecera(ws, CAB, COLS.map(k => titulos[k]));
   // La cabecera de su grupo, en su rosa
@@ -324,7 +324,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
     t.font = fuente({ size: 9, color: { argb: color } });
   });
   const nota = ws.getCell(`B${ley + leyenda.length}`);
-  nota.value = "PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP. El producto enlaza a nuestra ficha y «Ver ficha», a la suya. " +
+  nota.value = "PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio con dto.: el de su web, con su descuento sobre el PVP. El producto enlaza a nuestra ficha y «Ver ficha», a la suya. " +
     (hayCupon ? "Precio final: el de su web con el cupón que aplican en el carrito. " : "") +
     "Dto. total: lo que rebajan sobre su PVP. Diferencia: nuestro precio menos su precio final. Las celdas con un triángulo rojo llevan una nota con la explicación.";
   nota.font = fuente({ size: 9, italic: true, color: { argb: TEXTO_SUAVE } });
@@ -340,7 +340,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       `Solo en Cosméticos24h · ${marca}`,
       `Productos que venden ellos y no tienen nuestro mismo EAN · ${fechaCorta(fecha)}`,
       `${soloEllos.length} productos`);
-    filaCabecera(ws2, 5, ["EAN", "PRODUCTO", "PVP", "PRECIO WEB", ...(hayCupon ? [cuponTexto] : []), "DTO. TOTAL"]);
+    filaCabecera(ws2, 5, ["EAN", "PRODUCTO", "PVP", hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", ...(hayCupon ? [cuponTexto] : []), "DTO. TOTAL"]);
     for (let c = 1; c <= cols2; c++) ws2.getRow(5).getCell(c).fill = relleno(c <= 2 ? AZUL : ROSA);
     if (hayCupon && cupon!.condiciones) ws2.getRow(5).getCell(5).note = cupon!.condiciones;
     soloEllos.forEach((s, idx) => {

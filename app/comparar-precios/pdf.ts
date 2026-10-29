@@ -103,7 +103,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       ],
       [
         cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. AUTORIZADO (-${dto})` : "CON DTO. AUTORIZADO"), cab("PRECIO FINAL"), cab("DTO."),
-        cab("PVP", true), cab("PRECIO WEB", true),
+        cab("PVP", true), cab(hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", true),
         ...(hayCupon ? [cab(`PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""}${cupon!.hasta ? `, HASTA ${cupon!.hasta.slice(8, 10)}/${cupon!.hasta.slice(5, 7)}` : ""})`, true)] : []),
         cab("DTO. TOTAL", true),
         cab("DIFERENCIA"), cab("MÁS BARATO"), cab("¿PODEMOS IGUALAR?"),
@@ -164,7 +164,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     y += 5.5;
   }
   doc.setFont("helvetica", "italic"); doc.setTextColor(...TEXTO_SUAVE);
-  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP. Precio final: el de su web con el cupón que aplican en el carrito. Dto. total: lo que rebajan sobre su PVP contando el cupón. Diferencia: nuestro precio menos su precio final.", 277), M, y);
+  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio con dto.: el de su web, con su descuento sobre el PVP. Precio final: el de su web con el cupón que aplican en el carrito. Dto. total: lo que rebajan sobre su PVP contando el cupón. Diferencia: nuestro precio menos su precio final.", 277), M, y);
 
   // Lo que tienen ellos y nosotros no
   if (soloEllos.length > 0) {
@@ -179,7 +179,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       theme: "plain",
       styles: { font: "helvetica", fontSize: 8, textColor: TEXTO, cellPadding: 1.8 },
       headStyles: { textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7, halign: "center", valign: "middle" },
-      head: [[cab("EAN"), cab("PRODUCTO"), cab("PVP", true), cab("PRECIO WEB", true), ...(hayCupon ? [cab(`PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %)`, true)] : []), cab("DTO. TOTAL", true)]],
+      head: [[cab("EAN"), cab("PRODUCTO"), cab("PVP", true), cab(hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", true), ...(hayCupon ? [cab(`PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %)`, true)] : []), cab("DTO. TOTAL", true)]],
       body: soloEllos.map(s => {
         const k = filaSoloEllos(s, cupon);
         return [s.ean ?? "", (s.esPack ? "PACK · " : "") + s.titulo, eur(k.pvp), k.dtoWeb > 0.0005 ? `${eur(k.web)}\n-${pct(k.dtoWeb)}` : eur(k.web), ...(hayCupon ? [eur(k.final)] : []), pct(k.dto)];
