@@ -1481,11 +1481,17 @@ button:disabled {
 .cp-informe .cp-informe-grupos th.cp-g-nos { background: #e8f1f9; color: #1270b6; }
 .cp-informe .cp-informe-grupos th.cp-g-ellos { background: #fbeeec; color: #b5655f; }
 .cp-informe td { padding: 7px 5px; border-bottom: 1px solid #e5e7eb; text-align: right; white-space: nowrap; }
-.cp-informe tbody tr:nth-child(even) td { background: #f8fafc; }
+/* Bloques de columnas: nosotros (azul), Cosméticos24h (rosa) y comparación (gris); la cebra oscurece un poco cada fila par */
+.cp-informe col.cp-col-nos { background: #eef5fc; }
+.cp-informe col.cp-col-ellos { background: #fdf0ee; }
+.cp-informe col.cp-col-fin { background: #f6f7f9; }
+.cp-informe tbody tr:nth-child(even) td { background-image: linear-gradient(rgba(15, 23, 42, 0.035), rgba(15, 23, 42, 0.035)); }
+.cp-informe th.cp-h-fin { background: #4b5563; }
+.cp-informe .cp-informe-grupos th.cp-g-fin { background: #eceef1; color: #4b5563; }
 .cp-informe .cp-izq { text-align: left; }
 .cp-informe .cp-centro { text-align: center; }
 .cp-informe td.cp-izq:nth-child(2) { white-space: normal; min-width: 240px; }
-.cp-informe td.cp-izq:nth-child(13) { white-space: normal; min-width: 150px; }
+.cp-informe td.cp-izq.cp-pequena:last-child { white-space: normal; min-width: 150px; }
 .cp-informe .cp-prod { color: #1f2933; text-decoration: underline; text-decoration-color: #c7d2de; }
 .cp-informe .cp-suave { color: #6b7280; }
 .cp-informe .cp-fuerte { font-weight: 700; }
@@ -1551,7 +1557,7 @@ button:disabled {
 /* Cabecera fija: cada tabla tiene su propio scroll (alto de la pantalla) y su cabecera se queda arriba,
    así al pasar a otra marca se ve la cabecera de esa marca */
 
-.cp-informe .cp-informe-grupos th:not(.cp-g-nos):not(.cp-g-ellos) { background: #fff; }
+.cp-informe .cp-informe-grupos th:not(.cp-g-nos):not(.cp-g-ellos):not(.cp-g-fin) { background: #fff; }
 .cp-cupon-directo { display: block; flex-basis: 100%; margin-top: 4px; font-size: 11px; font-weight: 600; color: #067647; text-transform: none; letter-spacing: 0; }
 .cp-cupon-directo.cp-cupon-codigo { color: #b45309; }
 
@@ -1595,3 +1601,7 @@ button:disabled {
 .cp-ean-aviso.cp-aviso-rojo ul { margin: 4px 0 0 18px; padding: 0; }
 .cp-ean-aviso.cp-aviso-rojo a { color: #b42318; }
 .cp-informe .cp-ambar-texto { color: #b45309; }
+
+/* Botón «Para la marca» con su menú PDF / Excel */
+.cp-para-marca { position: relative; display: inline-flex; }
+.cp-para-marca-menu { position: absolute; top: 100%; right: 0; z-index: 5; display: flex; gap: 4px; margin-top: 4px; padding: 4px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12); }

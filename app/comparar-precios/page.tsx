@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { calcularFila, esPackFila, explicaDtoMaxLarga, explicaPvp, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
+import { calcularFila, esPackFila, explicaPvp, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
 import { construirPdf, nombrePdf } from "./pdf";
+import { construirExcelMarca, construirPdfMarca, filasParaMarca, nombreMarcaExcel, nombreMarcaPdf } from "./informe-marca";
 import { descuentoBoardfy, reglaBoardfyInactiva } from "./boardfy";
 
 type Comparacion = {
@@ -54,7 +55,7 @@ function aplicarCupon(r: ResultadoMarca, cupon: CuponExcel): ResultadoMarca {
   };
 }
 
-// Nuestro precio mínimo: PVP menos el descuento máximo de la marca
+// Nuestro precio mínimo: PVP menos el descuento autorizado de la marca
 function precioMinimo(c: Comparacion, descuento: number | null): number | null {
   if (descuento == null) return null;
   return Math.round((c.miPvp ?? c.miPrecio) * (1 - descuento / 100) * 100) / 100;
@@ -71,7 +72,7 @@ function nombreDesdeUrl(url: string) {
 }
 type Marca = { nombre: string; slug: string; miToken: string; descuentoMax?: number | null };
 
-// Descuento máximo de la marca: el puesto a mano en la app o, si no, el de Boardfy
+// Descuento autorizado de la marca: el puesto a mano en la app o, si no, el de Boardfy
 function descuentoDe(m?: Marca): { pct: number | null; deBoardfy: boolean } {
   if (!m) return { pct: null, deBoardfy: false };
   if (m.descuentoMax != null) return { pct: m.descuentoMax, deBoardfy: false };
@@ -154,6 +155,40 @@ async function descargarPdf(r: ResultadoMarca, descuento: number | null, cupon: 
   bajar(await construirPdf(r.marca, r.comparaciones, r.soloEllos, descuento, cupon), nombrePdf(r.marca));
 }
 
+// Informe para enviar a la marca: lo que Cosméticos24h vende por debajo del dto. autorizado
+async function descargarParaMarca(r: ResultadoMarca, descuento: number, cupon: CuponExcel, formato: "pdf" | "excel") {
+  if (formato === "pdf") bajar(await construirPdfMarca(r.marca, r.comparaciones, descuento, cupon), nombreMarcaPdf(r.marca));
+  else bajar(new Blob([await construirExcelMarca(r.marca, r.comparaciones, descuento, cupon)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nombreMarcaExcel(r.marca));
+}
+
+// Botón «Para la marca»: elige PDF o Excel. Desactivado si no hay descuento autorizado o nada por debajo
+function ParaMarca({ r, descuento, cupon }: { r: ResultadoMarca; descuento: number | null; cupon: CuponExcel }) {
+  const [abierto, setAbierto] = useState(false);
+  const n = filasParaMarca(r.comparaciones, descuento).length;
+  const bajar = (formato: "pdf" | "excel") => {
+    setAbierto(false);
+    descargarParaMarca(r, descuento!, cupon, formato).catch(err => alert("No se pudo crear el informe: " + err));
+  };
+  return (
+    <span className="cp-para-marca" onClick={e => e.stopPropagation()}>
+      <button
+        className="regen-btn"
+        disabled={n === 0}
+        onClick={() => setAbierto(a => !a)}
+        title={descuento == null ? "Esta marca no tiene descuento autorizado" : n === 0 ? "Cosméticos24h no vende nada por debajo del descuento autorizado" : `Informe para enviar a la marca: ${n} producto${n !== 1 ? "s" : ""} de Cosméticos24h por debajo del descuento autorizado`}
+      >
+        Para la marca{n > 0 ? ` (${n})` : ""}
+      </button>
+      {abierto && (
+        <span className="cp-para-marca-menu">
+          <button className="regen-btn" onClick={() => bajar("pdf")}>PDF</button>
+          <button className="regen-btn" onClick={() => bajar("excel")}>Excel</button>
+        </span>
+      )}
+    </span>
+  );
+}
+
 // Celda con explicación al pasar por encima (en vez de texto debajo, para que la tabla no crezca)
 function Celda({ className, tip, children }: { className?: string; tip?: string; children: React.ReactNode }) {
   return <td className={(className ?? "") + (tip ? " cp-tip" : "")} data-tip={tip}>{children}</td>;
@@ -189,18 +224,25 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
   return (
     <div className="cp-informe-scroll">
       <table className="cp-informe">
+        {/* Fondo por bloque: nosotros en azul, Cosméticos24h en rosa y la comparación en gris */}
+        <colgroup>
+          <col span={2} />
+          <col span={3} className="cp-col-nos" />
+          <col span={conCupon ? 4 : 3} className="cp-col-ellos" />
+          <col span={3} className="cp-col-fin" />
+        </colgroup>
         <thead>
           <tr className="cp-informe-grupos">
             <th colSpan={2} />
-            <th colSpan={4} className="cp-g-nos">Nosotros</th>
+            <th colSpan={3} className="cp-g-nos">Nosotros</th>
             <th colSpan={conCupon ? 4 : 3} className="cp-g-ellos">Cosméticos24h</th>
-            <th colSpan={3} />
+            <th colSpan={3} className="cp-g-fin">Comparación</th>
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
-            <th>PVP</th><th>{descuento != null ? `Con dto. máx. (−${pct})` : "Con dto. máx."}</th><th>Precio final</th><th>Dto.</th>
-            <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th>{conCupon && <th className={"cp-h-ellos" + (cupon?.condiciones ? " cp-tip" : "")} data-tip={cupon?.condiciones}>{conCupon}</th>}<th className="cp-h-ellos">Dto. total</th>
-            <th>Diferencia</th><th>Más barato</th><th className="cp-izq">¿Podemos igualar?</th>
+            <th>PVP</th><th className="cp-tip" data-tip="Nuestro PVP con el descuento autorizado de la marca: el de la regla de Boardfy, o el puesto a mano junto al nombre de la marca">{descuento != null ? `Con dto. autorizado (−${pct})` : "Con dto. autorizado"}</th><th>Precio final</th>
+            <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">{conCupon ? "Precio con dto." : "Precio final con dto."}</th>{conCupon && <th className={"cp-h-ellos" + (cupon?.condiciones ? " cp-tip" : "")} data-tip={cupon?.condiciones}>{conCupon}</th>}<th className="cp-h-ellos">Dto. total</th>
+            <th className="cp-h-fin">Diferencia</th><th className="cp-h-fin">Más barato</th><th className="cp-izq cp-h-fin">¿Podemos igualar?</th>
           </tr>
         </thead>
         <tbody>
@@ -215,17 +257,18 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
-                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. máx. ni se compara el PVP." : k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. autorizado ni se compara el PVP." : k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>
                   {eur(k.pvp)}{k.revisarPvp && <span className="cp-revisar-pvp">(revisar precio)</span>}
                 </Celda>
                 <td className="cp-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
-                <Celda className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. máx. (${eur(k.limite)}).` : undefined}>{eur(f.miPrecio)}</Celda>
-                <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
+                <Celda className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. autorizado (${eur(k.limite)}).` : undefined}>
+                  {eur(f.miPrecio)}{k.miDto > 0.0005 && <small className={"cp-dto-celda cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>−{pctW(k.miDto)}</small>}
+                </Celda>
                 <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
                 {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}</td>}
                 <td className="cp-fuerte cp-pequena cp-rosa">{pctW(k.suDto)}</td>
-                <Celda className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")} tip={explicaDtoMaxLarga(f, k, descuento) ?? undefined}>
+                <Celda className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>
                   {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
                 </Celda>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
@@ -248,7 +291,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                     <button className="cp-ocultar-fila" title="Ocultar este producto de la lista" onClick={() => onOcultar(x)}>ocultar</button>
                   </span>
                 </td>
-                {vacias(4)}
+                {vacias(3)}
                 <td className="cp-rosa">{eur(pvp)}</td>
                 <td className="cp-rosa">{eur(x.precio)}{dtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(dtoWeb)}</small>}</td>
                 {conCupon && <td className="cp-fuerte cp-rosa">{eur(final)}</td>}
@@ -277,8 +320,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 </td>
                 <td>{eur(pvp)}</td>
                 <td className="cp-suave">{limite != null ? eur(limite) : "—"}</td>
-                <td className="cp-fuerte">{eur(m.precio)}</td>
-                <td className="cp-dto-azul">{pctW(pvp > 0 ? 1 - m.precio / pvp : 0)}</td>
+                <td className="cp-fuerte">{eur(m.precio)}{pvp > 0 && 1 - m.precio / pvp > 0.0005 && <small className="cp-dto-celda cp-dto-azul">−{pctW(1 - m.precio / pvp)}</small>}</td>
                 {vacias(conCupon ? 4 : 3)}
                 {vacias(2)}
                 <td className="cp-izq cp-pequena cp-suave">{m.ean ? "Solo lo tenemos nosotros" : ""}</td>
@@ -356,8 +398,8 @@ function MarcaBloque({
             </span>
           )}
           {!r.revisadoEn && <span className="cp-revisado">Sin revisar todavía</span>}
-          <label className="cp-dto" title="Descuento máximo sobre el PVP. Vacío = el de la regla de Boardfy" onClick={e => e.stopPropagation()}>
-            Dto. máx.
+          <label className="cp-dto" title="Descuento autorizado sobre el PVP. Vacío = el de la regla de Boardfy" onClick={e => e.stopPropagation()}>
+            Dto. autorizado
             <input
               key={`${marca.slug}-${marca.descuentoMax ?? "b"}`}
               className="cp-dto-input"
@@ -368,7 +410,7 @@ function MarcaBloque({
               onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
             />
             %{deBoardfy && descuento != null && <span className="cp-dto-fuente">Boardfy</span>}
-            {deBoardfy && descuento == null && reglaBoardfyInactiva(marca.nombre) && <span className="cp-dto-fuente cp-dto-inactiva" title="La regla «Soy Más Caro» de esta marca está desactivada en Boardfy: no hay descuento máximo. Puedes poner uno a mano.">Boardfy: regla desactivada</span>}
+            {deBoardfy && descuento == null && reglaBoardfyInactiva(marca.nombre) && <span className="cp-dto-fuente cp-dto-inactiva" title="La regla «Soy Más Caro» de esta marca está desactivada en Boardfy: no hay descuento autorizado. Puedes poner uno a mano.">Boardfy: regla desactivada</span>}
             {descuento == null && <span className="cp-dto-fuente cp-suave-txt">sin límite</span>}
           </label>
         </span>
@@ -377,7 +419,7 @@ function MarcaBloque({
             <span className="vp-pill vp-pill-nuevo">{masCaro.length} caro{masCaro.length !== 1 ? "s" : ""}</span>
           )}
           {conBajoMinimo.length > 0 && (
-            <span className="vp-pill cp-pill-minimo" title={`Cosméticos24h vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento máximo`}>{conBajoMinimo.length} más allá de nuestro dto. máx.</span>
+            <span className="vp-pill cp-pill-minimo" title={`Cosméticos24h vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento autorizado`}>{conBajoMinimo.length} más allá de nuestro dto. autorizado</span>
           )}
           {paraDesactivar > 0 && <span className="vp-pill cp-pill-desactivar" title="Descatalogados sin unidades: conviene desactivar la ficha">{paraDesactivar} para desactivar</span>}
           {conPvpDistinto.length > 0 && (
@@ -410,6 +452,7 @@ function MarcaBloque({
           >
             Excel
           </button>
+          <ParaMarca r={r} descuento={descuento} cupon={cupon} />
           {confirmarBorrar
             ? <button className="vp-delete-btn cp-borrar-confirmar" onClick={e => { e.stopPropagation(); onBorrar(); }} onBlur={() => setConfirmarBorrar(false)} autoFocus>¿Quitar marca?</button>
             : <button className="vp-delete-btn" title="Quitar esta marca" onClick={e => { e.stopPropagation(); setConfirmarBorrar(true); }}>×</button>}
