@@ -374,35 +374,32 @@ Cruza **tus precios** (latiendadecosmeticos.com) con los de **Cosméticos24h**, 
 - **Tu web**: lee tu `sitemap.xml`, filtra los productos cuyo slug contiene el nombre de la marca, y de cada ficha extrae el precio del **JSON-LD (schema.org)**. Tu web es a medida (nginx+PHP, sin Cloudflare) y expone JSON-LD en cada producto → scraping fiable.
 - **Cosméticos24h**: API pública de Shopify `/collections/{slug}/products.json` (igual que el Agente 2).
 
-### Emparejamiento por NOMBRE (limitación clave)
-Cosméticos24h **no publica el EAN** en su API (`barcode: null`) y su SKU es interno suyo → **no hay código común**. Se empareja por **marca + nombre + ml** (similitud de tokens, Jaccard, umbral 0.34). Consecuencias:
-- No es 100% perfecto: algún producto puede quedar sin emparejar o con match de baja confianza (se marca con `≈` para que lo revises).
-- **Packs**: se emparejan solo **pack con pack** (nunca un pack suyo contra un producto suelto tuyo). Los que tenéis ambos se comparan (con etiqueta "pack"); los que solo tienen ellos se listan en su propia sección "Packs/estuches que tienen ellos y tú no". Aun así, sus packs-combo (dos productos juntos) pueden cruzarse con un pack tuyo más simple → si pasa, se oculta con la ×.
-- En la prueba con Atache: 95 productos tuyos, 120 suyos → ~79 comparados (incl. algún pack) + 17 novedades sueltas + 23 packs solo suyos.
+### Emparejamiento solo por EAN (oct 2026)
+Solo se comparan productos con el **mismo EAN en las dos webs**. Así no hay equívocos: ya no se empareja por nombre ni hay enlaces manuales.
+- **Tu EAN**: el `gtin13` del JSON-LD (o del microdato) de cada ficha, leído en la misma petición que el precio.
+- **Su EAN**: el listado de la colección de Shopify no trae el `barcode`, pero `/products/{handle}.json` sí, **uno por variante** (tono/formato). Se pide producto a producto (4 a la vez; se para a los 45 s o si Shopify responde 429) y se guarda en Upstash (`eanVariantes`), así cada producto solo se lee una vez.
+- Se usa el **precio de la variante que tiene ese EAN** (en maquillaje cada tono lleva su EAN y su precio) y el nombre lleva el tono (« · 02 - Natural»).
+- Los códigos de menos de 7 cifras no cuentan como EAN (en algunos packs ponen su código interno). Se comparan sin ceros a la izquierda.
+- Lo que no casa por EAN va a «Tienen ellos y tú no» (suyos) o a «Tus productos sin el mismo EAN» (tuyos; avisa si tu ficha no tiene EAN).
+- La primera revisión de una marca tarda más. Si no da tiempo a leer todos sus EAN, sale un aviso con cuántos faltan y se completan en la siguiente revisión.
+- Los enlaces manuales de antes siguen guardados en Upstash (`mapeos`) pero ya no se usan.
+
+### PVP de las dos webs
+Debajo de cada precio de venta sale el **PVP sin descuento**: el tuyo es `unit_price_original` de la ficha (oculto en la página) y el suyo el `compare_at_price` de Shopify (o el precio de venta si no hay oferta). Si no coinciden, la fila lleva **«PVP ≠»** (puede que una tarifa no esté actualizada) y la cabecera de la marca cuenta cuántas hay. En el PDF salen como dos columnas.
 
 ### Ojo con las ofertas del competidor
 El precio que se compara es el **precio de venta actual de cada uno**. Si Cosméticos24h tiene una marca en oferta (p. ej. Atache con −20%), muchos productos saldrán como "tú más caro" simplemente porque ellos están rebajados en ese momento. Es correcto, pero tenlo en cuenta al leerlo.
 
-### Enlazar productos a mano (corrige los fallos de emparejamiento)
-Como el cruce es por nombre, a veces enlaza mal o no encuentra el equivalente. Se puede **forzar el enlace correcto** y queda guardado (tiene prioridad sobre el automático y sobrevive a las revisiones):
-- **Fila mal emparejada** → botón **✎** en la fila: se abren **DOS casillas** con las URLs actuales ya rellenas — **"Tú"** (latiendadecosmeticos.com) y **"C24h"** (cosmeticos24h.com). Puedes corregir **una o las dos**: sirve tanto si el producto mal emparejado es el suyo como si **el equivocado es el tuyo**. La fila queda con etiqueta verde **"✓ manual"**. Desde el mismo editor se puede **"Quitar enlace manual"** (vuelve al automático).
-  - Si cambias tu URL por una ficha que no estaba en los resultados, la app **lee el precio de esa ficha** de tu web al momento.
-  - Si cambias **las dos** a la vez, se envían también las URLs anteriores (`miUrlPrevio`/`suUrlPrevio`) para borrar la fila vieja y que no quede duplicada.
-  - Valida cada casilla: la de "Tú" debe ser de `latiendadecosmeticos.com` y la de "C24h" debe ser `cosmeticos24h.com/products/…`; si no, avisa con un error claro.
-- **Producto tuyo que no encuentra** → sección desplegable **"Tus productos sin emparejar (N)"**: lista tus productos de esa marca que no cruzaron con ninguno suyo; en cada uno pegas su **URL de C24h** para enlazarlos.
-- **En "Tienen ellos y tú no" y en "Packs que tienen ellos y tú no"** → cada fila tiene botón **✎** ("Ya lo tengo"): como aquí el ancla es el producto SUYO, pegas la **URL de TU web** (latiendadecosmeticos.com) y se enlazan. Útil porque muchos de esos "no los tienes" en realidad sí los tienes con otro nombre. Valida que la URL sea de latiendadecosmeticos.com.
-- Al enlazar, la app lee ese producto de la API de C24h y crea la comparación **al instante** (sin re-escanear toda tu web). Se guarda en Upstash (`mapeos`, por marca). Si pegas una URL que no es de C24h o de otra marca, avisa con un error claro.
-
 ### Excluir productos a mano
-Cada fila (tanto en la comparación como en "tienen ellos y tú no") tiene un botón **×** para **ocultarla**. Sirve para quitar los matches erróneos (cuando por nombre cruza dos productos distintos). Lo ocultado:
+Cada fila (tanto en la comparación como en "tienen ellos y tú no") tiene un botón **×** para **ocultarla**. Sirve para quitar productos que no interesan (o un EAN mal puesto en una de las dos webs). Lo ocultado:
 - Desaparece al instante y **se mantiene oculto aunque vuelvas a revisar**.
 - Se guarda en Upstash (`excluidos`, por marca), con **precios y tipo**: si venía de la comparación guarda tu precio, el de C24h y la diferencia; si venía de "tienen ellos y tú no" lo marca como tal.
 - En la lista "Ocultos (N)" cada producto muestra esos precios (o la etiqueta "Tienen ellos y tú no") y un **desplegable "Oculto por:"** para elegir el motivo (Compara productos diferentes · Ya lo tengo, no lo detecta · No me interesa · Otro motivo · Sin especificar). El motivo se guarda.
 - Se puede **restaurar** desde esa misma lista (reaparece en la siguiente revisión).
-- Los ocultos guardados **antes** de esta función no tenían precios; al **revisar** la marca, la app los rellena automáticamente (busca el producto en Cosméticos24h y lo reempareja con tu web).
+- Los ocultos guardados **antes** de esta función no tenían precios; al **revisar** la marca, la app los rellena automáticamente (busca el producto en Cosméticos24h y lo cruza con tu web por EAN).
 
 ### PDF por marca
-Cada marca tiene un botón **PDF** (en su cabecera) que genera un documento descargable (vía impresión del navegador, gratis) con: resumen (nº comparados y en cuántos vas más caro), la **tabla de comparación** (tú vs. C24h, diferencia en rojo/verde, con etiquetas "manual"/"pack"), y las listas de "tienen ellos y tú no" y de packs. Ordenado por diferencia (lo más caro primero). **Enlaces clicables** (jul 2026): en la tabla de comparación, el precio de la columna "Tú" enlaza a tu ficha y el de "Cosméticos24h" a la suya; en las listas "tienen ellos y tú no" y packs, el nombre del producto enlaza a su ficha en Cosméticos24h.
+Cada marca tiene un botón **PDF** (en su cabecera) que genera un documento descargable (vía impresión del navegador, gratis) con: resumen (nº comparados y en cuántos vas más caro), la **tabla de comparación** (tú vs. C24h, diferencia en rojo/verde, con etiquetas "EAN"/"pack"/"PVP distinto" y las columnas de PVP), y las listas de "tienen ellos y tú no" y de packs. Ordenado por diferencia (lo más caro primero). **Enlaces clicables** (jul 2026): en la tabla de comparación, el precio de la columna "Tú" enlaza a tu ficha y el de "Cosméticos24h" a la suya; en las listas "tienen ellos y tú no" y packs, el nombre del producto enlaza a su ficha en Cosméticos24h.
 
 ### Solo PVP (sin margen)
 Compara precio de venta contra precio de venta. El **coste de compra no es público** (vive en tu panel de admin), así que no hay margen/beneficio.
