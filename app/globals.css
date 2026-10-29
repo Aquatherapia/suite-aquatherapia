@@ -1528,6 +1528,7 @@ button:disabled {
   .cp-layout .left-col > * { grid-column: 1 !important; grid-row: auto !important; }
 }
 
+.cp-ean-copiable { user-select: all; cursor: text; }
 .cp-maxdto-tag { display: inline-block; margin: 0 6px 2px 0; padding: 1px 6px; border-radius: 4px; background: #f1ebfb; color: #6b3fb5; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
 .cp-descat-tag { display: inline-block; margin: 0 6px 2px 0; padding: 1px 6px; border-radius: 4px; background: #374151; color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
 .cp-ean-linea { display: block; font-size: 11px; color: var(--muted); font-weight: 400; user-select: all; cursor: text; }

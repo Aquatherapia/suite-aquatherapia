@@ -15,7 +15,7 @@ type Comparacion = {
   verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
 };
 type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean; ean?: string };
-type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean; sinEan?: boolean; ean?: string; descatalogado?: boolean };
+type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean; sinEan?: boolean; ean?: string; formato?: string; descatalogado?: boolean };
 type ResultadoMarca = {
   marca: string; slug: string; error?: string;
   comparaciones: Comparacion[]; soloEllos: SoloEllos[]; misSinEmparejar: MiSinEmparejar[];
@@ -367,7 +367,7 @@ function MarcaBloque({
                         <a href={m.url} target="_blank" rel="noreferrer" className="cp-oculto-nombre">
                           {m.esPack && <span className="cp-pack-tag">pack</span>}{m.descatalogado && <span className="cp-descat-tag">Descatalogado</span>}{m.nombre}
                         </a>
-                        <div className="cp-oculto-precios">Tu precio: <strong>{m.precio.toFixed(2)}€</strong>{m.ean ? <> · EAN {m.ean}</> : m.sinEan && <> · <span className="cp-sin-ean">tu ficha no tiene EAN</span></>}</div>
+                        <div className="cp-oculto-precios">Tu precio: <strong>{m.precio.toFixed(2)}€</strong>{m.ean ? <> · <span className="cp-ean-copiable">EAN {m.ean}</span></> : m.formato ? <> · <span className="cp-sin-ean">nuestra web no publica el EAN de este formato</span></> : m.sinEan && <> · <span className="cp-sin-ean">tu ficha no tiene EAN</span></>}</div>
                       </div>
                     </div>
                   ))}
