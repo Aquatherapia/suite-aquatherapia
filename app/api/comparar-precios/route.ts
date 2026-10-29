@@ -14,7 +14,7 @@ const MI_WEB = "https://www.latiendadecosmeticos.com";
 const SITEMAP = `${MI_WEB}/sitemap.xml`;
 
 // Palabras que indican pack/lote: se excluyen de la comparación de precios
-const EXCLUIR = ["pack", "set", "kit", "lote", "duo", "dúo", "trio", "trío", "estuche", "bundle", "caja", "cofre", "box", "programa", "rutina"];
+const EXCLUIR = ["pack", "set", "kit", "lote", "duo", "dúo", "trio", "trío", "estuche", "bundle", "caja", "cofre", "coffret", "box", "programa", "rutina"];
 
 type Marca = {
   nombre: string;
@@ -119,7 +119,15 @@ type Config = {
   cupon?: Cupon;
 };
 
-type Cupon = { pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string };
+// desde: primera vez que se vio este código en su web; hasta: fecha de fin, puesta a mano (su web no la publica)
+type Cupon = { pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string; desde?: string; hasta?: string };
+
+// Cupón recién detectado: conserva desde/hasta si es el mismo código que ya había
+function cuponDetectado(d: { pct: number; codigo?: string; directo: boolean } | null, antes?: Cupon): Cupon {
+  const ahora = new Date().toISOString();
+  const mismo = !!d && !!antes?.codigo && antes.codigo === d.codigo;
+  return { pct: d?.pct ?? null, codigo: d?.codigo, directo: d?.directo, detectadoEn: ahora, desde: d ? (mismo ? antes!.desde ?? ahora : ahora) : undefined, hasta: mismo ? antes!.hasta : undefined };
+}
 
 function configVacia(): Config {
   return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {}, nombres: {}, eanVariantes: {} };
@@ -475,19 +483,27 @@ export async function POST(req: NextRequest) {
   }
 
   // Cupón de carrito de Cosméticos24h puesto a mano (null = volver a detectarlo en su web)
+  if (body.action === "cupon-hasta") {
+    const { hasta } = body as { hasta: string | null };
+    if (hasta && !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) return NextResponse.json({ error: "Fecha no válida." }, { status: 400 });
+    config.cupon = { ...(config.cupon ?? { pct: null }), hasta: hasta || undefined };
+    await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
   if (body.action === "cupon") {
     const { pct } = body as { pct: number | null };
     if (pct == null) {
       try {
         const d = await detectarCupon();
-        config.cupon = { pct: d?.pct ?? null, codigo: d?.codigo, directo: d?.directo, detectadoEn: new Date().toISOString() };
+        config.cupon = cuponDetectado(d, config.cupon);
       } catch {
         config.cupon = { pct: null };
       }
     } else if (!(pct >= 0 && pct <= 50)) {
       return NextResponse.json({ error: "El cupón debe estar entre 0 y 50 %." }, { status: 400 });
     } else {
-      config.cupon = { pct: Math.round(pct * 10) / 10, codigo: config.cupon?.codigo, directo: config.cupon?.directo, manual: true };
+      config.cupon = { pct: Math.round(pct * 10) / 10, codigo: config.cupon?.codigo, directo: config.cupon?.directo, desde: config.cupon?.desde, hasta: config.cupon?.hasta, manual: true };
     }
     await guardarConfig(config);
     return NextResponse.json(config);
@@ -614,7 +630,7 @@ export async function POST(req: NextRequest) {
     if (!config.cupon?.manual) {
       try {
         const d = await detectarCupon();
-        config.cupon = { pct: d?.pct ?? null, codigo: d?.codigo, directo: d?.directo, detectadoEn: new Date().toISOString() };
+        config.cupon = cuponDetectado(d, config.cupon);
       } catch { /* si su portada no responde, se conserva el último */ }
     }
 
@@ -693,14 +709,19 @@ export async function POST(req: NextRequest) {
             continue;
           }
           const variantesUsadas = new Set<number>();
-          for (const { i, ean, mp } of matches) {
+          for (const { i, ean, mp: mpEan } of matches) {
+            // El EAN dice qué producto es; el tamaño de su variante, qué formato nuestro (la web solo publica
+            // un EAN por ficha y a veces es el de otro formato)
+            const tamSuyo = TAMANO.test(s.variantes[i]?.titulo ?? "") ? tamano(s.variantes[i].titulo) : null;
+            const mp = (mpEan.formato && tamSuyo && tamano(mpEan.formato) !== tamSuyo
+              && (formatosDe.get(mpEan.url) ?? []).find(h => !miUsados.has(h.clave) && tamano(h.formato ?? "") === tamSuyo)) || mpEan;
             if (miUsados.has(mp.clave)) continue;
             anadirFila(s, i, ean, mp);
             variantesUsadas.add(i);
           }
           for (const { mp } of matches) {
             for (const hermano of formatosDe.get(mp.url) ?? []) {
-              if (miUsados.has(hermano.clave) || hermano.ean) continue;
+              if (miUsados.has(hermano.clave)) continue;
               const j = s.variantes.findIndex((v, k) => !variantesUsadas.has(k) && tamano(v.titulo) === tamano(hermano.formato ?? ""));
               if (j < 0) continue;
               anadirFila(s, j, susEans(s.url)[j] ?? undefined, hermano);

@@ -62,6 +62,14 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     `${pvpDist} con PVP distinto`, M, 27);
 
   const cab = (t: string, ellos = false) => ({ content: t, styles: { fillColor: ellos ? ROSA : AZUL } });
+  const cuerpo: string[][] = orden.map((f, i) => {
+      const k = calc[i];
+      return [
+        f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : ""].filter(Boolean).join("\n"), eur(k.pvp) + (k.revisarPvp ? "\n(revisar precio)" : k.esPack ? "\nsuma de productos" : ""), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
+        eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
+        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}${explicaDtoMax(f, k, descuento) ? `\n${explicaDtoMax(f, k, descuento)!.replace(/−/g, "-")}` : ""}`, k.masBarato, k.igualar.replace(/−/g, "-"),
+      ];
+    });
   autoTable(doc, {
     startY: 31,
     margin: { left: M, right: M },
@@ -77,18 +85,11 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       ],
       [
         cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. MÁX. (-${dto})` : "CON DTO. MÁX."), cab("PRECIO FINAL"), cab("DTO."),
-        cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""})` : "PRECIO FINAL (sin cupón)", true), cab("DTO. TOTAL", true),
+        cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""}${cupon!.hasta ? `, HASTA ${cupon!.hasta.slice(8, 10)}/${cupon!.hasta.slice(5, 7)}` : ""})` : "PRECIO FINAL (sin cupón)", true), cab("DTO. TOTAL", true),
         cab("DIFERENCIA"), cab("MÁS BARATO"), cab("¿PODEMOS IGUALAR?"),
       ],
     ],
-    body: orden.map((f, i) => {
-      const k = calc[i];
-      return [
-        f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : ""].filter(Boolean).join("\n"), eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
-        eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
-        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}${explicaDtoMax(f, k, descuento) ? `\n${explicaDtoMax(f, k, descuento)!.replace(/−/g, "-")}` : ""}`, k.masBarato, k.igualar.replace(/−/g, "-"),
-      ];
-    }),
+    body: cuerpo,
     columnStyles: {
       0: { cellWidth: 18, halign: "left", textColor: TEXTO_SUAVE },
       1: { cellWidth: 64, halign: "left" },
@@ -114,10 +115,11 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     },
     didDrawCell: d => {
       if (d.section !== "body") return;
-      const f = orden[d.row.index];
-      // Enlaces: el producto lleva a nuestra ficha y el precio final a la suya
+      // Una fila partida entre dos páginas llega con índice -1: se busca por su contenido
+      const f = orden[d.row.index] ?? orden[cuerpo.indexOf(d.row.raw as string[])];
+      if (!f) return;
+      // Enlace: el producto lleva a nuestra ficha
       if (d.column.index === 1) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.miUrl });
-      if (d.column.index === 8) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.suUrl });
     },
   });
 
@@ -155,7 +157,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       body: soloEllos.map(s => [s.ean ?? "", s.titulo, eur(s.precio), s.esPack ? "Pack" : "Producto"]),
       columnStyles: { 0: { cellWidth: 28, halign: "left", textColor: TEXTO_SUAVE }, 1: { halign: "left" }, 2: { cellWidth: 25, halign: "right" }, 3: { cellWidth: 22, halign: "center", textColor: TEXTO_SUAVE } },
       didParseCell: d => { if (d.section === "body" && d.row.index % 2 === 1) d.cell.styles.fillColor = CEBRA; },
-      didDrawCell: d => { if (d.section === "body" && d.column.index === 1) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: soloEllos[d.row.index].url }); },
+      didDrawCell: d => { const s = soloEllos[d.row.index]; if (d.section === "body" && d.column.index === 1 && s) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: s.url }); },
     });
   }
 

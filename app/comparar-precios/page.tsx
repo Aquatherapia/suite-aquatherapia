@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { calcularFila, explicaDtoMax, type CuponExcel } from "./excel";
+import { calcularFila, explicaDtoMaxLarga, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
 import { construirPdf, nombrePdf } from "./pdf";
 import { descuentoBoardfy } from "./boardfy";
 
@@ -78,7 +78,7 @@ type Excluido = {
   tipo?: "comparacion" | "soloEllos";
   miPrecio?: number; suPrecio?: number; miUrl?: string; motivo?: string;
 };
-type Cupon = { pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string };
+type Cupon = { pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string; desde?: string; hasta?: string };
 type Config = { marcas: Marca[]; ultimaRevision: string | null; resultados: ResultadoMarca[]; excluidos: Record<string, Excluido[]>; cupon?: Cupon };
 
 const MOTIVOS = [
@@ -112,13 +112,26 @@ function fechaExacta(iso: string) {
 
 const MOSTRAR_INICIAL = 6;
 
-async function descargarPdf(r: ResultadoMarca, descuento: number | null, cupon: CuponExcel) {
-  const blob = await construirPdf(r.marca, r.comparaciones, r.soloEllos, descuento, cupon);
+async function descargarExcel(r: ResultadoMarca, descuento: number | null, cupon: CuponExcel) {
+  const buf = await construirExcel(r.marca, r.comparaciones, r.soloEllos, descuento, cupon);
+  bajar(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nombreArchivo(r.marca));
+}
+
+function bajar(blob: Blob, nombre: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = nombrePdf(r.marca);
+  a.href = url; a.download = nombre;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function descargarPdf(r: ResultadoMarca, descuento: number | null, cupon: CuponExcel) {
+  bajar(await construirPdf(r.marca, r.comparaciones, r.soloEllos, descuento, cupon), nombrePdf(r.marca));
+}
+
+// Celda con explicación al pasar por encima (en vez de texto debajo, para que la tabla no crezca)
+function Celda({ className, tip, children }: { className?: string; tip?: string; children: React.ReactNode }) {
+  return <td className={(className ?? "") + (tip ? " cp-tip" : "")} data-tip={tip}>{children}</td>;
 }
 
 // «Descatalogado (1 u)»; sin unidades, aviso para desactivar la ficha
@@ -247,18 +260,19 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
-                <td className={k.pvpDistinto ? "cp-ambar" : ""}>{eur(k.pvp)}</td>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. máx. ni se compara el PVP." : k.pvpDistinto ? `PVP distinto: nuestro ${eur(k.pvp)}, el suyo ${eur(k.suPvp)}. ¿Tarifa sin actualizar?` : undefined}>
+                  {eur(k.pvp)}{k.revisarPvp && <span className="cp-revisar-pvp">(revisar precio)</span>}
+                </Celda>
                 <td className="cp-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
-                <td className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")}>{eur(f.miPrecio)}</td>
+                <Celda className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. máx. (${eur(k.limite)}).` : undefined}>{eur(f.miPrecio)}</Celda>
                 <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
-                <td className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"}>{eur(k.suPvp)}</td>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? `PVP distinto: el suyo ${eur(k.suPvp)}, el nuestro ${eur(k.pvp)}.` : undefined}>{eur(k.suPvp)}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
-                <td className="cp-fuerte cp-rosa"><a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-precio-enlace" title="Ver su ficha">{eur(f.suPrecio)}</a></td>
+                <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}</td>
                 <td className="cp-fuerte cp-pequena cp-rosa">{pctW(k.suDto)}</td>
-                <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>
+                <Celda className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")} tip={explicaDtoMaxLarga(f, k, descuento) ?? undefined}>
                   {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
-                  {explicaDtoMax(f, k, descuento) && <span className="cp-dif-max">{explicaDtoMax(f, k, descuento)}</span>}
-                </td>
+                </Celda>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
                 <td className={"cp-izq cp-pequena " + (k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
               </tr>
@@ -376,10 +390,18 @@ function MarcaBloque({
           <button
             className="regen-btn"
             disabled={r.comparaciones.length === 0}
-            onClick={e => { e.stopPropagation(); descargarPdf(r, descuento, cupon); }}
+            onClick={e => { e.stopPropagation(); descargarPdf(r, descuento, cupon).catch(err => alert("No se pudo crear el PDF: " + err)); }}
             title="Descargar el informe de esta marca en PDF"
           >
             PDF
+          </button>
+          <button
+            className="regen-btn"
+            disabled={r.comparaciones.length === 0}
+            onClick={e => { e.stopPropagation(); descargarExcel(r, descuento, cupon).catch(err => alert("No se pudo crear el Excel: " + err)); }}
+            title="Descargar el informe de esta marca en Excel"
+          >
+            Excel
           </button>
           {confirmarBorrar
             ? <button className="vp-delete-btn cp-borrar-confirmar" onClick={e => { e.stopPropagation(); onBorrar(); }} onBlur={() => setConfirmarBorrar(false)} autoFocus>¿Quitar marca?</button>
@@ -533,6 +555,16 @@ export default function CompararPrecios() {
     setNuevaMarca(""); setNuevoSlug(""); setSlugManual(false);
   }
 
+  async function guardarHastaCupon(hasta: string) {
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cupon-hasta", hasta: hasta || null }),
+    });
+    const data = await res.json();
+    if (data.error) { setError(data.error); return; }
+    setConfig(data);
+  }
+
   async function guardarCupon(valor: string) {
     const limpio = valor.trim().replace(",", ".");
     const pct = limpio === "" ? null : Number(limpio);
@@ -644,7 +676,7 @@ export default function CompararPrecios() {
   }
 
   const resultados = config?.resultados ?? [];
-  const cuponActivo: CuponExcel = config?.cupon?.pct != null && config.cupon.pct > 0 ? { pct: config.cupon.pct, codigo: config.cupon.codigo, directo: config.cupon.directo } : null;
+  const cuponActivo: CuponExcel = config?.cupon?.pct != null && config.cupon.pct > 0 ? { pct: config.cupon.pct, codigo: config.cupon.codigo, directo: config.cupon.directo, hasta: config.cupon.hasta } : null;
 
   return (
     <div className="wrap cp-wrap">
@@ -671,6 +703,20 @@ export default function CompararPrecios() {
             {config?.cupon?.pct != null && config.cupon.pct > 0 && (
               <span className={"cp-cupon-directo" + (config.cupon.directo ? "" : " cp-cupon-codigo")}>
                 {config.cupon.directo ? "Directo en carrito, sin poner código" : "Hay que poner el código en el carrito"}
+              </span>
+            )}
+            {config?.cupon?.pct != null && config.cupon.pct > 0 && (
+              <span className="cp-cupon-fechas">
+                {config.cupon.desde && <>Visto desde el {new Date(config.cupon.desde).toLocaleDateString("es-ES", { day: "numeric", month: "short" })} · </>}
+                Hasta{" "}
+                <input
+                  type="date" className="cp-cupon-hasta"
+                  defaultValue={config.cupon.hasta ?? ""}
+                  key={`hasta-${config.cupon.hasta ?? ""}`}
+                  onChange={e => guardarHastaCupon(e.target.value)}
+                  title="Su web no publica la fecha de fin: ponla si la sabes. Si deja de anunciarlo, al revisar el cupón desaparece."
+                />
+                {!config.cupon.hasta && <span className="cp-cupon-sinfecha"> (su web no lo indica)</span>}
               </span>
             )}
           </label>
