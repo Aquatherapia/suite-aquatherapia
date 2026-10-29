@@ -32,8 +32,8 @@ function fechaArchivo(d: Date) {
 function fechaCorta(d: Date) {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
-export const nombreMarcaExcel = (marca: string, fecha = new Date()) => `${limpio(marca)}_precios_bajo_dto_autorizado_${fechaArchivo(fecha)}.xlsx`;
-export const nombreMarcaPdf = (marca: string, fecha = new Date()) => `${limpio(marca)}_precios_bajo_dto_autorizado_${fechaArchivo(fecha)}.pdf`;
+export const nombreMarcaExcel = (marca: string, descuento: number, fecha = new Date()) => `${limpio(marca)}_precios_bajo_${descuento > 0 ? "dto_autorizado" : "PVP"}_${fechaArchivo(fecha)}.xlsx`;
+export const nombreMarcaPdf = (marca: string, descuento: number, fecha = new Date()) => `${limpio(marca)}_precios_bajo_${descuento > 0 ? "dto_autorizado" : "PVP"}_${fechaArchivo(fecha)}.pdf`;
 
 const num = (n: number) => String(n).replace(".", ",");
 const textoCupon = (cupon: CuponExcel) => cupon && cupon.pct > 0 ? `PRECIO FINAL (${cupon.codigo ?? "cupón"} -${num(cupon.pct)} % EN CARRITO)` : "";

@@ -157,8 +157,8 @@ async function descargarPdf(r: ResultadoMarca, descuento: number | null, cupon: 
 
 // Informe para enviar a la marca: lo que Cosméticos24h vende por debajo del dto. autorizado
 async function descargarParaMarca(r: ResultadoMarca, descuento: number, cupon: CuponExcel, formato: "pdf" | "excel") {
-  if (formato === "pdf") bajar(await construirPdfMarca(r.marca, r.comparaciones, descuento, cupon), nombreMarcaPdf(r.marca));
-  else bajar(new Blob([await construirExcelMarca(r.marca, r.comparaciones, descuento, cupon)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nombreMarcaExcel(r.marca));
+  if (formato === "pdf") bajar(await construirPdfMarca(r.marca, r.comparaciones, descuento, cupon), nombreMarcaPdf(r.marca, descuento));
+  else bajar(new Blob([await construirExcelMarca(r.marca, r.comparaciones, descuento, cupon)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nombreMarcaExcel(r.marca, descuento));
 }
 
 // Botón «Para la marca»: elige PDF o Excel. Sin descuento autorizado cuenta como 0 % (mínimo = PVP). Desactivado si no hay nada por debajo
@@ -318,7 +318,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <td className="cp-fuerte cp-azul">{eur(m.precio)}{pvp > 0 && 1 - m.precio / pvp > 0.0005 && <small className="cp-dto-celda cp-dto-azul">−{pctW(1 - m.precio / pvp)}</small>}</td>
                 {vacias(conCupon ? 3 : 2)}
                 {vacias(2)}
-                <td className="cp-izq cp-pequena cp-suave">{m.ean ? "Solo lo tenemos nosotros" : ""}</td>
+                <td className="cp-izq cp-pequena cp-suave">{m.ean ? "Solo en La Tienda de Cosméticos" : ""}</td>
               </tr>
             );
           })}
