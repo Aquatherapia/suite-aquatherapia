@@ -1163,7 +1163,11 @@ button:disabled {
 .cp-nombre { font-weight: 500; line-height: 1.35; text-decoration: none; color: inherit; }
 .cp-nombre:hover { text-decoration: underline; }
 .cp-col-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.cp-c24 { color: var(--muted); text-decoration: none; }
+.cp-c24 { color: #b5655f; font-weight: 600; text-decoration: none; }
+.cp-c24 .cp-dto-pct { color: #c98a85; }
+.cp-web { display: block; font-size: 10px; font-weight: 400; color: var(--muted); }
+.cp-cupon { margin: 0 0 14px; font-size: 12px; }
+.cp-cupon-fuente { color: #b5655f; }
 .cp-c24:hover { text-decoration: underline; }
 .cp-caro { color: #b91c1c; font-weight: 700; }
 .cp-barato { color: #15803d; font-weight: 600; }
