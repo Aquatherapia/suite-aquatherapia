@@ -13,6 +13,8 @@ const TEXTO: RGB = [31, 41, 51];
 const TEXTO_SUAVE: RGB = [107, 114, 128];
 const ROJO: RGB = [180, 35, 24];
 const ROJO_FONDO: RGB = [253, 236, 236];
+const MORADO: RGB = [107, 63, 181];
+const MORADO_FONDO: RGB = [241, 235, 251];
 const AMBAR: RGB = [180, 83, 9];
 const AMBAR_FONDO: RGB = [254, 246, 231];
 const VERDE: RGB = [6, 118, 71];
@@ -82,7 +84,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     body: orden.map((f, i) => {
       const k = calc[i];
       return [
-        f.ean ?? "", f.descatalogado ? `${f.nombre}\nDESCATALOGADO EN NUESTRA WEB` : f.nombre, eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
+        f.ean ?? "", [f.nombre, f.descatalogado ? "DESCATALOGADO EN NUESTRA WEB" : "", k.bajoMinimo.suyo ? "MÁS ALLÁ DE NUESTRO DTO. MÁX." : ""].filter(Boolean).join("\n"), eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
         `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}`, k.masBarato, k.igualar.replace(/−/g, "-"),
       ];
@@ -103,7 +105,8 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
       // Mismos resaltados que el Excel: precio bajo nuestro mínimo y PVP distinto
       if ((c === 4 || c === 5) && k.bajoMinimo.mio) { if (c === 4) s.fillColor = ROJO_FONDO; s.textColor = ROJO; s.fontStyle = "bold"; }
-      if ((c === 8 || c === 9) && k.bajoMinimo.suyo) { if (c === 8) s.fillColor = ROJO_FONDO; s.textColor = ROJO; }
+      if ((c === 8 || c === 9) && k.bajoMinimo.suyo) { if (c === 8) s.fillColor = MORADO_FONDO; s.textColor = MORADO; }
+      if (c === 1 && k.bajoMinimo.suyo && !f.descatalogado) s.textColor = MORADO;
       if ((c === 2 || c === 6) && k.pvpDistinto) { s.fillColor = AMBAR_FONDO; s.textColor = AMBAR; s.fontStyle = "bold"; }
       if (c === 1 && f.descatalogado) s.textColor = ROJO;
       if (c === 10) s.textColor = f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO;
@@ -122,7 +125,8 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
   // Leyenda
   let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   const leyenda: [RGB, RGB, string][] = [
-    [ROJO_FONDO, ROJO, descuento != null ? `Precio más barato que nuestro PVP con el descuento máximo de la marca (-${dto})` : "Esta marca no tiene descuento máximo"],
+    [MORADO_FONDO, MORADO, descuento != null ? `Más allá de nuestro dto. máx.: venden por debajo de nuestro PVP -${dto} y no podemos igualarlos` : "Esta marca no tiene descuento máximo"],
+    [ROJO_FONDO, ROJO, "Nuestro precio está por debajo del PVP con el descuento máximo"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?)"],
   ];
   doc.setFontSize(7.5); doc.setFont("helvetica", "normal");

@@ -153,6 +153,7 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                 <td className="cp-suave">{f.ean ?? ""}</td>
                 <td className="cp-izq">
                   {f.descatalogado && <span className="cp-descat-tag" title="Tu ficha está marcada como descatalogada en tu web">Descatalogado</span>}
+                  {k.bajoMinimo.suyo && <span className="cp-maxdto-tag" title="Cosméticos24h vende por debajo de nuestro PVP con el descuento máximo: no podemos igualarlos">Más allá de nuestro dto. máx.</span>}
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
@@ -162,8 +163,8 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                 <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
                 <td className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"}>{eur(k.suPvp)}</td>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
-                <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-rojo-fondo" : "cp-rosa")}><a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-precio-enlace" title="Ver su ficha">{eur(f.suPrecio)}</a></td>
-                <td className={"cp-fuerte cp-pequena " + (k.bajoMinimo.suyo ? "cp-rojo" : "cp-rosa")}>{pctW(k.suDto)}</td>
+                <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo" : "cp-rosa")}><a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-precio-enlace" title="Ver su ficha">{eur(f.suPrecio)}</a></td>
+                <td className={"cp-fuerte cp-pequena " + (k.bajoMinimo.suyo ? "cp-morado" : "cp-rosa")}>{pctW(k.suDto)}</td>
                 <td className={"cp-fuerte " + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>{f.diff > 0.005 ? "+" : ""}{eur(f.diff)}</td>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
                 <td className={"cp-izq cp-pequena " + (k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
