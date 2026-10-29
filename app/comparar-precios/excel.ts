@@ -8,9 +8,10 @@ export type FilaExcel = {
   nombre: string; ean?: string; miUrl: string; suUrl: string;
   miPrecio: number; suPrecio: number; miPvp?: number; suPvp?: number; diff: number;
   suPrecioWeb?: number; // precio de su web antes del cupón de carrito (suPrecio ya lo lleva aplicado)
+  descatalogado?: boolean;
 };
 export type CuponExcel = { pct: number; codigo?: string } | null;
-export type SoloEllosExcel = { titulo: string; precio: number; url: string; esPack: boolean };
+export type SoloEllosExcel = { titulo: string; precio: number; url: string; esPack: boolean; ean?: string };
 
 // Colores del logo (azul #1270B6, azul claro #1C9CD9) y neutros
 const AZUL = "FF1270B6";
@@ -77,7 +78,7 @@ const pctTexto = (frac: number) => `${coma(Math.round(frac * 1000) / 10, 1).repl
 
 // Cálculos de una fila del informe, los mismos en el Excel y en la tabla de la web
 export type FilaCalculada = {
-  pvp: number; limite: number | null; miDto: number; suPvp: number; suWeb: number; suDto: number;
+  pvp: number; limite: number | null; miDto: number; suPvp: number; suWeb: number; suDtoWeb: number; suDto: number;
   bajoMinimo: { mio: boolean; suyo: boolean }; pvpDistinto: boolean;
   masBarato: "Cosméticos24h" | "Nosotros" | "Igual"; igualar: string;
 };
@@ -96,6 +97,7 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
     pvp, limite, suPvp,
     miDto: pvp > 0 ? 1 - f.miPrecio / pvp : 0,
     suWeb: f.suPrecioWeb ?? f.suPrecio,
+    suDtoWeb: suPvp > 0 ? 1 - (f.suPrecioWeb ?? f.suPrecio) / suPvp : 0,
     suDto: suPvp > 0 ? 1 - f.suPrecio / suPvp : 0,
     bajoMinimo: { mio: limite != null && f.miPrecio < limite - 0.005, suyo: limite != null && f.suPrecio < limite - 0.005 },
     pvpDistinto: f.suPvp != null && Math.abs(f.suPvp - pvp) > 0.01,
