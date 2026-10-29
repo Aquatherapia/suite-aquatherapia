@@ -10,8 +10,9 @@ export type FilaExcel = {
   suPrecioWeb?: number; // precio de su web antes del cupón de carrito (suPrecio ya lo lleva aplicado)
   descatalogado?: boolean;
   stock?: number;
+  esPack?: boolean;
 };
-export type CuponExcel = { pct: number; codigo?: string; directo?: boolean } | null;
+export type CuponExcel = { pct: number; codigo?: string; directo?: boolean; hasta?: string } | null;
 export type SoloEllosExcel = { titulo: string; precio: number; url: string; esPack: boolean; ean?: string };
 
 // Colores del logo (azul #1270B6, azul claro #1C9CD9) y neutros
@@ -81,6 +82,8 @@ const pctTexto = (frac: number) => `${coma(Math.round(frac * 1000) / 10, 1).repl
 export type FilaCalculada = {
   pvp: number; limite: number | null; miDto: number; suPvp: number; suWeb: number; suDtoWeb: number; suDto: number;
   bajoMinimo: { mio: boolean; suyo: boolean }; pvpDistinto: boolean;
+  revisarPvp: boolean; // PVP muy distinto (más de un 10 %): puede que una tarifa esté mal
+  esPack: boolean;
   masBarato: "Cosméticos24h" | "Nosotros" | "Igual"; igualar: string;
 };
 // Por qué no podemos igualar cuando venden por debajo de nuestro dto. máx.
@@ -89,20 +92,39 @@ export function explicaDtoMax(f: { miPrecio: number; suPrecio: number; diff: num
   if (!k.bajoMinimo.suyo || k.limite == null || descuento == null) return null;
   const d = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
   const pct = `${String(descuento).replace(".", ",")} %`;
-  if (Math.abs(f.miPrecio - k.limite) <= 0.005) return `Ya estamos en el máximo (−${pct}) y seguimos ${d(f.diff)} más caros`;
-  if (f.miPrecio < k.limite) return `Ya pasamos del máximo (−${pct}) y aún seguimos ${d(f.diff)} más caros`;
-  return `Bajando al máximo (−${pct}) seguiríamos ${d(k.limite - f.suPrecio)} más caros`;
+  if (Math.abs(f.miPrecio - k.limite) <= 0.005) return `Ya estamos en el máx. (−${pct})`;
+  if (f.miPrecio < k.limite) return `Ya pasamos del máx. (−${pct})`;
+  return `Con el máx. (−${pct}): +${d(k.limite - f.suPrecio)}`;
+}
+
+// Packs y cofres: nuestro PVP es la suma de los productos sueltos, así que el dto. máx. sobre ese PVP
+// y la comparación de PVP no tienen sentido; solo cuenta el precio final.
+const PACK = /\b(pack|set|kit|lote|d[uú]o|tr[ií]o|estuche|cofre|coffret|bundle|caja|box)\b/i;
+export function esPackFila(f: { nombre: string; esPack?: boolean }): boolean {
+  return !!f.esPack || PACK.test(f.nombre);
+}
+
+// La misma explicación, larga, para el texto que sale al pasar por encima de la celda
+export function explicaDtoMaxLarga(f: { miPrecio: number; suPrecio: number; diff: number }, k: { limite: number | null; bajoMinimo: { suyo: boolean } }, descuento: number | null): string | null {
+  if (!k.bajoMinimo.suyo || k.limite == null || descuento == null) return null;
+  const d = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+  const pct = `${String(descuento).replace(".", ",")} %`;
+  if (Math.abs(f.miPrecio - k.limite) <= 0.005) return `Ya estamos en nuestro descuento máximo (−${pct}) y seguimos ${d(f.diff)} más caros: no podemos igualarlos.`;
+  if (f.miPrecio < k.limite) return `Ya pasamos de nuestro descuento máximo (−${pct}) y aún seguimos ${d(f.diff)} más caros: no podemos igualarlos.`;
+  return `Bajando a nuestro descuento máximo (−${pct}) seguiríamos ${d(k.limite - f.suPrecio)} más caros: no podemos igualarlos.`;
 }
 
 export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalculada {
   const pvp = f.miPvp ?? f.miPrecio;
-  const limite = descuento != null ? Math.round(pvp * (1 - descuento / 100) * 100) / 100 : null;
+  const esPack = esPackFila(f);
+  const limite = descuento != null && !esPack ? Math.round(pvp * (1 - descuento / 100) * 100) / 100 : null;
   const suPvp = f.suPvp ?? f.suPrecioWeb ?? f.suPrecio;
   const pct = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
   // Si vamos más caros: ¿llegamos a su precio final sin pasar nuestro descuento máximo?
   // Se da también el descuento total sobre nuestro PVP con el que quedaríamos.
   const dtoIgualar = pvp > 0 ? 1 - f.suPrecio / pvp : 0;
   const igualar = f.diff <= 0.01 ? ""
+    : esPack ? `Pack: habría que bajar ${coma(f.diff)} €`
     : limite == null || f.suPrecio >= limite - 0.005 ? `Sí, bajando ${coma(f.diff)} € (dto. total ${pctTexto(dtoIgualar)})`
     : `No: haría falta un ${pctTexto(dtoIgualar)} (máx. ${pct})`;
   return {
@@ -112,7 +134,9 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
     suDtoWeb: suPvp > 0 ? 1 - (f.suPrecioWeb ?? f.suPrecio) / suPvp : 0,
     suDto: suPvp > 0 ? 1 - f.suPrecio / suPvp : 0,
     bajoMinimo: { mio: limite != null && f.miPrecio < limite - 0.005, suyo: limite != null && f.suPrecio < limite - 0.005 },
-    pvpDistinto: f.suPvp != null && Math.abs(f.suPvp - pvp) > 0.01,
+    pvpDistinto: !esPack && f.suPvp != null && Math.abs(f.suPvp - pvp) > 0.01,
+    revisarPvp: !esPack && f.suPvp != null && pvp > 0 && Math.abs(f.suPvp - pvp) / pvp > 0.10,
+    esPack,
     masBarato: f.diff > 0.01 ? "Cosméticos24h" : f.diff < -0.01 ? "Nosotros" : "Igual",
     igualar,
   };
