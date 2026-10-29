@@ -136,13 +136,13 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
             <th colSpan={2} />
             <th colSpan={4} className="cp-g-nos">Nosotros</th>
             <th colSpan={4} className="cp-g-ellos">Cosméticos24h</th>
-            <th colSpan={4} />
+            <th colSpan={3} />
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
             <th>PVP</th><th>{descuento != null ? `Con dto. máx. (−${pct})` : "Con dto. máx."}</th><th>Precio</th><th>Dto.</th>
             <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th><th className="cp-h-ellos">{conCupon}</th><th className="cp-h-ellos">Dto. total</th>
-            <th>Diferencia</th><th>Más barato</th><th className="cp-izq">¿Podemos igualar?</th><th>Ficha Cosméticos24h</th>
+            <th>Diferencia</th><th>Más barato</th><th className="cp-izq">¿Podemos igualar?</th>
           </tr>
         </thead>
         <tbody>
@@ -167,7 +167,6 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                 <td className={"cp-fuerte " + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>{f.diff > 0.005 ? "+" : ""}{eur(f.diff)}</td>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
                 <td className={"cp-izq cp-pequena " + (k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
-                <td className="cp-centro"><a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-ficha">Ver ficha</a></td>
               </tr>
             );
           })}
@@ -321,7 +320,7 @@ function MarcaBloque({
               {soloEllosReal.map((s, i) => (
                 <div key={i}>
                   <div className="cp-fila cp-solo">
-                    <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}{s.ean && <span className="cp-ean-linea">EAN {s.ean}</span>}</a>
+                    <div><a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>{s.ean && <span className="cp-ean-linea">EAN {s.ean}</span>}</div>
                     <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
                     <div className="cp-acciones">
                       <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
@@ -340,7 +339,7 @@ function MarcaBloque({
               {packs.map((s, i) => (
                 <div key={i}>
                   <div className="cp-fila cp-solo">
-                    <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}{s.ean && <span className="cp-ean-linea">EAN {s.ean}</span>}</a>
+                    <div><a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>{s.ean && <span className="cp-ean-linea">EAN {s.ean}</span>}</div>
                     <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
                     <div className="cp-acciones">
                       <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>

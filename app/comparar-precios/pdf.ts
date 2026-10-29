@@ -71,12 +71,12 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
         { content: "", colSpan: 2, styles: { fillColor: [255, 255, 255] } },
         { content: "NOSOTROS", colSpan: 4, styles: { fillColor: FONDO_NOSOTROS, textColor: AZUL } },
         { content: "COSMÉTICOS24H", colSpan: 4, styles: { fillColor: FONDO_ELLOS, textColor: ROSA } },
-        { content: "", colSpan: 4, styles: { fillColor: [255, 255, 255] } },
+        { content: "", colSpan: 3, styles: { fillColor: [255, 255, 255] } },
       ],
       [
         cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. MÁX. (-${dto})` : "CON DTO. MÁX."), cab("PRECIO"), cab("DTO."),
         cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %)` : "PRECIO FINAL (sin cupón)", true), cab("DTO. TOTAL", true),
-        cab("DIFERENCIA"), cab("MÁS BARATO"), cab("¿PODEMOS IGUALAR?"), cab("FICHA C24H"),
+        cab("DIFERENCIA"), cab("MÁS BARATO"), cab("¿PODEMOS IGUALAR?"),
       ],
     ],
     body: orden.map((f, i) => {
@@ -84,15 +84,15 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       return [
         f.ean ?? "", f.descatalogado ? `${f.nombre}\nDESCATALOGADO EN NUESTRA WEB` : f.nombre, eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
-        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}`, k.masBarato, k.igualar.replace(/−/g, "-"), "Ver ficha",
+        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}`, k.masBarato, k.igualar.replace(/−/g, "-"),
       ];
     }),
     columnStyles: {
       0: { cellWidth: 18, halign: "left", textColor: TEXTO_SUAVE },
-      1: { cellWidth: 50, halign: "left" },
+      1: { cellWidth: 64, halign: "left" },
       2: { cellWidth: 15 }, 3: { cellWidth: 15, textColor: TEXTO_SUAVE }, 4: { cellWidth: 15, fontStyle: "bold" }, 5: { cellWidth: 11, textColor: AZUL },
       6: { cellWidth: 15, textColor: ROSA }, 7: { cellWidth: 15, textColor: ROSA }, 8: { cellWidth: 18, textColor: ROSA, fontStyle: "bold" }, 9: { cellWidth: 12, textColor: ROSA, fontStyle: "bold" },
-      10: { cellWidth: 19, fontStyle: "bold" }, 11: { cellWidth: 22, halign: "center" }, 13: { cellWidth: 14, halign: "center", textColor: ROSA },
+      10: { cellWidth: 19, fontStyle: "bold" }, 11: { cellWidth: 22, halign: "center" },
       12: { halign: "left" },
     },
     didParseCell: d => {
@@ -113,9 +113,9 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     didDrawCell: d => {
       if (d.section !== "body") return;
       const f = orden[d.row.index];
-      // Enlaces: el producto lleva a nuestra ficha y «Ver ficha» a la suya
+      // Enlaces: el producto lleva a nuestra ficha y el precio final a la suya
       if (d.column.index === 1) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.miUrl });
-      if (d.column.index === 8 || d.column.index === 13) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.suUrl });
+      if (d.column.index === 8) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.suUrl });
     },
   });
 
