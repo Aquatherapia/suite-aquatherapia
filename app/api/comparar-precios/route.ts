@@ -306,7 +306,7 @@ async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promis
 const esperar = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 // Una ficha con varios formatos (50 ml / 30 ml) da un MiProducto por formato: mismo url, cada uno con su precio.
-// La web solo publica el EAN del primer formato (el que sale marcado); los demás van sin EAN.
+// La web solo publica el EAN de un formato (el del precio del JSON-LD, que es el más barato); los demás van sin EAN.
 type MiProducto = {
   nombre: string; url: string; precio: number; pvp: number; esPack: boolean; ean: string | null; propiedades: string[];
   formato?: string; clave: string; descatalogado?: boolean | null; stock?: number | null;
@@ -453,9 +453,12 @@ async function leerMiFicha(url: string): Promise<MiProducto[] | null | "sinPreci
     const estados: Awaited<ReturnType<typeof estadoVariante>>[] = [];
     for (const f of formatos) estados.push(await estadoVariante(url, f.id));
     if (estados.every(e => e !== null)) {
+      // El EAN publicado es el del formato cuyo precio sale en el JSON-LD (no siempre el primero de la lista)
+      const conEsePrecio = estados.map((e, i) => Math.abs(e!.precio - precio) < 0.01 ? i : -1).filter(i => i >= 0);
+      const iEan = conEsePrecio.length === 1 ? conEsePrecio[0] : 0;
       return formatos.map((f, i): MiProducto => ({
         nombre: `${nombre} · ${f.titulo}`, url, precio: estados[i]!.precio, pvp: estados[i]!.pvp ?? estados[i]!.precio, esPack,
-        ean: i === 0 ? ean : null, propiedades: [f.id], formato: f.titulo, clave: `${url}#${f.id}`, descatalogado: estados[i]!.descatalogado, stock: estados[i]!.stock,
+        ean: i === iEan ? ean : null, propiedades: [f.id], formato: f.titulo, clave: `${url}#${f.id}`, descatalogado: estados[i]!.descatalogado, stock: estados[i]!.stock,
       }));
     }
   }
