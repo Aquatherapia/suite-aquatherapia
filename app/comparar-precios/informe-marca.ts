@@ -60,7 +60,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
   type ExcelJS_Valor = string | number | { text: string; hyperlink: string };
   const cols: Col[] = [
     { t: "EAN", w: 16, grupo: "base", v: f => f.ean },
-    { t: "PRODUCTO", w: 50, grupo: "base", v: f => f.producto },
+    { t: "PRODUCTO", w: 50, grupo: "base", v: f => ({ text: f.producto, hyperlink: f.miUrl }) },
     { t: "PVP", w: 11, grupo: "nos", v: f => f.pvp, fmt: EUROS },
     { t: `DTO. AUTORIZADO`, w: 12, grupo: "nos", v: () => descuento / 100, fmt: PORC },
     { t: "PRECIO MÍNIMO AUTORIZADO", w: 14, grupo: "nos", v: f => f.minimo, fmt: EUROS },
@@ -69,8 +69,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
     ...(hayCupon ? [{ t: "DTO.", w: 8, grupo: "ellos" as const, v: (f: FilaMarca) => f.suDtoWeb, fmt: PORC }, { t: textoCupon(cupon), w: 18, grupo: "ellos" as const, v: (f: FilaMarca) => f.suFinal, fmt: EUROS }] : []),
     { t: "DTO. TOTAL", w: 10, grupo: "ellos", v: f => f.suDto, fmt: PORC },
     { t: "POR DEBAJO DEL MÍNIMO", w: 14, grupo: "fin", v: f => f.porDebajo, fmt: EUROS },
-    { t: "FICHA EN COSMÉTICOS24H", w: 23, grupo: "fin", v: f => ({ text: "Ver en Cosméticos24h ↗", hyperlink: f.suUrl }) },
-    { t: "FICHA EN LA TIENDA DE COSMÉTICOS", w: 21, grupo: "fin", v: f => ({ text: "Ver nuestra ficha ↗", hyperlink: f.miUrl }) },
+    { t: "COSMÉTICOS24H", w: 23, grupo: "fin", v: f => ({ text: "Ver ficha ↗", hyperlink: f.suUrl }) },
   ];
   ws.columns = cols.map(c => ({ width: c.w }));
   const ult = String.fromCharCode(64 + cols.length);
@@ -114,7 +113,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
       const enlace = typeof cel.value === "object";
       const rojo = c.t === "POR DEBAJO DEL MÍNIMO";
       cel.font = fuente({
-        color: { argb: enlace ? (i === cols.length - 2 ? ROSA : AZUL) : rojo ? ROJO : c.grupo === "ellos" ? ROSA : i === 0 ? SUAVE : TEXTO },
+        color: { argb: enlace ? (i === 1 ? TEXTO : ROSA) : rojo ? ROJO : c.grupo === "ellos" ? ROSA : i === 0 ? SUAVE : TEXTO },
         bold: rojo || c.t === "PRECIO MÍNIMO AUTORIZADO", underline: enlace,
       });
       cel.fill = relleno(c.grupo === "nos" ? FONDO_AZUL : c.grupo === "ellos" ? FONDO_ROSA : c.grupo === "fin" ? FONDO_GRIS : "FFFFFFFF");
@@ -131,6 +130,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
 type RGB = [number, number, number];
 const P_AZUL: RGB = [18, 112, 182], P_ROSA: RGB = [181, 101, 95], P_GRIS: RGB = [75, 85, 99], P_TEXTO: RGB = [31, 41, 51], P_SUAVE: RGB = [107, 114, 128], P_ROJO: RGB = [180, 35, 24];
 const P_F_AZUL: RGB = [238, 245, 252], P_F_ROSA: RGB = [253, 240, 238], P_F_GRIS: RGB = [246, 247, 249];
+const VER_C24 = "Ver en Cosméticos24h >";
 const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 const pct = (frac: number) => `${(Math.round(frac * 1000) / 10).toFixed(1).replace(".", ",").replace(/,0$/, "")} %`;
 
@@ -149,15 +149,16 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
   doc.setFont("helvetica", "bold"); doc.setTextColor(...P_TEXTO);
   doc.text(resumen(datos.length), M, 26);
 
-  // Bloques: base (2) · marca (3) · Cosméticos24h (2 o 3) · diferencia y enlaces (3)
-  // Su dto. va bajo cada precio; bajo el precio final, el dto. total
+  // Bloques: base (2) · marca (3) · Cosméticos24h (2 o 3) · por debajo del mínimo (1)
+  // Su dto. va bajo cada precio; bajo el precio final, el dto. total.
+  // Enlaces como en la web: el nombre lleva a nuestra ficha y la línea de abajo, a la suya.
   const nEllos = hayCupon ? 3 : 2;
   const grupoDe = (c: number): "base" | "nos" | "ellos" | "fin" => c < 2 ? "base" : c < 5 ? "nos" : c < 5 + nEllos ? "ellos" : "fin";
-  const colEnlaceC24 = 5 + nEllos + 1, colEnlaceMia = colEnlaceC24 + 1;
+  const colFin = 5 + nEllos;
   const cuerpo = datos.map(f => [
-    f.ean, f.producto, eur(f.pvp), pct(descuento / 100), eur(f.minimo),
+    f.ean, `${f.producto}\n${VER_C24}`, eur(f.pvp), pct(descuento / 100), eur(f.minimo),
     eur(f.suPvp), f.suDtoWeb > 0.0005 ? `${eur(f.suWeb)}\n-${pct(f.suDtoWeb)}` : eur(f.suWeb), ...(hayCupon ? [`${eur(f.suFinal)}\n-${pct(f.suDto)}`] : []),
-    eur(f.porDebajo), "Ver >", "Ver >",
+    eur(f.porDebajo),
   ]);
   const cab = (t: string, color: RGB) => ({ content: t, styles: { fillColor: color } });
   autoTable(doc, {
@@ -171,21 +172,21 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
         { content: "", colSpan: 2, styles: { fillColor: [255, 255, 255] } },
         { content: "MARCA (PVP Y DTO. AUTORIZADO)", colSpan: 3, styles: { fillColor: P_F_AZUL, textColor: P_AZUL } },
         { content: "COSMÉTICOS24H", colSpan: nEllos, styles: { fillColor: P_F_ROSA, textColor: P_ROSA } },
-        { content: "DIFERENCIA Y ENLACES", colSpan: 3, styles: { fillColor: P_F_GRIS, textColor: P_GRIS } },
+        { content: "", styles: { fillColor: [255, 255, 255] } },
       ],
       [
         cab("EAN", P_AZUL), cab("PRODUCTO", P_AZUL),
         cab("PVP", P_AZUL), cab("DTO.\nAUTORIZADO", P_AZUL), cab("PRECIO MÍNIMO\nAUTORIZADO", P_AZUL),
         cab("PVP", P_ROSA), cab(hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", P_ROSA), ...(hayCupon ? [cab(textoCupon(cupon), P_ROSA)] : []),
-        cab("POR DEBAJO DEL MÍNIMO", P_GRIS), cab("FICHA\nCOSMÉTICOS24H", P_GRIS), cab("NUESTRA\nFICHA", P_GRIS),
+        cab("POR DEBAJO\nDEL MÍNIMO", P_GRIS),
       ],
     ],
     body: cuerpo,
     // Anchos fijos para que los importes no se partan; el producto se queda con el resto
     columnStyles: Object.fromEntries([
-      [0, { cellWidth: 22, halign: "left", textColor: P_SUAVE }], [1, { cellWidth: hayCupon ? 93 : 109, halign: "left" }],
+      [0, { cellWidth: 22, halign: "left", textColor: P_SUAVE }], [1, { halign: "left" }],
       ...Array.from({ length: 3 + nEllos }, (_, i) => [2 + i, { cellWidth: i === 1 || i === 2 ? 19 : 16 }]),
-      [5 + nEllos, { cellWidth: 18 }], [colEnlaceC24, { cellWidth: 24 }], [colEnlaceMia, { cellWidth: 18 }],
+      [colFin, { cellWidth: 20 }],
     ]),
     didParseCell: d => {
       if (d.section !== "body") return;
@@ -195,15 +196,25 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
       s.lineColor = [229, 231, 235];
       if (g === "ellos") s.textColor = P_ROSA;
       if (c === 4) s.fontStyle = "bold";
-      if (c === colEnlaceC24 - 1) { s.textColor = P_ROJO; s.fontStyle = "bold"; }
-      if (c === colEnlaceC24 || c === colEnlaceMia) { s.halign = "center"; s.fontStyle = "bold"; s.textColor = c === colEnlaceC24 ? P_ROSA : P_AZUL; }
+      if (c === colFin) { s.textColor = P_ROJO; s.fontStyle = "bold"; }
+    },
+    // La línea «Ver en Cosméticos24h» se dibuja aparte, en rosa y con su enlace
+    willDrawCell: d => {
+      if (d.section === "body" && d.column.index === 1 && d.cell.text[d.cell.text.length - 1] === VER_C24) d.cell.text[d.cell.text.length - 1] = "";
     },
     didDrawCell: d => {
-      if (d.section !== "body") return;
-      const f = datos[d.row.index];
+      if (d.section !== "body" || d.column.index !== 1) return;
+      // Una fila partida entre dos páginas llega con índice -1: se busca por su contenido
+      const f = datos[d.row.index] ?? datos[cuerpo.indexOf(d.row.raw as string[])];
       if (!f) return;
-      if (d.column.index === colEnlaceC24) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.suUrl });
-      if (d.column.index === colEnlaceMia) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.miUrl });
+      const n = d.cell.text.length;
+      const linea = (d.cell.styles.fontSize * doc.getLineHeightFactor() * 25.4) / 72;
+      const yVer = d.cell.y + (d.cell.height - n * linea) / 2 + (n - 1) * linea;
+      doc.link(d.cell.x, d.cell.y, d.cell.width, yVer - d.cell.y, { url: f.miUrl });
+      if (d.cell.text[n - 1] !== "") return;
+      doc.setTextColor(...P_ROSA); doc.setFont("helvetica", "bold");
+      doc.text(VER_C24, d.cell.x + d.cell.padding("left"), yVer, { baseline: "top" });
+      doc.link(d.cell.x + d.cell.padding("left"), yVer, doc.getTextWidth(VER_C24), linea, { url: f.suUrl });
     },
   });
   return doc.output("blob");
