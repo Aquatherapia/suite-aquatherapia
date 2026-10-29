@@ -12,7 +12,7 @@ const LINEA: RGB = [229, 231, 235];
 const TEXTO: RGB = [31, 41, 51];
 const TEXTO_SUAVE: RGB = [107, 114, 128];
 const ROJO: RGB = [180, 35, 24];
-const ROJO_FONDO: RGB = [253, 236, 236];
+const PASADO_FONDO: RGB = [223, 244, 247], PASADO: RGB = [14, 116, 144];
 const MORADO: RGB = [107, 63, 181];
 const MORADO_FONDO: RGB = [241, 235, 251];
 const AMBAR: RGB = [180, 83, 9];
@@ -117,7 +117,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       s.fillColor = i % 2 === 1 ? CEBRA : [255, 255, 255];
       s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
       // Mismos resaltados que el Excel: precio bajo nuestro mínimo y PVP distinto
-      if (c === 4 && k.bajoMinimo.mio) { s.fillColor = ROJO_FONDO; s.textColor = ROJO; s.fontStyle = "bold"; }
+      if (c === 4 && k.bajoMinimo.mio) { s.fillColor = PASADO_FONDO; s.textColor = PASADO; s.fontStyle = "bold"; }
       if (c === 8 && k.bajoMinimo.suyo) s.fillColor = MORADO_FONDO;
       if ((c === 2 || c === 5) && k.pvpDistinto) { s.fillColor = AMBAR_FONDO; s.textColor = AMBAR; s.fontStyle = "bold"; }
       if (c === 1 && f.descatalogado) s.textColor = ROJO;
@@ -152,7 +152,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
   let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   const leyenda: [RGB, RGB, string][] = [
     [MORADO_FONDO, MORADO, descuento != null ? `Más allá de nuestro dto. autorizado: venden por debajo de nuestro PVP -${dto} y no podemos igualarlos` : "Esta marca no tiene descuento autorizado"],
-    [ROJO_FONDO, ROJO, "Nuestro precio está por debajo del PVP con el descuento autorizado"],
+    [PASADO_FONDO, PASADO, "Nuestro precio está por debajo del PVP con el descuento autorizado"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?)"],
   ];
   doc.setFontSize(7.5); doc.setFont("helvetica", "normal");
@@ -163,7 +163,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     y += 5.5;
   }
   doc.setFont("helvetica", "italic"); doc.setTextColor(...TEXTO_SUAVE);
-  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio con dto.: el de su web, con su descuento sobre el PVP. Precio final: el de su web con el cupón que aplican en el carrito. Debajo de cada precio, su dto. sobre el PVP (bajo el precio final, contando el cupón). Diferencia: nuestro precio menos su precio final.", 277), M, y);
+  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca. Precio con dto.: el de su web, con su descuento sobre el PVP. Precio final: el de su web con el cupón que aplican en el carrito. Debajo de cada precio, su dto. sobre el PVP (bajo el precio final, contando el cupón). Diferencia: nuestro precio menos su precio final.", 277), M, y);
 
   // Lo que tienen ellos y nosotros no
   if (soloEllos.length > 0) {

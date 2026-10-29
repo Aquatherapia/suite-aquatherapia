@@ -34,7 +34,7 @@ const LINEA = "FFE5E7EB";
 const TEXTO = "FF1F2933";
 const TEXTO_SUAVE = "FF6B7280";
 const ROJO = "FFB42318";
-const ROJO_FONDO = "FFFDECEC";
+const PASADO_FONDO = "FFDFF4F7", PASADO = "FF0E7490";
 const AMBAR = "FFB45309";
 const AMBAR_FONDO = "FFFEF6E7";
 const VERDE = "FF067647";
@@ -275,9 +275,9 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       c("pvp").note = (k.revisarPvp ? "REVISAR PRECIO. " : "") + explicaPvp(pvp, suPvp);
     }
     if (k.bajoMinimo.mio && limite != null) {
-      c("precio").fill = relleno(ROJO_FONDO);
-      c("precio").font = fuente({ bold: true, color: { argb: ROJO } });
-      c("dto").font = fuente({ size: 9, bold: true, color: { argb: ROJO } });
+      c("precio").fill = relleno(PASADO_FONDO);
+      c("precio").font = fuente({ bold: true, color: { argb: PASADO } });
+      c("dto").font = fuente({ size: 9, bold: true, color: { argb: PASADO } });
       c("precio").note = `Nuestro precio está por debajo del PVP con el dto. autorizado (${coma(limite)} €).`;
     }
     if (k.bajoMinimo.suyo) c("diff").fill = relleno(MORADO_FONDO);
@@ -294,7 +294,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const ley = ultima + 2;
   const leyenda: [string, string, string][] = [
     [MORADO_FONDO, MORADO, descuento != null ? `Más allá de nuestro dto. autorizado: venden por debajo de nuestro PVP −${pct} y no podemos igualarlos` : "Esta marca no tiene descuento autorizado"],
-    [ROJO_FONDO, ROJO, "Nuestro precio está por debajo del PVP con el descuento autorizado"],
+    [PASADO_FONDO, PASADO, "Nuestro precio está por debajo del PVP con el descuento autorizado"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?). Si la diferencia pasa del 10 %, la nota dice «revisar precio»"],
   ];
   leyenda.forEach(([fondo, color, texto], i) => {
@@ -306,7 +306,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
     t.font = fuente({ size: 9, color: { argb: color } });
   });
   const nota = ws.getCell(`B${ley + leyenda.length}`);
-  nota.value = "PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio con dto.: el de su web, con su descuento sobre el PVP. El producto enlaza a nuestra ficha y «Ver ficha», a la suya. " +
+  nota.value = "PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca. Precio con dto.: el de su web, con su descuento sobre el PVP. El producto enlaza a nuestra ficha y «Ver ficha», a la suya. " +
     (hayCupon ? "Precio final: el de su web con el cupón que aplican en el carrito. " : "") +
     "Dto. total: lo que rebajan sobre su PVP. Diferencia: nuestro precio menos su precio final. Las celdas con un triángulo rojo llevan una nota con la explicación.";
   nota.font = fuente({ size: 9, italic: true, color: { argb: TEXTO_SUAVE } });
