@@ -124,8 +124,8 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
   // Pack con un precio final muy distinto al suyo (más de un 5 %): puede que la suma de nuestro pack esté mal
   const revisarPack = esPack && f.suPrecio > 0 && Math.abs(f.diff) / f.suPrecio > 0.05;
   const igualar = revisarPack ? `Pack: revisar precio (un ${pctTexto(Math.abs(f.diff) / f.suPrecio)} ${f.diff < 0 ? "más barato" : "más caro"} que ellos)`
-    : f.diff < -0.01 ? "Tenemos bien el precio"
-    : f.diff <= 0.01 ? "Tenemos bien el precio (mismo precio)"
+    : f.diff < -0.01 ? "Mejor precio"
+    : f.diff <= 0.01 ? "Mismo precio"
     : esPack ? `Pack: habría que bajar ${coma(f.diff)} €`
     : limite == null || f.suPrecio >= limite - 0.005 ? `Sí, bajando ${coma(f.diff)} € (dto. total ${pctTexto(dtoIgualar)})`
     : `No: haría falta un ${pctTexto(dtoIgualar)} (autorizado ${pct})`;

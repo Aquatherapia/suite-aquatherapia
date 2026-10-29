@@ -161,13 +161,14 @@ async function descargarParaMarca(r: ResultadoMarca, descuento: number, cupon: C
   else bajar(new Blob([await construirExcelMarca(r.marca, r.comparaciones, descuento, cupon)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nombreMarcaExcel(r.marca));
 }
 
-// Botón «Para la marca»: elige PDF o Excel. Desactivado si no hay descuento autorizado o nada por debajo
-function ParaMarca({ r, descuento, cupon }: { r: ResultadoMarca; descuento: number | null; cupon: CuponExcel }) {
+// Botón «Para la marca»: elige PDF o Excel. Sin descuento autorizado cuenta como 0 % (mínimo = PVP). Desactivado si no hay nada por debajo
+function ParaMarca({ r, descuento: dto, cupon }: { r: ResultadoMarca; descuento: number | null; cupon: CuponExcel }) {
   const [abierto, setAbierto] = useState(false);
+  const descuento = dto ?? 0;
   const n = filasParaMarca(r.comparaciones, descuento).length;
   const bajar = (formato: "pdf" | "excel") => {
     setAbierto(false);
-    descargarParaMarca(r, descuento!, cupon, formato).catch(err => alert("No se pudo crear el informe: " + err));
+    descargarParaMarca(r, descuento, cupon, formato).catch(err => alert("No se pudo crear el informe: " + err));
   };
   return (
     <span className="cp-para-marca" onClick={e => e.stopPropagation()}>
@@ -175,7 +176,7 @@ function ParaMarca({ r, descuento, cupon }: { r: ResultadoMarca; descuento: numb
         className="regen-btn"
         disabled={n === 0}
         onClick={() => setAbierto(a => !a)}
-        title={descuento == null ? "Esta marca no tiene descuento autorizado" : n === 0 ? "Cosméticos24h no vende nada por debajo del descuento autorizado" : `Informe para enviar a la marca: ${n} producto${n !== 1 ? "s" : ""} de Cosméticos24h por debajo del descuento autorizado`}
+        title={`${n === 0 ? "Cosméticos24h no vende nada" : `Informe para enviar a la marca: ${n} producto${n !== 1 ? "s" : ""} de Cosméticos24h`} por debajo ${dto == null ? "del PVP (la marca no tiene descuento autorizado)" : "del descuento autorizado"}`}
       >
         Para la marca{n > 0 ? ` (${n})` : ""}
       </button>
