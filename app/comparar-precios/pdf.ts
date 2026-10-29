@@ -11,7 +11,7 @@ const CEBRA: RGB = [248, 250, 252];
 const LINEA: RGB = [229, 231, 235];
 const TEXTO: RGB = [31, 41, 51];
 const TEXTO_SUAVE: RGB = [107, 114, 128];
-const ROJO: RGB = [180, 35, 24];
+const ROJO: RGB = [212, 0, 0];
 const PASADO_FONDO: RGB = [223, 244, 247], PASADO: RGB = [14, 116, 144];
 const AMBAR: RGB = [180, 83, 9];
 const AMBAR_FONDO: RGB = [254, 246, 231];

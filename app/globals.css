@@ -1498,7 +1498,7 @@ button:disabled {
 /* Texto por bloque: nosotros en azul, Cosméticos24h en rosa */
 .cp-informe .cp-azul { color: #1270b6; }
 .cp-informe .cp-azul-suave { color: #6a9bd0; }
-.cp-informe .cp-rojo { color: #b42318; }
+.cp-informe .cp-rojo { color: #d40000; }
 .cp-informe .cp-verde { color: #067647; }
 /* Nuestro precio por debajo del dto. autorizado: turquesa, para no confundirse con el rojo de la comparación */
 .cp-informe td.cp-pasado-fondo { background: #dff4f7 !important; color: #0e7490; }
