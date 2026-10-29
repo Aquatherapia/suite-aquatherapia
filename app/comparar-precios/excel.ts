@@ -188,11 +188,11 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const cuponTexto = hayCupon
     ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} −${coma(cupon!.pct, 1).replace(/,0$/, "")} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""}${cupon!.hasta ? `, HASTA ${cupon!.hasta.slice(8, 10)}/${cupon!.hasta.slice(5, 7)}` : ""})`
     : "";
-  const COLS = ["ean", "producto", "pvp", "limite", "precio", "dto", "suPvp", "suWeb", ...(hayCupon ? ["suFinal"] : []), "suDto", "diff", "barato", "igualar"] as const;
+  const COLS = ["ean", "producto", "pvp", "limite", "precio", "dto", "suPvp", "suWeb", ...(hayCupon ? ["suFinal"] : []), "suDto", "diff", "barato", "igualar", "ficha"] as const;
   const col = (k: typeof COLS[number]) => COLS.indexOf(k) + 1;
   const letra = (k: typeof COLS[number]) => String.fromCharCode(64 + col(k));
   const ultimaCol = String.fromCharCode(64 + COLS.length);
-  const anchos: Record<typeof COLS[number], number> = { ean: 16, producto: 52, pvp: 14, limite: 12, precio: 12, dto: 8, suPvp: 11, suWeb: 12, suFinal: 16, suDto: 10, diff: 14, barato: 15, igualar: 32 };
+  const anchos: Record<typeof COLS[number], number> = { ean: 16, producto: 52, pvp: 12, limite: 12, precio: 12, dto: 8, suPvp: 11, suWeb: 12, suFinal: 16, suDto: 10, diff: 14, barato: 15, igualar: 32, ficha: 16 };
   ws.columns = COLS.map(k => ({ width: anchos[k] }));
   encabezado(ws, ultimaCol,
     `Comparativa de precios · ${marca}`,
@@ -217,11 +217,12 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const CAB = 5;
   const titulos: Record<typeof COLS[number], string> = {
     ean: "EAN", producto: "PRODUCTO", pvp: "PVP", limite: descuento != null ? `CON DTO. MÁX. (−${pct})` : "CON DTO. MÁX.", precio: "PRECIO FINAL", dto: "DTO.",
-    suPvp: "PVP", suWeb: "PRECIO WEB", suFinal: cuponTexto, suDto: "DTO. TOTAL", diff: "DIFERENCIA", barato: "MÁS BARATO", igualar: "¿PODEMOS IGUALAR?",
+    suPvp: "PVP", suWeb: "PRECIO WEB", suFinal: cuponTexto, suDto: "DTO. TOTAL", diff: "DIFERENCIA", barato: "MÁS BARATO", igualar: "¿PODEMOS IGUALAR?", ficha: "COSMÉTICOS24H",
   };
   filaCabecera(ws, CAB, COLS.map(k => titulos[k]));
   // La cabecera de su grupo, en su rosa
   for (let c = col("suPvp"); c <= col("suDto"); c++) ws.getRow(CAB).getCell(c).fill = relleno(ROSA);
+  ws.getRow(CAB).getCell(col("ficha")).fill = relleno(ROSA);
   if (hayCupon && cupon!.condiciones) ws.getRow(CAB).getCell(col("suFinal")).note = cupon!.condiciones;
 
   const L = { pvp: letra("pvp"), precio: letra("precio"), suPvp: letra("suPvp"), suWeb: letra("suWeb"), suFin: hayCupon ? letra("suFinal") : letra("suWeb") };
@@ -239,15 +240,14 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       precio: f.miPrecio,
       dto: { formula: `IF(${L.pvp}${n}>0,1-${L.precio}${n}/${L.pvp}${n},0)`, result: miDto },
       suPvp,
-      suWeb: { text: coma(suWeb) + " €", hyperlink: f.suUrl },
+      suWeb,
       suFinal: { formula: `ROUND(${suWeb}*${factorCupon},2)`, result: f.suPrecio },
       suDto: { formula: `IF(${L.suPvp}${n}>0,1-${L.suFin}${n}/${L.suPvp}${n},0)`, result: suDto },
       diff: { formula: `${L.precio}${n}-${L.suFin}${n}`, result: Math.round(f.diff * 100) / 100 },
       barato: masBarato,
       igualar,
+      ficha: { text: "Ver ficha ↗", hyperlink: f.suUrl },
     };
-    // Sin columna de cupón, el precio web es un número (la fórmula de la diferencia lo usa)
-    if (!hayCupon) valores.suWeb = suWeb;
     const fila = ws.getRow(n);
     fila.values = COLS.map(c => valores[c]);
     fila.height = descat ? 30 : 22;
@@ -255,7 +255,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       const cel = fila.getCell(i + 1);
       cel.font = fuente();
       cel.border = lineaAbajo;
-      cel.alignment = { vertical: "middle", horizontal: key === "ean" || key === "producto" || key === "igualar" ? "left" : key === "barato" ? "center" : "right", wrapText: key === "producto" || key === "igualar" };
+      cel.alignment = { vertical: "middle", horizontal: key === "ean" || key === "producto" || key === "igualar" ? "left" : key === "barato" || key === "ficha" ? "center" : "right", wrapText: key === "producto" || key === "igualar" };
       if (idx % 2 === 1) cel.fill = relleno(CEBRA);
       if (["pvp", "limite", "precio", "suPvp", "suWeb", "suFinal"].includes(key)) cel.numFmt = EUROS;
     });
@@ -270,21 +270,21 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
     c("precio").font = fuente({ bold: true });
     c("dto").font = fuente({ size: 9, color: { argb: AZUL } });
     c("suPvp").font = fuente({ color: { argb: ROSA } });
-    c("suWeb").font = fuente({ color: { argb: ROSA }, underline: hayCupon });
+    c("suWeb").font = fuente({ color: { argb: ROSA } });
+    c("ficha").font = fuente({ size: 9, underline: true, color: { argb: ROSA } });
     if (hayCupon) c("suFinal").font = fuente({ bold: true, color: { argb: ROSA } });
     c("suDto").font = fuente({ size: 9, bold: true, color: { argb: ROSA } });
 
     // Mismos resaltados que la web, con la explicación como nota (sale al pasar el ratón)
     if (k.esPack) c("pvp").note = "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. máx. ni se compara el PVP.";
-    // Sigue siendo un número (la columna «con dto. máx.» lo usa): el aviso va en el formato
-    if (k.revisarPvp) c("pvp").numFmt = '#,##0.00 "€ (revisar precio)"';
+
     if (k.pvpDistinto) {
       for (const key of ["pvp", "suPvp"] as const) {
         c(key).fill = relleno(AMBAR_FONDO);
         if (!(key === "pvp" && k.revisarPvp)) c(key).font = fuente({ bold: true, color: { argb: AMBAR } });
       }
-      c("pvp").alignment = { ...c("pvp").alignment, wrapText: true };
-      c("pvp").note = explicaPvp(pvp, suPvp);
+      // Muy distinto (más de un 10 %): el aviso «revisar precio» va en la nota, para no cortar el número
+      c("pvp").note = (k.revisarPvp ? "REVISAR PRECIO. " : "") + explicaPvp(pvp, suPvp);
     }
     if (k.bajoMinimo.mio && limite != null) {
       c("precio").fill = relleno(ROJO_FONDO);
@@ -309,7 +309,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const leyenda: [string, string, string][] = [
     [MORADO_FONDO, MORADO, descuento != null ? `Más allá de nuestro dto. máx.: venden por debajo de nuestro PVP −${pct} y no podemos igualarlos` : "Esta marca no tiene descuento máximo"],
     [ROJO_FONDO, ROJO, "Nuestro precio está por debajo del PVP con el descuento máximo"],
-    [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?)"],
+    [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?). Si la diferencia pasa del 10 %, la nota dice «revisar precio»"],
   ];
   leyenda.forEach(([fondo, color, texto], i) => {
     const c = ws.getCell(`A${ley + i}`);
@@ -320,7 +320,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
     t.font = fuente({ size: 9, color: { argb: color } });
   });
   const nota = ws.getCell(`B${ley + leyenda.length}`);
-  nota.value = "PVP: precio sin descuento. Con dto. máx.: nuestro PVP con el descuento máximo al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP (enlace a su ficha). " +
+  nota.value = "PVP: precio sin descuento. Con dto. máx.: nuestro PVP con el descuento máximo al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP. El producto enlaza a nuestra ficha y «Ver ficha», a la suya. " +
     (hayCupon ? "Precio final: el de su web con el cupón que aplican en el carrito. " : "") +
     "Dto. total: lo que rebajan sobre su PVP. Diferencia: nuestro precio menos su precio final. Las celdas con un triángulo rojo llevan una nota con la explicación.";
   nota.font = fuente({ size: 9, italic: true, color: { argb: TEXTO_SUAVE } });

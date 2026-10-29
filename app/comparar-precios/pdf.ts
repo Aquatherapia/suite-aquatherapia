@@ -35,6 +35,9 @@ export function nombrePdf(marca: string, fecha = new Date()): string {
   return `${limpio}_COSMETICOS24H_${dd}-${mm}-${fecha.getFullYear()}_informe.pdf`;
 }
 
+// Última línea del producto: enlace a su ficha, en su rosa (como «Ver en Cosméticos24h ↗» en la web)
+const VER_C24 = "Ver en Cosméticos24h >";
+
 // Columna de su precio final con cupón (se quita si no hay cupón)
 const COL_CUPON = 8;
 
@@ -68,7 +71,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
   const cuerpo: string[][] = orden.map((f, i) => {
       const k = calc[i];
       return [
-        f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : "", f.deAntes ? "DATO ANTERIOR (no se pudo leer nuestra ficha)" : ""].filter(Boolean).join("\n"), eur(k.pvp) + (k.revisarPvp ? "\n(revisar precio)" : k.esPack ? "\nsuma de productos" : ""), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
+        f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : "", f.deAntes ? "DATO ANTERIOR (no se pudo leer nuestra ficha)" : "", VER_C24].filter(Boolean).join("\n"), eur(k.pvp) + (k.revisarPvp ? "\n(revisar precio)" : k.esPack ? "\nsuma de productos" : ""), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
         `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}${explicaDtoMax(f, k, descuento) ? `\n${explicaDtoMax(f, k, descuento)!.replace(/−/g, "-")}` : ""}`, k.masBarato, k.igualar.replace(/−/g, "-"),
       ].filter((_, c) => hayCupon || c !== COL_CUPON);
@@ -123,13 +126,26 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       if (c === 11) { s.textColor = k.masBarato === "Cosméticos24h" ? ROJO : k.masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE; s.fontStyle = k.masBarato === "Igual" ? "normal" : "bold"; }
       if (c === 12) { s.textColor = k.igualar.startsWith("No") ? ROJO : VERDE; s.fontStyle = k.igualar.startsWith("No") ? "bold" : "normal"; }
     },
+    // La línea «Ver en Cosméticos24h» se dibuja aparte, en rosa y con su enlace
+    willDrawCell: d => {
+      if (d.section === "body" && d.column.index === 1 && d.cell.text[d.cell.text.length - 1] === VER_C24) d.cell.text[d.cell.text.length - 1] = "";
+    },
     didDrawCell: d => {
-      if (d.section !== "body") return;
+      if (d.section !== "body" || d.column.index !== 1) return;
       // Una fila partida entre dos páginas llega con índice -1: se busca por su contenido
       const f = orden[d.row.index] ?? orden[cuerpo.indexOf(d.row.raw as string[])];
       if (!f) return;
-      // Enlace: el producto lleva a nuestra ficha
-      if (d.column.index === 1) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.miUrl });
+      const n = d.cell.text.length;
+      const linea = (d.cell.styles.fontSize * doc.getLineHeightFactor() * 25.4) / 72;
+      const arriba = d.cell.y + (d.cell.height - n * linea) / 2;
+      const yVer = arriba + (n - 1) * linea;
+      // Enlaces: el nombre lleva a nuestra ficha y la última línea, a la suya
+      doc.link(d.cell.x, d.cell.y, d.cell.width, yVer - d.cell.y, { url: f.miUrl });
+      if (d.cell.text[n - 1] !== "") return;
+      doc.setTextColor(...ROSA); doc.setFont("helvetica", "bold");
+      doc.text(VER_C24, d.cell.x + d.cell.padding("left"), yVer, { baseline: "top" });
+      const ancho = doc.getTextWidth(VER_C24);
+      doc.link(d.cell.x + d.cell.padding("left"), yVer, ancho, linea, { url: f.suUrl });
     },
   });
 
