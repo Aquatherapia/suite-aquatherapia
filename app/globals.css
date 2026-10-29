@@ -1187,7 +1187,7 @@ button:disabled {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: #c2410c; background: #ffedd5; border-radius: 4px; vertical-align: middle; cursor: help;
 }
-.cp-tabla-head.cp-tabla-pvp { grid-template-columns: 1fr 58px 62px 58px 62px 60px 22px; }
+.cp-tabla-head.cp-tabla-pvp { grid-template-columns: 1fr 58px 62px 58px 62px 60px 86px; }
 .cp-fila.cp-tabla-pvp { grid-template-columns: 1fr 58px 62px 58px 62px 60px 86px; }
 .cp-pvp { color: var(--muted); }
 .cp-pvp-dif { color: #c2410c; font-weight: 700; }
