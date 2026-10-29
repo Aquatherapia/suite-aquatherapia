@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { construirExcel, nombreArchivo, type CuponExcel } from "./excel";
+import { construirExcel, nombreArchivo, calcularFila, type CuponExcel } from "./excel";
 import { descuentoBoardfy } from "./boardfy";
 
 type Comparacion = {
@@ -212,6 +212,59 @@ async function descargarExcel(r: ResultadoMarca, descuento: number | null, cupon
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// Misma tabla que el Excel: mismas columnas, colores y cálculos
+const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+const pctW = (frac: number) => `${(Math.round(frac * 1000) / 10).toFixed(1).replace(".", ",").replace(/,0$/, "")} %`;
+function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descuento: number | null; cupon: CuponExcel }) {
+  const pct = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
+  const conCupon = cupon && cupon.pct > 0
+    ? `Con cupón (−${String(cupon.pct).replace(".", ",")} %${cupon.codigo ? ` ${cupon.codigo}` : ""})`
+    : "Con cupón (no hay)";
+  return (
+    <div className="cp-informe-scroll">
+      <table className="cp-informe">
+        <thead>
+          <tr className="cp-informe-grupos">
+            <th colSpan={2} />
+            <th colSpan={4} className="cp-g-nos">Nosotros</th>
+            <th colSpan={4} className="cp-g-ellos">Cosméticos24h</th>
+            <th colSpan={4} />
+          </tr>
+          <tr>
+            <th>EAN</th><th className="cp-izq">Producto</th>
+            <th>PVP</th><th>{descuento != null ? `Mínimo (−${pct})` : "Mínimo"}</th><th>Precio</th><th>Dto.</th>
+            <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th><th className="cp-h-ellos">{conCupon}</th><th className="cp-h-ellos">Dto. total</th>
+            <th>Diferencia</th><th>Más barato</th><th className="cp-izq">¿Podemos igualar?</th><th>Ficha Cosméticos24h</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((f, i) => {
+            const k = calcularFila(f, descuento);
+            return (
+              <tr key={i}>
+                <td className="cp-suave">{f.ean ?? ""}</td>
+                <td className="cp-izq"><a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a></td>
+                <td className={k.pvpDistinto ? "cp-ambar" : ""}>{eur(k.pvp)}</td>
+                <td className="cp-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
+                <td className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")}>{eur(f.miPrecio)}</td>
+                <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
+                <td className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"}>{eur(k.suPvp)}</td>
+                <td className="cp-rosa">{eur(k.suWeb)}</td>
+                <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-rojo-fondo" : "cp-rosa")}>{eur(f.suPrecio)}</td>
+                <td className={"cp-fuerte cp-pequena " + (k.bajoMinimo.suyo ? "cp-rojo" : "cp-rosa")}>{pctW(k.suDto)}</td>
+                <td className={"cp-fuerte " + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>{f.diff > 0.005 ? "+" : ""}{eur(f.diff)}</td>
+                <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
+                <td className={"cp-izq cp-pequena " + (k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
+                <td className="cp-centro"><a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-ficha">Ver ficha</a></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function MarcaBloque({
   r, descuento, deBoardfy, cupon, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onVerificar, onDesverificar, onRenombrar, onRestaurarNombre,
 }: {
@@ -260,7 +313,8 @@ function MarcaBloque({
   const soloEllosReal = r.soloEllos.filter(s => !s.esPack);
   const packs = r.soloEllos.filter(s => s.esPack);
   const sinEmp = (r.misSinEmparejar ?? []).filter(m => !m.esPack);
-  const compMostrar = mostrarTodos ? r.comparaciones : r.comparaciones.slice(0, MOSTRAR_INICIAL);
+  // Todas las filas, de más caros a más baratos, como en el Excel
+  const compOrden = [...r.comparaciones].sort((a, b) => b.diff - a.diff);
 
   return (
     <div className="vp-accordion">
@@ -322,78 +376,7 @@ function MarcaBloque({
           {r.comparaciones.length > 0 && (
             <>
               <div className="cp-subtit">Comparación de precios (tú vs. Cosméticos24h)</div>
-              <div className="cp-tabla-head cp-tabla-pvp">
-                <span>Producto</span>
-                <span className="cp-col-num" title="Tu PVP sin descuento">Tu PVP</span>
-                <span className="cp-col-num" title="Tu precio con descuento">Tu precio</span>
-                <span className="cp-col-num" title="PVP sin descuento en Cosméticos24h">Su PVP</span>
-                <span className="cp-col-num" title={cupon && cupon.pct > 0 ? `Precio final en Cosméticos24h: el de su web con el cupón de carrito del ${cupon.pct} %` : "Precio con descuento en Cosméticos24h"}>{cupon && cupon.pct > 0 ? "Su precio final" : "Su precio"}</span>
-                <span className="cp-col-num" title="Tu precio − su precio">Dif.</span>
-                <span />
-              </div>
-              {compMostrar.map((c, i) => {
-                const caro = c.diff > 0.01;
-                return (
-                  <div key={i}>
-                    <div className="cp-fila cp-tabla-pvp">
-                      <a href={c.miUrl} target="_blank" rel="noreferrer" className="cp-nombre">
-                        {c.esPack && <span className="cp-pack-tag">pack</span>}
-                        {bajoMinimo(c, descuento) && <span className="cp-minimo-tag" title={`Su precio está por debajo de nuestro mínimo (${precioMinimo(c, descuento)!.toFixed(2)} € = PVP −${descuento} %)`}>Bajo mínimo</span>}
-                        {pvpDistinto(c) && <span className="cp-pvp-tag" title={`PVP distinto: tú ${c.miPvp!.toFixed(2)} € · C24h ${c.suPvp!.toFixed(2)} €`}>PVP ≠</span>}
-                        {c.porEan && <span className="cp-ean-tag" title={`Mismo EAN en las dos webs: ${c.ean}`}>EAN</span>}
-                        {c.verificado && <span className="cp-verificado-tag" title="Comprobado a mano: es el mismo producto">✓ verificado</span>}
-                        {c.nombreEditado && <span className="cp-nombre-tag" title="Nombre editado a mano">✎ editado</span>}
-                        {c.nombre}
-                      </a>
-                      <span className={"cp-col-num cp-pvp" + (pvpDistinto(c) ? " cp-pvp-dif" : "")}>{c.miPvp != null ? `${c.miPvp.toFixed(2)}€` : "—"}</span>
-                      <span className="cp-col-num">{c.miPrecio.toFixed(2)}€{dtoSobrePvp(c.miPvp, c.miPrecio) != null && <small className="cp-dto-pct">−{dtoSobrePvp(c.miPvp, c.miPrecio)} %</small>}</span>
-                      <span className={"cp-col-num cp-pvp" + (pvpDistinto(c) ? " cp-pvp-dif" : "")}>{c.suPvp != null ? `${c.suPvp.toFixed(2)}€` : "—"}</span>
-                      <a href={c.suUrl} target="_blank" rel="noreferrer" className="cp-col-num cp-c24" title={c.suPrecioWeb != null ? `En su web ${c.suPrecioWeb.toFixed(2)} € · con el cupón de carrito ${c.suPrecio.toFixed(2)} €` : "Ver su ficha"}>{c.suPrecio.toFixed(2)}€{c.suPrecioWeb != null && <small className="cp-web">web {c.suPrecioWeb.toFixed(2)}€</small>}{dtoSobrePvp(c.suPvp, c.suPrecio) != null && <small className="cp-dto-pct">−{dtoSobrePvp(c.suPvp, c.suPrecio)} %</small>}</a>
-                      <span className={"cp-col-num " + (caro ? "cp-caro" : c.diff < -0.01 ? "cp-barato" : "")}>
-                        {c.diff > 0 ? "+" : ""}{c.diff.toFixed(2)}€
-                      </span>
-                      <div className="cp-acciones">
-                        <button
-                          className={"cp-verificar" + (c.verificado ? " cp-verificar-on" : "")}
-                          title={c.verificado ? "Verificado: quitar la marca" : "Marcar: he comprobado que es el mismo producto"}
-                          onClick={() => c.verificado ? onDesverificar(c.suUrl) : onVerificar(c.suUrl)}
-                        >
-                          ✓
-                        </button>
-                        <button className="cp-renombrar" title="Editar el nombre mostrado" onClick={() => abrirEditorNombre(c.suUrl, c.nombre)}>Aa</button>
-                        <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecioWeb ?? c.suPrecio, miUrl: c.miUrl })}>×</button>
-                      </div>
-                    </div>
-                    {editandoNombre === c.suUrl && (
-                      <div className="cp-editor">
-                        <div className="cp-editor-lbl">Nombre a mostrar para este producto:</div>
-                        <div className="cp-editor-row">
-                          <input
-                            className="cp-editor-input"
-                            value={nombreInput}
-                            onChange={e => setNombreInput(e.target.value)}
-                            onKeyDown={e => e.key === "Enter" && guardarNombre(c.suUrl)}
-                            autoFocus
-                          />
-                          <button className="cp-editor-save" disabled={guardandoNombre} onClick={() => guardarNombre(c.suUrl)}>
-                            {guardandoNombre ? "…" : "Guardar"}
-                          </button>
-                          <button className="cp-editor-cancel" onClick={() => { setEditandoNombre(null); setErrNombre(""); }}>Cancelar</button>
-                        </div>
-                        {c.nombreEditado && (
-                          <button className="cp-editor-undo" onClick={() => { onRestaurarNombre(c.suUrl); setEditandoNombre(null); }}>Restaurar nombre original</button>
-                        )}
-                        {errNombre && <div className="cp-editor-err">{errNombre}</div>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {r.comparaciones.length > MOSTRAR_INICIAL && (
-                <button className="vp-ver-mas" onClick={onToggleMostrar}>
-                  {mostrarTodos ? "Ver menos ▲" : `Ver ${r.comparaciones.length - MOSTRAR_INICIAL} más →`}
-                </button>
-              )}
+              <TablaInforme filas={compOrden} descuento={descuento} cupon={cupon} />
             </>
           )}
 
@@ -669,12 +652,12 @@ export default function CompararPrecios() {
   const cuponActivo: CuponExcel = config?.cupon?.pct != null && config.cupon.pct > 0 ? { pct: config.cupon.pct, codigo: config.cupon.codigo } : null;
 
   return (
-    <div className="wrap">
+    <div className="wrap cp-wrap">
       <Link href="/" className="volver-link">← Herramientas IA</Link>
       <h1>Comparar mis precios con Cosméticos24h</h1>
       <p className="subtitle">Cruza tus precios con los de Cosméticos24h, marca a marca. Marca en rojo dónde vas más caro y lista lo que ellos tienen y tú no.</p>
 
-      <div className="two-col">
+      <div className="two-col cp-layout">
         {/* ── Columna izquierda ── */}
         <div className="left-col">
           <div className="vp-section-title">Cupón de Cosméticos24h</div>
@@ -759,7 +742,7 @@ export default function CompararPrecios() {
         {/* ── Columna derecha ── */}
         <div className="right-col">
           <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-            <span>La revisión es <strong>marca a marca</strong>: usa el botón "Revisar" de cada marca (columna izquierda). Cada marca muestra <strong>su propia fecha</strong> de revisión.</span>
+            <span>La revisión es <strong>marca a marca</strong>: usa el botón "Revisar" de cada marca (arriba). Cada marca muestra <strong>su propia fecha</strong> de revisión.</span>
           </div>
 
           {error && <div className="error">{error}</div>}
