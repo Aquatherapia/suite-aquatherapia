@@ -135,6 +135,7 @@ async function leerConfig(): Promise<Config> {
       verificados: parsed.verificados ?? {},
       nombres: parsed.nombres ?? {},
       eanVariantes: parsed.eanVariantes ?? {},
+      cupon: parsed.cupon,
     };
   } catch {
     return configVacia();

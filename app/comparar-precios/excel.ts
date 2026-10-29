@@ -75,6 +75,35 @@ function preparar(ws: ExcelJS.Worksheet) {
 const coma = (n: number, dec = 2) => n.toFixed(dec).replace(".", ",");
 const pctTexto = (frac: number) => `${coma(Math.round(frac * 1000) / 10, 1).replace(/,0$/, "")} %`;
 
+// Cálculos de una fila del informe, los mismos en el Excel y en la tabla de la web
+export type FilaCalculada = {
+  pvp: number; limite: number | null; miDto: number; suPvp: number; suWeb: number; suDto: number;
+  bajoMinimo: { mio: boolean; suyo: boolean }; pvpDistinto: boolean;
+  masBarato: "Cosméticos24h" | "Nosotros" | "Igual"; igualar: string;
+};
+export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalculada {
+  const pvp = f.miPvp ?? f.miPrecio;
+  const limite = descuento != null ? Math.round(pvp * (1 - descuento / 100) * 100) / 100 : null;
+  const suPvp = f.suPvp ?? f.suPrecioWeb ?? f.suPrecio;
+  const pct = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
+  // Si vamos más caros: ¿llegamos a su precio final sin pasar nuestro descuento máximo?
+  // Se da también el descuento total sobre nuestro PVP con el que quedaríamos.
+  const dtoIgualar = pvp > 0 ? 1 - f.suPrecio / pvp : 0;
+  const igualar = f.diff <= 0.01 ? ""
+    : limite == null || f.suPrecio >= limite - 0.005 ? `Sí, bajando ${coma(f.diff)} € (dto. total ${pctTexto(dtoIgualar)})`
+    : `No: haría falta un ${pctTexto(dtoIgualar)} (máx. ${pct})`;
+  return {
+    pvp, limite, suPvp,
+    miDto: pvp > 0 ? 1 - f.miPrecio / pvp : 0,
+    suWeb: f.suPrecioWeb ?? f.suPrecio,
+    suDto: suPvp > 0 ? 1 - f.suPrecio / suPvp : 0,
+    bajoMinimo: { mio: limite != null && f.miPrecio < limite - 0.005, suyo: limite != null && f.suPrecio < limite - 0.005 },
+    pvpDistinto: f.suPvp != null && Math.abs(f.suPvp - pvp) > 0.01,
+    masBarato: f.diff > 0.01 ? "Cosméticos24h" : f.diff < -0.01 ? "Nosotros" : "Igual",
+    igualar,
+  };
+}
+
 export async function construirExcel(marca: string, filas: FilaExcel[], soloEllos: SoloEllosExcel[], descuento: number | null, cupon: CuponExcel = null, fecha = new Date()): Promise<ArrayBuffer> {
   const { default: Excel } = await import("exceljs");
   const wb = new Excel.Workbook();
@@ -124,19 +153,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
 
   orden.forEach((f, idx) => {
     const n = CAB + 1 + idx;
-    const pvp = pvpDe(f);
-    const suPvp = f.suPvp ?? f.suPrecioWeb ?? f.suPrecio;
-    const suWeb = f.suPrecioWeb ?? f.suPrecio;
-    const limite = limiteDe(f);
-    const miDto = pvp > 0 ? 1 - f.miPrecio / pvp : 0;
-    const suDto = suPvp > 0 ? 1 - f.suPrecio / suPvp : 0;
-    const masBarato = f.diff > 0.01 ? "Cosméticos24h" : f.diff < -0.01 ? "Nosotros" : "Igual";
-    // Si vamos más caros: ¿llegamos a su precio final sin pasar nuestro descuento máximo?
-    // Se da también el descuento total sobre nuestro PVP con el que quedaríamos.
-    const dtoIgualar = pvp > 0 ? 1 - f.suPrecio / pvp : 0;
-    const igualar = f.diff <= 0.01 ? ""
-      : limite == null || f.suPrecio >= limite - 0.005 ? `Sí, bajando ${coma(f.diff)} € (dto. total ${pctTexto(dtoIgualar)})`
-      : `No: haría falta un ${pctTexto(dtoIgualar)} (máx. ${pct})`;
+    const { pvp, suPvp, suWeb, limite, miDto, suDto, masBarato, igualar } = calcularFila(f, descuento);
     const fila = ws.getRow(n);
     fila.values = [
       f.ean ?? "",

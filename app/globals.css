@@ -1466,3 +1466,44 @@ button:disabled {
   .mg-omitido-fila { grid-template-columns: 1fr auto; }
   .mg-omitido-tag { grid-column: 2; grid-row: 1; }
 }
+
+/* ── Comparar precios: ancho completo y tabla como el Excel ── */
+.cp-wrap { max-width: 1600px; }
+.cp-layout { grid-template-columns: 1fr; }
+.cp-layout > * { min-width: 0; }
+.cp-layout .vp-marcas-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
+.cp-informe-scroll { overflow-x: auto; margin: 4px 0 12px; -webkit-overflow-scrolling: touch; }
+.cp-informe { width: 100%; min-width: 1120px; border-collapse: collapse; font-size: 12px; color: #1f2933; }
+.cp-informe th { background: #1270b6; color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 8px 5px; text-align: center; white-space: normal; line-height: 1.25; }
+.cp-informe th.cp-h-ellos { background: #b5655f; }
+.cp-informe .cp-informe-grupos th { background: transparent; padding: 4px 6px; }
+.cp-informe .cp-informe-grupos th.cp-g-nos { background: #e8f1f9; color: #1270b6; }
+.cp-informe .cp-informe-grupos th.cp-g-ellos { background: #fbeeec; color: #b5655f; }
+.cp-informe td { padding: 7px 5px; border-bottom: 1px solid #e5e7eb; text-align: right; white-space: nowrap; }
+.cp-informe tbody tr:nth-child(even) td { background: #f8fafc; }
+.cp-informe .cp-izq { text-align: left; }
+.cp-informe .cp-centro { text-align: center; }
+.cp-informe td.cp-izq:nth-child(2) { white-space: normal; min-width: 240px; }
+.cp-informe td.cp-izq:nth-child(13) { white-space: normal; min-width: 150px; }
+.cp-informe .cp-prod { color: #1f2933; text-decoration: underline; text-decoration-color: #c7d2de; }
+.cp-informe .cp-suave { color: #6b7280; }
+.cp-informe .cp-fuerte { font-weight: 700; }
+.cp-informe .cp-pequena { font-size: 11px; }
+.cp-informe .cp-dto-azul { color: #1270b6; font-size: 11px; }
+.cp-informe .cp-rosa { color: #b5655f; }
+.cp-informe .cp-rojo { color: #b42318; }
+.cp-informe .cp-verde { color: #067647; }
+.cp-informe td.cp-rojo-fondo { background: #fdecec !important; color: #b42318; }
+.cp-informe td.cp-ambar { background: #fef6e7 !important; color: #b45309; font-weight: 700; }
+.cp-informe .cp-ficha { color: #b5655f; font-size: 11px; text-decoration: underline; }
+@media (max-width: 640px) {
+  .cp-wrap .vp-accordion-header { flex-wrap: wrap; gap: 8px; }
+  .cp-wrap .vp-accordion-right { flex: 1 1 100%; min-width: 0; flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+  .cp-wrap .vp-accordion-marca { flex: 1 1 100%; }
+  /* En el móvil el producto se queda fijo a la izquierda al desplazar la tabla */
+  .cp-informe th:nth-child(2), .cp-informe td:nth-child(2) { position: sticky; left: 0; z-index: 1; box-shadow: 1px 0 0 #e5e7eb; }
+  .cp-informe td:nth-child(2) { background: #fff; }
+  .cp-informe tbody tr:nth-child(even) td:nth-child(2) { background: #f8fafc; }
+  .cp-informe td.cp-izq:nth-child(2) { min-width: 170px; max-width: 170px; }
+  .cp-informe .cp-informe-grupos th:nth-child(1) { position: sticky; left: 0; background: #fff; }
+}
