@@ -99,9 +99,11 @@ export function explicaDtoMax(f: { miPrecio: number; suPrecio: number; diff: num
 
 // Packs y cofres: nuestro PVP es la suma de los productos sueltos, así que el dto. máx. sobre ese PVP
 // y la comparación de PVP no tienen sentido; solo cuenta el precio final.
-const PACK = /\b(pack|set|kit|lote|d[uú]o|tr[ií]o|estuche|cofre|coffret|bundle|caja|box)\b/i;
-export function esPackFila(f: { nombre: string; esPack?: boolean }): boolean {
-  return !!f.esPack || PACK.test(f.nombre);
+// Solo por palabras de pack de verdad: «Dúo»/«Trío» suelen ser nombres de producto (p. ej. 550 Eye Contour Dúo),
+// así que no basta con la marca de pack que pone la revisión.
+const PACK = /\b(pack|set|kit|lote|estuche|cofre|coffret|bundle|caja|box)\b/i;
+export function esPackFila(f: { nombre: string }): boolean {
+  return PACK.test(f.nombre);
 }
 
 // La misma explicación, larga, para el texto que sale al pasar por encima de la celda
