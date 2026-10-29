@@ -12,6 +12,8 @@ const KV_KEY = "comparar-precios-config";
 
 const MI_WEB = "https://www.latiendadecosmeticos.com";
 const SITEMAP = `${MI_WEB}/sitemap.xml`;
+// Feed de Google Shopping de nuestra web: todas las fichas activas con precio, PVP y EAN, en un solo archivo
+const FEED = `${MI_WEB}/resources/productos.xml`;
 
 // Palabras que indican pack/lote: se excluyen de la comparación de precios
 const EXCLUIR = ["pack", "set", "kit", "lote", "duo", "dúo", "trio", "trío", "estuche", "bundle", "caja", "cofre", "coffret", "box", "programa", "rutina"];
@@ -468,7 +470,29 @@ async function leerMiFicha(url: string): Promise<MiProducto[] | null | "sinPreci
 // Enumera y lee los productos de una marca en la tienda propia.
 // Se lee despacio (pocas a la vez y con pausas): con 10 a la vez nuestra web cortaba y se perdían fichas.
 // Cada ficha se intenta 3 veces; las que siguen fallando se reintentan una a una al final, si queda tiempo.
-async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: number): Promise<{ productos: MiProducto[]; fallidas: string[]; sinPrecio: string[] }> {
+// Precio, PVP y EAN de cada ficha activa según el feed (uno por ficha: el del formato más barato).
+// Las fichas desactivadas no salen. null si no se pudo leer.
+type DatoFeed = { precio: number; pvp: number; ean: string | null };
+async function leerFeed(): Promise<Map<string, DatoFeed> | null> {
+  try {
+    const xml = await fetchTexto(FEED);
+    const feed = new Map<string, DatoFeed>();
+    const campo = (item: string, k: string) => item.match(new RegExp(`<g:${k}>([^<]*)</g:${k}>`))?.[1]?.trim() ?? "";
+    for (const item of xml.split("<item>").slice(1)) {
+      const url = campo(item, "link");
+      const pvp = parseFloat(campo(item, "price").replace(",", "."));
+      const oferta = parseFloat(campo(item, "sale_price").replace(",", "."));
+      const precio = Number.isFinite(oferta) && oferta > 0 ? oferta : pvp;
+      if (!url || !Number.isFinite(precio) || precio <= 0) continue;
+      feed.set(url, { precio, pvp: Number.isFinite(pvp) && pvp > 0 ? pvp : precio, ean: normalizarEan(campo(item, "gtin")) });
+    }
+    return feed.size ? feed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: number, feed: Map<string, DatoFeed> | null): Promise<{ productos: MiProducto[]; fallidas: string[]; sinPrecio: string[] }> {
   const tokLower = normalizar(miToken);
   const urls = new Set<string>();
   const re = /<loc>([^<]+-p\d+)<\/loc>/gi;
@@ -492,6 +516,13 @@ async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: n
     if (leidas.has(url) || Date.now() > limiteMs) continue;
     await esperar(1_000);
     await intentar(url, [3_000]);
+  }
+  // Las que no se pudieron leer pero están en el feed: se usa su precio de hoy (sin desglose por formato)
+  for (const url of lista) {
+    const f = feed?.get(url);
+    if (leidas.has(url) || !f) continue;
+    const nombre = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "").replace(/-/g, " ");
+    leidas.set(url, [{ nombre, url, precio: f.precio, pvp: f.pvp, esPack: EXCLUIR.some(w => nombre.toLowerCase().includes(w)), ean: f.ean, propiedades: [], clave: url }]);
   }
   return {
     productos: lista.flatMap(u => { const l = leidas.get(u); return Array.isArray(l) ? l : []; }),
@@ -717,6 +748,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `No se pudo leer el sitemap: ${e}` }, { status: 502 });
     }
 
+    const feed = await leerFeed();
+
     // El cupón de carrito puede cambiar (campañas): se vuelve a mirar en su web en cada revisión
     try {
       const d = await detectarCupon();
@@ -739,7 +772,7 @@ export async function POST(req: NextRequest) {
         const suPorUrl = new Map(suProdsAll.map(s => [s.url, s]));
 
         // 2) Mis productos (tienda propia)
-        const { productos: mis, fallidas, sinPrecio } = await leerMisProductos(marca.miToken, sitemapXml, limiteMis);
+        const { productos: mis, fallidas, sinPrecio } = await leerMisProductos(marca.miToken, sitemapXml, limiteMis, feed);
 
         // 2a) EAN de sus productos (de la caché; los nuevos se leen ahora)
         const eanPendientes = await leerSusEans(suProdsAll.map(s => s.url), config.eanVariantes, limiteEans);
