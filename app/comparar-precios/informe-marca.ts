@@ -42,8 +42,8 @@ const subtitulo = (descuento: number, fecha: Date) =>
   `Cosméticos24h (cosmeticos24h.com) · precios consultados el ${fechaCorta(fecha)} · descuento autorizado: ${num(descuento)} % sobre el PVP`;
 const resumen = (n: number) => `${n} producto${n !== 1 ? "s" : ""} por debajo del precio mínimo autorizado (PVP menos el descuento autorizado).`;
 // ── Excel ──
-const AZUL = "FF1270B6", ROSA = "FFB5655F", GRIS = "FF4B5563", TEXTO = "FF1F2933", SUAVE = "FF6B7280", ROJO = "FFB42318";
-const FONDO_AZUL = "FFEEF5FC", FONDO_ROSA = "FFFDF0EE", FONDO_GRIS = "FFF6F7F9", LINEA = "FFE5E7EB";
+const AZUL = "FF1270B6", ROSA = "FFC2367E", GRIS = "FF4B5563", TEXTO = "FF1F2933", SUAVE = "FF6B7280", ROJO = "FFB42318";
+const FONDO_AZUL = "FFEEF5FC", FONDO_ROSA = "FFFDEEF6", FONDO_GRIS = "FFF6F7F9", LINEA = "FFE5E7EB";
 const EUROS = '#,##0.00 "€"', PORC = "0.0 %";
 
 export async function construirExcelMarca(marca: string, filas: FilaExcel[], descuento: number, cupon: CuponExcel, fecha = new Date()): Promise<ArrayBuffer> {
@@ -114,10 +114,9 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
       const enlace = typeof cel.value === "object";
       const rojo = c.t === "POR DEBAJO DEL MÍNIMO";
       cel.font = fuente({
-        color: { argb: enlace ? (i === cols.length - 1 ? ROSA : AZUL) : rojo ? ROJO : c.grupo === "ellos" ? ROSA : i === 0 ? SUAVE : TEXTO },
+        color: { argb: enlace ? (i === cols.length - 1 ? ROSA : AZUL) : rojo ? ROJO : c.grupo === "ellos" ? ROSA : c.grupo === "nos" ? AZUL : i === 0 ? SUAVE : TEXTO },
         bold: rojo || c.t === "PRECIO MÍNIMO AUTORIZADO", underline: enlace,
       });
-      cel.fill = relleno(c.grupo === "nos" ? FONDO_AZUL : c.grupo === "ellos" ? FONDO_ROSA : c.grupo === "fin" ? FONDO_GRIS : "FFFFFFFF");
       cel.border = { bottom: { style: "thin", color: { argb: LINEA } } };
       cel.alignment = { vertical: "middle", horizontal: i <= 1 ? "left" : enlace ? "center" : "right", wrapText: i === 1 };
     });
@@ -129,8 +128,8 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
 
 // ── PDF ──
 type RGB = [number, number, number];
-const P_AZUL: RGB = [18, 112, 182], P_ROSA: RGB = [181, 101, 95], P_GRIS: RGB = [75, 85, 99], P_TEXTO: RGB = [31, 41, 51], P_SUAVE: RGB = [107, 114, 128], P_ROJO: RGB = [180, 35, 24];
-const P_F_AZUL: RGB = [238, 245, 252], P_F_ROSA: RGB = [253, 240, 238], P_F_GRIS: RGB = [246, 247, 249];
+const P_AZUL: RGB = [18, 112, 182], P_ROSA: RGB = [194, 54, 126], P_GRIS: RGB = [75, 85, 99], P_TEXTO: RGB = [31, 41, 51], P_SUAVE: RGB = [107, 114, 128], P_ROJO: RGB = [180, 35, 24];
+const P_F_AZUL: RGB = [238, 245, 252], P_F_ROSA: RGB = [253, 238, 246];
 const VER_LTC = "Ver en La Tienda de Cosméticos >", VER_C24 = "Ver en Cosméticos24h >";
 const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 const pct = (frac: number) => `${(Math.round(frac * 1000) / 10).toFixed(1).replace(".", ",").replace(/,0$/, "")} %`;
@@ -192,10 +191,11 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
     didParseCell: d => {
       if (d.section !== "body") return;
       const c = d.column.index, g = grupoDe(c), s = d.cell.styles;
-      s.fillColor = g === "nos" ? P_F_AZUL : g === "ellos" ? P_F_ROSA : g === "fin" ? P_F_GRIS : [255, 255, 255];
+      s.fillColor = [255, 255, 255];
       s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
       s.lineColor = [229, 231, 235];
       if (g === "ellos") s.textColor = P_ROSA;
+      if (g === "nos") s.textColor = P_AZUL;
       if (c === 4) s.fontStyle = "bold";
       if (c === colFin) { s.textColor = P_ROJO; s.fontStyle = "bold"; }
     },

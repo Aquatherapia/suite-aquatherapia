@@ -26,9 +26,9 @@ export function filaSoloEllos(s: SoloEllosExcel, cupon: CuponExcel) {
 // Colores del logo (azul #1270B6, azul claro #1C9CD9) y neutros
 const AZUL = "FF1270B6";
 // Rosas de Cosméticos24h (#EDD0CC y #D69D9A de su web, oscurecido para que se lea)
-const ROSA = "FFB5655F";
+const ROSA = "FFC2367E";
 const FONDO_NOSOTROS = "FFE8F1F9";
-const FONDO_ELLOS = "FFFBEEEC";
+const FONDO_ELLOS = "FFFBE9F3";
 const CEBRA = "FFF8FAFC";
 const LINEA = "FFE5E7EB";
 const TEXTO = "FF1F2933";
