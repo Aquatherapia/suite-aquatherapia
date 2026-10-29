@@ -5,6 +5,7 @@ import Link from "next/link";
 
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
+  miPvp?: number; suPvp?: number; // PVP sin descuento (faltan en resultados guardados antes)
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
   verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
 };
@@ -17,6 +18,11 @@ type ResultadoMarca = {
   revisadoEn?: string; // cuándo se revisó ESTA marca (falta en resultados guardados antes)
   eanPendientes?: number; // productos suyos con el EAN aún sin leer
 };
+
+// PVP distinto en las dos webs: puede ser una tarifa sin actualizar
+function pvpDistinto(c: Comparacion): boolean {
+  return c.miPvp != null && c.suPvp != null && Math.abs(c.miPvp - c.suPvp) > 0.01;
+}
 
 function nombreDesdeUrl(url: string) {
   return (url.split("/es/")[1] ?? url).replace(/-p\d+$/, "").replace(/-/g, " ");
@@ -73,7 +79,7 @@ function generarPDF(r: ResultadoMarca) {
 
   const filasComp = comp.map(c => {
     const cls = c.diff > 0.01 ? "caro" : c.diff < -0.01 ? "barato" : "";
-    const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (c.porEan ? '<span class="tag tag-e">EAN</span>' : "") + (c.manual ? '<span class="tag tag-m">manual</span>' : "") + (c.verificado ? '<span class="tag tag-v">verificado</span>' : "");
+    const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (pvpDistinto(c) ? '<span class="tag tag-p">PVP distinto</span>' : "") + (c.porEan ? '<span class="tag tag-e">EAN</span>' : "") + (c.manual ? '<span class="tag tag-m">manual</span>' : "") + (c.verificado ? '<span class="tag tag-v">verificado</span>' : "");
     const miPrecio = c.miUrl
       ? `<a class="lnk" href="${esc(c.miUrl)}">${c.miPrecio.toFixed(2)} €</a>`
       : `${c.miPrecio.toFixed(2)} €`;
@@ -85,6 +91,8 @@ function generarPDF(r: ResultadoMarca) {
       <td class="num">${miPrecio}</td>
       <td class="num">${suPrecio}</td>
       <td class="num ${cls}">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(2)} €</td>
+      <td class="num pvp">${c.miPvp != null ? c.miPvp.toFixed(2) + " €" : "—"}</td>
+      <td class="num pvp ${pvpDistinto(c) ? "pvp-dif" : ""}">${c.suPvp != null ? c.suPvp.toFixed(2) + " €" : "—"}</td>
     </tr>`;
   }).join("");
 
@@ -115,6 +123,9 @@ function generarPDF(r: ResultadoMarca) {
   .barato { color: #15803d; }
   .tag { display: inline-block; font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 1px 4px; border-radius: 3px; margin-right: 5px; background: #ede9fe; color: #6d28d9; vertical-align: middle; }
   .tag-e { background: #e0f2fe; color: #0369a1; }
+  .tag-p { background: #ffedd5; color: #c2410c; }
+  .pvp { color: #666; }
+  .pvp-dif { color: #c2410c; font-weight: 700; }
   .tag-m { background: #dcfce7; color: #15803d; }
   .tag-v { background: #dbeafe; color: #1d4ed8; }
   .resumen { font-size: 11px; color: #555; margin-bottom: 4px; }
@@ -127,11 +138,11 @@ function generarPDF(r: ResultadoMarca) {
   <div class="meta">Generado el ${fechaHora}</div>
 </div>
 
-<div class="resumen">${comp.length} productos comparados · <strong>${masCaro.length} en los que vas más caro</strong> que Cosméticos24h.</div>
+<div class="resumen">${comp.length} productos comparados · <strong>${masCaro.length} en los que vas más caro</strong> que Cosméticos24h · ${comp.filter(pvpDistinto).length} con PVP distinto (¿tarifa sin actualizar?).</div>
 
 ${comp.length ? `<h2>Comparación de precios</h2>
 <table>
-  <thead><tr><th>Producto</th><th class="num">Tú</th><th class="num">Cosméticos24h</th><th class="num">Diferencia</th></tr></thead>
+  <thead><tr><th>Producto</th><th class="num">Tú</th><th class="num">Cosméticos24h</th><th class="num">Diferencia</th><th class="num">PVP tú</th><th class="num">PVP C24h</th></tr></thead>
   <tbody>${filasComp}</tbody>
 </table>` : ""}
 
@@ -141,7 +152,7 @@ ${soloEllosReal.length ? `<h2>Tienen ellos y tú no (${soloEllosReal.length})</h
 ${packs.length ? `<h2>Packs que tienen ellos y tú no (${packs.length})</h2>
 <table><tbody>${lista(packs.map(s => ({ titulo: s.titulo, precio: s.precio, url: s.url })))}</tbody></table>` : ""}
 
-<div class="footer">La Tienda de Cosméticos · Comparativa con Cosméticos24h · ${fechaHora}. Los precios son los de venta actuales de cada tienda (si Cosméticos24h tiene la marca en oferta, la diferencia lo refleja).</div>
+<div class="footer">La Tienda de Cosméticos · Comparativa con Cosméticos24h · ${fechaHora}. Los precios son los de venta actuales de cada tienda (si Cosméticos24h tiene la marca en oferta, la diferencia lo refleja). El PVP es el precio sin descuento de cada tienda.</div>
 <script>window.onload = function(){ window.print(); }<\/script>
 </body></html>`;
 
@@ -270,6 +281,7 @@ function MarcaBloque({
 
   const masCaro = r.comparaciones.filter(c => c.diff > 0.01);
   const verificados = r.comparaciones.filter(c => c.verificado);
+  const conPvpDistinto = r.comparaciones.filter(pvpDistinto);
   const soloEllosReal = r.soloEllos.filter(s => !s.esPack);
   const packs = r.soloEllos.filter(s => s.esPack);
   const sinEmp = (r.misSinEmparejar ?? []).filter(m => !m.esPack);
@@ -289,6 +301,9 @@ function MarcaBloque({
         <div className="vp-accordion-right">
           {masCaro.length > 0 && (
             <span className="vp-pill vp-pill-nuevo">{masCaro.length} caro{masCaro.length !== 1 ? "s" : ""}</span>
+          )}
+          {conPvpDistinto.length > 0 && (
+            <span className="vp-pill cp-pill-pvp" title="El PVP sin descuento no coincide: puede que una tarifa no esté actualizada">{conPvpDistinto.length} PVP distinto{conPvpDistinto.length !== 1 ? "s" : ""}</span>
           )}
           {verificados.length > 0 && (
             <span className="vp-pill vp-pill-verificado" title="Productos que has comprobado a mano">✓ {verificados.length} verificado{verificados.length !== 1 ? "s" : ""}</span>
@@ -333,6 +348,7 @@ function MarcaBloque({
                     <div className="cp-fila">
                       <a href={c.miUrl} target="_blank" rel="noreferrer" className="cp-nombre">
                         {c.esPack && <span className="cp-pack-tag">pack</span>}
+                        {pvpDistinto(c) && <span className="cp-pvp-tag" title={`PVP distinto: tú ${c.miPvp!.toFixed(2)} € · C24h ${c.suPvp!.toFixed(2)} €`}>PVP ≠</span>}
                         {c.porEan && <span className="cp-ean-tag" title={`Mismo EAN en las dos webs: ${c.ean}`}>EAN</span>}
                         {c.manual && <span className="cp-manual-tag" title="Enlazado a mano">✓ manual</span>}
                         {c.verificado && <span className="cp-verificado-tag" title="Comprobado a mano: es el mismo producto">✓ verificado</span>}
@@ -340,8 +356,14 @@ function MarcaBloque({
                         {c.nombre}
                         {!c.manual && !c.verificado && c.confianza < 0.5 && <span className="cp-baja" title="Emparejamiento de baja confianza: revísalo o enlázalo a mano con ✎">≈</span>}
                       </a>
-                      <span className="cp-col-num">{c.miPrecio.toFixed(2)}€</span>
-                      <a href={c.suUrl} target="_blank" rel="noreferrer" className="cp-col-num cp-c24">{c.suPrecio.toFixed(2)}€</a>
+                      <span className="cp-col-num">
+                        {c.miPrecio.toFixed(2)}€
+                        {c.miPvp != null && <span className={"cp-pvp" + (pvpDistinto(c) ? " cp-pvp-dif" : "")} title="Tu PVP sin descuento">PVP {c.miPvp.toFixed(2)}</span>}
+                      </span>
+                      <a href={c.suUrl} target="_blank" rel="noreferrer" className="cp-col-num cp-c24">
+                        {c.suPrecio.toFixed(2)}€
+                        {c.suPvp != null && <span className={"cp-pvp" + (pvpDistinto(c) ? " cp-pvp-dif" : "")} title="PVP sin descuento en Cosméticos24h">PVP {c.suPvp.toFixed(2)}</span>}
+                      </a>
                       <span className={"cp-col-num " + (caro ? "cp-caro" : c.diff < -0.01 ? "cp-barato" : "")}>
                         {c.diff > 0 ? "+" : ""}{c.diff.toFixed(2)}€
                       </span>

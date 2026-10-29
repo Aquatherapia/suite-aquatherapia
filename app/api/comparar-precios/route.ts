@@ -27,6 +27,8 @@ type Comparacion = {
   miPrecio: number;
   suPrecio: number;
   suPrecioTachado?: number;
+  miPvp?: number;      // PVP sin descuento en tu web
+  suPvp?: number;      // PVP sin descuento en Cosméticos24h (precio tachado, o el de venta si no hay oferta)
   diff: number;        // miPrecio - suPrecio (positivo = tú más caro)
   confianza: number;   // 0-1, calidad del emparejamiento por nombre
   miUrl: string;
@@ -51,6 +53,7 @@ type MiSinEmparejar = {
   nombre: string;
   url: string;
   precio: number;
+  pvp?: number;
   esPack: boolean;
 };
 
@@ -223,6 +226,19 @@ async function leerSusEans(urls: string[], cache: Record<string, string[]>, limi
   return urls.filter(u => !(u in cache)).length;
 }
 
+// Lee el PVP sin descuento de una ficha de la tienda propia.
+// La ficha solo enseña el precio final; el original va en un bloque oculto (unit_price_original).
+// Sin él, el PVP es el mismo precio de venta.
+function pvpDesdeHtml(html: string): number | null {
+  const m = html.match(/class="unit_price_original">\s*([0-9]+\.?[0-9]*)/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// PVP de Cosméticos24h: el precio tachado si hay oferta; si no, el de venta
+function suPvp(s: { precio: number; tachado?: number }): number {
+  return s.tachado && s.tachado > s.precio ? s.tachado : s.precio;
+}
+
 // Ejecuta tareas con concurrencia limitada
 async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = [];
@@ -233,7 +249,7 @@ async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promis
   return out;
 }
 
-type MiProducto = { nombre: string; url: string; precio: number; tok: Set<string>; esPack: boolean; ean: string | null };
+type MiProducto = { nombre: string; url: string; precio: number; pvp: number; tok: Set<string>; esPack: boolean; ean: string | null };
 
 // Enumera y lee los productos de una marca en la tienda propia
 async function leerMisProductos(miToken: string, sitemapXml: string): Promise<MiProducto[]> {
@@ -256,7 +272,7 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<Mi
       const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
       const nombre = slug.replace(/-/g, " ");
       const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
-      return { nombre, url, precio, tok: tokens(nombre, miToken), esPack, ean: eanDesdeHtml(html) };
+      return { nombre, url, precio, pvp: pvpDesdeHtml(html) ?? precio, tok: tokens(nombre, miToken), esPack, ean: eanDesdeHtml(html) };
     } catch {
       return null;
     }
@@ -438,16 +454,16 @@ export async function POST(req: NextRequest) {
 
     // Precio/nombre de TU producto: primero del resultado guardado; si no, leyendo la ficha
     const r = config.resultados.find(x => x.slug === marca.slug);
-    let miPrecio: number | undefined, miEsPack = false;
+    let miPrecio: number | undefined, miPvp: number | undefined, miEsPack = false;
     const enComp = r?.comparaciones.find(c => c.miUrl === miUrl);
     const enSin = r?.misSinEmparejar?.find(m => m.url === miUrl);
-    if (enComp) miPrecio = enComp.miPrecio;
-    else if (enSin) { miPrecio = enSin.precio; miEsPack = enSin.esPack; }
+    if (enComp) { miPrecio = enComp.miPrecio; miPvp = enComp.miPvp; }
+    else if (enSin) { miPrecio = enSin.precio; miPvp = enSin.pvp; miEsPack = enSin.esPack; }
     else {
       try {
         const html = await fetchTexto(miUrl);
         const p = precioDesdeHtml(html);
-        if (p !== null) miPrecio = p;
+        if (p !== null) { miPrecio = p; miPvp = pvpDesdeHtml(html) ?? p; }
         const slug = (miUrl.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
         miEsPack = EXCLUIR.some(w => slug.replace(/-/g, " ").toLowerCase().includes(w));
       } catch { /* se queda sin precio */ }
@@ -474,6 +490,7 @@ export async function POST(req: NextRequest) {
       const nombreOverride = (config.nombres[marca.slug] ?? []).find(n => n.suUrl === suUrl)?.nombre;
       r.comparaciones.push({
         nombre: nombreOverride || sp.titulo || nombre, miPrecio, suPrecio: sp.precio, suPrecioTachado: sp.tachado,
+        miPvp, suPvp: suPvp(sp),
         diff: Math.round((miPrecio - sp.precio) * 100) / 100,
         confianza: 1, miUrl, suUrl, esPack: sp.esPack || miEsPack, manual: true,
         verificado: (config.verificados[marca.slug] ?? []).includes(suUrl),
@@ -570,6 +587,7 @@ export async function POST(req: NextRequest) {
           miUsados.add(mp.url);
           comparaciones.push({
             nombre: nombresOverride.get(s.url) ?? s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
+            miPvp: mp.pvp, suPvp: suPvp(s),
             diff: Math.round((mp.precio - s.precio) * 100) / 100,
             confianza: 1, miUrl: mp.url, suUrl: s.url, esPack: s.esPack, manual: true,
             verificado: verificados.has(s.url), nombreEditado: nombresOverride.has(s.url),
@@ -591,6 +609,7 @@ export async function POST(req: NextRequest) {
           suPorEan.add(s.url);
           comparaciones.push({
             nombre: nombresOverride.get(s.url) ?? s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
+            miPvp: mp.pvp, suPvp: suPvp(s),
             diff: Math.round((mp.precio - s.precio) * 100) / 100,
             confianza: 1, miUrl: mp.url, suUrl: s.url, esPack: s.esPack || mp.esPack, porEan: true, ean,
             verificado: verificados.has(s.url), nombreEditado: nombresOverride.has(s.url),
@@ -615,6 +634,7 @@ export async function POST(req: NextRequest) {
             miUsados.add(mp.url);
             comparaciones.push({
               nombre: nombresOverride.get(s.url) ?? s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
+              miPvp: mp.pvp, suPvp: suPvp(s),
               diff: Math.round((mp.precio - s.precio) * 100) / 100,
               confianza: Math.round(mejorJ * 100) / 100,
               miUrl: mp.url, suUrl: s.url, esPack: s.esPack,
@@ -628,7 +648,7 @@ export async function POST(req: NextRequest) {
         // 3d) Mis productos que no se emparejaron con ninguno suyo
         const misSinEmparejar: MiSinEmparejar[] = mis
           .filter(m => !miUsados.has(m.url))
-          .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, esPack: m.esPack }));
+          .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, pvp: m.pvp, esPack: m.esPack }));
 
         // Ordenar: tú más caro primero; el resto por nombre
         comparaciones.sort((a, b) => b.diff - a.diff);
