@@ -20,6 +20,7 @@ type Marca = {
   nombre: string;
   slug: string;    // colección en cosmeticos24h (/collections/{slug})
   miToken: string; // texto que aparece en el slug de TUS URLs (normalmente = slug)
+  descuentoMax?: number | null; // % máximo de descuento sobre el PVP puesto a mano (si falta, el de Boardfy)
 };
 
 type Comparacion = {
@@ -309,6 +310,18 @@ export async function POST(req: NextRequest) {
       config.marcas.push({ nombre, slug, miToken: (miToken || slug).trim() });
       await guardarConfig(config);
     }
+    return NextResponse.json(config);
+  }
+
+  // Descuento máximo de la marca (null = volver al de Boardfy)
+  if (body.action === "descuento") {
+    const { slug, descuentoMax } = body as { slug: string; descuentoMax: number | null };
+    const m = config.marcas.find(x => x.slug === slug);
+    if (!m) return NextResponse.json({ error: "Marca no encontrada." }, { status: 404 });
+    if (descuentoMax == null) delete m.descuentoMax;
+    else if (!(descuentoMax >= 0 && descuentoMax <= 90)) return NextResponse.json({ error: "El descuento debe estar entre 0 y 90 %." }, { status: 400 });
+    else m.descuentoMax = Math.round(descuentoMax * 10) / 10;
+    await guardarConfig(config);
     return NextResponse.json(config);
   }
 

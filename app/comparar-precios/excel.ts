@@ -1,5 +1,6 @@
 // Excel por marca con la estructura de los informes de precios de las marcas (p. ej. el de Matis Paris):
-// EAN, nombre, PVP, PVP -10 % y resaltados los precios que quedan por debajo de ese -10 %.
+// EAN, nombre, PVP, nuestro mínimo (PVP menos el descuento máximo de la marca, el de Boardfy por defecto)
+// y resaltados los precios que quedan por debajo de ese mínimo.
 // Diseño con los azules del logo de La Tienda de Cosméticos.
 import type ExcelJS from "exceljs";
 
@@ -24,6 +25,7 @@ const AMBAR = "FFB45309";
 const AMBAR_FONDO = "FFFEF6E7";
 const VERDE = "FF067647";
 const EUROS = '#,##0.00 "€"';
+const PORCENTAJE = '0.0 %';
 const EUROS_SIGNO = '+#,##0.00 "€";-#,##0.00 "€";0.00 "€"';
 const FUENTE = "Calibri";
 
@@ -67,30 +69,36 @@ function preparar(ws: ExcelJS.Worksheet) {
   ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
 }
 
-export async function construirExcel(marca: string, filas: FilaExcel[], soloEllos: SoloEllosExcel[], fecha = new Date()): Promise<ArrayBuffer> {
+export async function construirExcel(marca: string, filas: FilaExcel[], soloEllos: SoloEllosExcel[], descuento: number | null, fecha = new Date()): Promise<ArrayBuffer> {
   const { default: Excel } = await import("exceljs");
   const wb = new Excel.Workbook();
   wb.creator = "La Tienda de Cosméticos";
 
   const orden = [...filas].sort((a, b) => b.diff - a.diff);
   const pvpDe = (f: FilaExcel) => f.miPvp ?? f.miPrecio;
-  const limiteDe = (f: FilaExcel) => Math.round(pvpDe(f) * 0.9 * 100) / 100;
+  const factor = descuento != null ? 1 - descuento / 100 : null;
+  const pct = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
+  const limiteDe = (f: FilaExcel) => (factor != null ? Math.round(pvpDe(f) * factor * 100) / 100 : null);
   const masCaros = orden.filter(f => f.diff > 0.01).length;
   const pvpDistintos = orden.filter(f => f.suPvp != null && Math.abs(f.suPvp - pvpDe(f)) > 0.01).length;
-  const bajoLimite = orden.filter(f => f.suPrecio < limiteDe(f) - 0.005).length;
+  const bajoLimite = orden.filter(f => { const l = limiteDe(f); return l != null && f.suPrecio < l - 0.005; }).length;
 
   // ── Hoja 1: comparación por EAN ──
   const ws = wb.addWorksheet(marca.replace(/[\\/?*[\]:]/g, " ").slice(0, 31));
   preparar(ws);
-  ws.columns = [16, 52, 11, 11, 12, 11, 12, 13, 15].map(width => ({ width }));
-  encabezado(ws, "I",
+  // Columnas: A EAN · B producto · C-F nosotros (PVP, mínimo, precio, dto.) · G-I Cosméticos24h (PVP, precio, dto.)
+  //          J diferencia · K más barato · L ¿podemos igualar?
+  ws.columns = [16, 50, 11, 12, 12, 9, 11, 12, 9, 13, 15, 22].map(width => ({ width }));
+  encabezado(ws, "L",
     `Comparativa de precios · ${marca}`,
     `La Tienda de Cosméticos frente a Cosméticos24h · emparejado por EAN · ${fechaCorta(fecha)}`,
-    `${orden.length} productos comparados  ·  ${masCaros} en los que vamos más caros  ·  ${bajoLimite} que Cosméticos24h vende por debajo del PVP −10 %  ·  ${pvpDistintos} con PVP distinto`);
+    `${orden.length} productos comparados  ·  ${masCaros} en los que vamos más caros  ·  ` +
+    (descuento != null ? `${bajoLimite} que Cosméticos24h vende por debajo de nuestro mínimo (PVP −${pct})  ·  ` : "") +
+    `${pvpDistintos} con PVP distinto`);
 
   // Fila 4: grupos de columnas
-  ws.mergeCells("C4:E4"); ws.mergeCells("F4:G4");
-  for (const [celda, texto, fondo, color] of [["C4", "NOSOTROS", FONDO_NOSOTROS, AZUL], ["F4", "COSMÉTICOS24H", FONDO_ELLOS, AZUL_CLARO]] as const) {
+  ws.mergeCells("C4:F4"); ws.mergeCells("G4:I4");
+  for (const [celda, texto, fondo, color] of [["C4", "NOSOTROS", FONDO_NOSOTROS, AZUL], ["G4", "COSMÉTICOS24H", FONDO_ELLOS, AZUL_CLARO]] as const) {
     const c = ws.getCell(celda);
     c.value = texto;
     c.font = fuente({ bold: true, size: 9, color: { argb: color } });
@@ -100,69 +108,84 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   ws.getRow(4).height = 18;
 
   const CAB = 5;
-  filaCabecera(ws, CAB, ["EAN", "PRODUCTO", "PVP", "PVP −10 %", "PRECIO", "PVP", "PRECIO", "DIFERENCIA", "MÁS BARATO"]);
+  filaCabecera(ws, CAB, ["EAN", "PRODUCTO", "PVP", descuento != null ? `MÍNIMO (−${pct})` : "MÍNIMO", "PRECIO", "DTO.", "PVP", "PRECIO", "DTO.", "DIFERENCIA", "MÁS BARATO", "¿PODEMOS IGUALAR?"]);
 
   orden.forEach((f, idx) => {
     const n = CAB + 1 + idx;
     const pvp = pvpDe(f);
+    const suPvp = f.suPvp ?? f.suPrecio;
     const limite = limiteDe(f);
+    const miDto = pvp > 0 ? 1 - f.miPrecio / pvp : 0;
+    const suDto = suPvp > 0 ? 1 - f.suPrecio / suPvp : 0;
     const masBarato = f.diff > 0.01 ? "Cosméticos24h" : f.diff < -0.01 ? "Nosotros" : "Igual";
+    // Si vamos más caros: ¿llegamos a su precio sin pasar nuestro descuento máximo?
+    const igualar = f.diff <= 0.01 ? "" : limite == null ? "Sí (sin límite)"
+      : f.suPrecio >= limite - 0.005 ? `Sí, bajando ${f.diff.toFixed(2).replace(".", ",")} €` : "No: está bajo nuestro mínimo";
     const fila = ws.getRow(n);
     fila.values = [
       f.ean ?? "",
       { text: f.nombre, hyperlink: f.miUrl },
       pvp,
-      { formula: `ROUND(C${n}*0.9,2)`, result: limite },
+      factor != null && limite != null ? { formula: `ROUND(C${n}*${factor},2)`, result: limite } : "—",
       f.miPrecio,
-      f.suPvp ?? null,
+      { formula: `IF(C${n}>0,1-E${n}/C${n},0)`, result: miDto },
+      suPvp,
       // Su precio enlaza a su ficha y sigue siendo un número (para ordenar y filtrar)
       { formula: `HYPERLINK("${f.suUrl}",${f.suPrecio})`, result: f.suPrecio },
-      { formula: `E${n}-G${n}`, result: Math.round(f.diff * 100) / 100 },
+      { formula: `IF(G${n}>0,1-H${n}/G${n},0)`, result: suDto },
+      { formula: `E${n}-H${n}`, result: Math.round(f.diff * 100) / 100 },
       masBarato,
+      igualar,
     ];
     fila.height = 22;
-    for (let c = 1; c <= 9; c++) {
+    for (let c = 1; c <= 12; c++) {
       const cel = fila.getCell(c);
       cel.font = fuente();
       cel.border = lineaAbajo;
-      cel.alignment = { vertical: "middle", horizontal: c === 2 ? "left" : c === 1 ? "left" : c === 9 ? "center" : "right", wrapText: c === 2 };
+      cel.alignment = { vertical: "middle", horizontal: c <= 2 || c === 12 ? "left" : c === 11 ? "center" : "right", wrapText: c === 2 };
       if (idx % 2 === 1) cel.fill = relleno(CEBRA);
-      if (c >= 3 && c <= 8) cel.numFmt = EUROS;
+      if ([3, 4, 5, 7, 8].includes(c)) cel.numFmt = EUROS;
     }
     fila.getCell(1).numFmt = "@";
-    fila.getCell(8).numFmt = EUROS_SIGNO;
+    fila.getCell(6).numFmt = PORCENTAJE;
+    fila.getCell(9).numFmt = PORCENTAJE;
+    fila.getCell(10).numFmt = EUROS_SIGNO;
     fila.getCell(1).font = fuente({ color: { argb: TEXTO_SUAVE } });
     fila.getCell(4).font = fuente({ color: { argb: TEXTO_SUAVE } });
     fila.getCell(5).font = fuente({ bold: true });
-    fila.getCell(7).font = fuente({ bold: true, color: { argb: AZUL_CLARO } });
+    fila.getCell(6).font = fuente({ size: 9, color: { argb: AZUL } });
+    fila.getCell(8).font = fuente({ bold: true, color: { argb: AZUL_CLARO } });
+    fila.getCell(9).font = fuente({ size: 9, color: { argb: AZUL_CLARO } });
 
-    // Resaltado, como en los informes de marca: precio por debajo del PVP -10 %
-    for (const [c, precio] of [[5, f.miPrecio], [7, f.suPrecio]] as const) {
-      if (precio < limite - 0.005) {
+    // Resaltado, como en los informes de marca: precio por debajo de nuestro mínimo
+    for (const [c, precio] of [[5, f.miPrecio], [8, f.suPrecio]] as const) {
+      if (limite != null && precio < limite - 0.005) {
         fila.getCell(c).fill = relleno(ROJO_FONDO);
         fila.getCell(c).font = fuente({ bold: true, color: { argb: ROJO } });
+        fila.getCell(c + 1).font = fuente({ size: 9, bold: true, color: { argb: ROJO } });
       }
     }
     // PVP distinto en las dos webs (¿tarifa sin actualizar?)
     if (f.suPvp != null && Math.abs(f.suPvp - pvp) > 0.01) {
-      for (const c of [3, 6]) {
+      for (const c of [3, 7]) {
         fila.getCell(c).fill = relleno(AMBAR_FONDO);
         fila.getCell(c).font = fuente({ bold: true, color: { argb: AMBAR } });
       }
     }
-    if (f.diff > 0.01) fila.getCell(8).font = fuente({ bold: true, color: { argb: ROJO } });
-    else if (f.diff < -0.01) fila.getCell(8).font = fuente({ bold: true, color: { argb: VERDE } });
-    fila.getCell(9).font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE } });
+    if (f.diff > 0.01) fila.getCell(10).font = fuente({ bold: true, color: { argb: ROJO } });
+    else if (f.diff < -0.01) fila.getCell(10).font = fuente({ bold: true, color: { argb: VERDE } });
+    fila.getCell(11).font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE } });
+    fila.getCell(12).font = fuente({ size: 9, bold: igualar.startsWith("No"), color: { argb: igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
   });
 
   const ultima = CAB + orden.length;
   ws.views = [{ state: "frozen", xSplit: 2, ySplit: CAB, showGridLines: false }];
-  ws.autoFilter = { from: `A${CAB}`, to: `I${Math.max(ultima, CAB)}` };
+  ws.autoFilter = { from: `A${CAB}`, to: `L${Math.max(ultima, CAB)}` };
 
   // Leyenda
   const ley = ultima + 2;
   const leyenda: [string, string, string][] = [
-    [ROJO_FONDO, ROJO, "Precio por debajo del PVP −10 %"],
+    [ROJO_FONDO, ROJO, descuento != null ? `Precio por debajo de nuestro mínimo (PVP −${pct}, descuento máximo de la marca)` : "Precio por debajo de nuestro mínimo (esta marca no tiene descuento máximo)"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?)"],
   ];
   leyenda.forEach(([fondo, color, texto], i) => {
@@ -174,7 +197,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
     t.font = fuente({ size: 9, color: { argb: color } });
   });
   const nota = ws.getCell(`B${ley + leyenda.length}`);
-  nota.value = "PVP: precio sin descuento. Precio: precio de venta actual. Diferencia: nuestro precio menos el suyo.";
+  nota.value = "PVP: precio sin descuento. Mínimo: PVP menos el descuento máximo de la marca (Boardfy o el puesto en la app). Precio: precio de venta actual. Dto.: descuento del precio sobre el PVP. Diferencia: nuestro precio menos el suyo.";
   nota.font = fuente({ size: 9, italic: true, color: { argb: TEXTO_SUAVE } });
 
   // ── Hoja 2: lo que tienen ellos y nosotros no ──
