@@ -9,6 +9,7 @@ export type FilaExcel = {
   miPrecio: number; suPrecio: number; miPvp?: number; suPvp?: number; diff: number;
   suPrecioWeb?: number; // precio de su web antes del cupón de carrito (suPrecio ya lo lleva aplicado)
   descatalogado?: boolean;
+  stock?: number;
 };
 export type CuponExcel = { pct: number; codigo?: string; directo?: boolean } | null;
 export type SoloEllosExcel = { titulo: string; precio: number; url: string; esPack: boolean; ean?: string };

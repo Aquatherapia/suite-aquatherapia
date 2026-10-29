@@ -41,6 +41,7 @@ type Comparacion = {
   porEan?: boolean;    // true si se emparejó por EAN (mismo código de barras en las dos webs)
   ean?: string;        // EAN con el que se emparejó
   descatalogado?: boolean; // tu ficha está marcada como descatalogada en tu web
+  stock?: number;          // unidades que quedan (solo se guarda si está descatalogada)
 };
 
 type SoloEllos = {
@@ -63,6 +64,7 @@ type MiSinEmparejar = {
   ean?: string;
   formato?: string; // formato de la ficha (50 ml, 30 ml…) cuando tiene varios
   descatalogado?: boolean;
+  stock?: number;   // unidades que quedan (solo si está descatalogada)
 };
 
 type ResultadoMarca = {
@@ -254,7 +256,7 @@ async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promis
 // La web solo publica el EAN del primer formato (el que sale marcado); los demás van sin EAN.
 type MiProducto = {
   nombre: string; url: string; precio: number; pvp: number; esPack: boolean; ean: string | null; propiedades: string[];
-  formato?: string; clave: string; descatalogado?: boolean | null;
+  formato?: string; clave: string; descatalogado?: boolean | null; stock?: number | null;
 };
 
 // Combinaciones de propiedades (tono, formato…) de la ficha, para preguntar a la web por su estado.
@@ -296,7 +298,7 @@ function formatosDesdeHtml(html: string): { id: string; titulo: string }[] {
 const TAMANO = /(\d+(?:[.,]\d+)?)\s*(ml|gr|g|uds?|unidades|l)\b/i;
 
 // Precio, PVP y estado de un formato, preguntando a la web (lo mismo que hace la ficha al elegir formato)
-async function estadoVariante(url: string, propiedades: string): Promise<{ precio: number; pvp: number | null; descatalogado: boolean } | null> {
+async function estadoVariante(url: string, propiedades: string): Promise<{ precio: number; pvp: number | null; descatalogado: boolean; stock: number | null } | null> {
   const id = url.match(/-p(\d+)$/)?.[1];
   if (!id) return null;
   try {
@@ -307,14 +309,21 @@ async function estadoVariante(url: string, propiedades: string): Promise<{ preci
       cache: "no-store",
     });
     if (!res.ok) return null;
-    const j = await res.json() as { descatalogado?: string | number; precios?: { precio?: number | string; precio_anterior?: number | string } };
+    const j = await res.json() as { descatalogado?: string | number; stock?: string | number; precios?: { precio?: number | string; precio_anterior?: number | string } };
     const precio = Number(j.precios?.precio);
     if (!Number.isFinite(precio) || precio <= 0) return null;
     const pvp = Number(j.precios?.precio_anterior);
-    return { precio: Math.round(precio * 100) / 100, pvp: Number.isFinite(pvp) && pvp > 0 ? pvp : null, descatalogado: String(j.descatalogado) === "1" };
+    return { precio: Math.round(precio * 100) / 100, pvp: Number.isFinite(pvp) && pvp > 0 ? pvp : null, descatalogado: String(j.descatalogado) === "1", stock: stockDe(j.stock) };
   } catch {
     return null;
   }
+}
+
+// Unidades en stock según la web. Las fichas que se pueden vender sin stock dan un número enorme (9998):
+// solo tiene sentido mirarlo en las descatalogadas, que ya no se reponen.
+function stockDe(v: unknown): number | null {
+  const n = Number(v);
+  return v === "" || v == null || !Number.isFinite(n) ? null : Math.max(0, Math.round(n));
 }
 
 // Tamaño de un formato para comparar entre webs: «Tarro 30 ml» y «30 ml» → "30ml"
@@ -326,14 +335,16 @@ function tamano(t: string): string {
 // ¿Está descatalogada la ficha? La propia web lo dice al pedir el estado de cada variante
 // (lo mismo que pinta «Producto descatalogado» en la ficha). Cuenta como descatalogada si lo están
 // todas sus variantes. null si no se pudo saber.
-async function descatalogadoEnMiWeb(url: string, combinaciones: string[]): Promise<boolean | null> {
+async function descatalogadoEnMiWeb(url: string, combinaciones: string[]): Promise<{ descatalogado: boolean; stock: number | null } | null> {
   if (combinaciones.length === 0) return null;
   const estados = await Promise.all(combinaciones.map(p => varianteDescatalogada(url, p)));
   if (estados.some(e => e === null)) return null;
-  return estados.every(e => e === true);
+  const descatalogado = estados.every(e => e!.descatalogado);
+  const stocks = estados.map(e => e!.stock);
+  return { descatalogado, stock: stocks.some(x => x === null) ? null : stocks.reduce((a, b) => a! + b!, 0) };
 }
 
-async function varianteDescatalogada(url: string, propiedades: string): Promise<boolean | null> {
+async function varianteDescatalogada(url: string, propiedades: string): Promise<{ descatalogado: boolean; stock: number | null } | null> {
   const id = url.match(/-p(\d+)$/)?.[1];
   if (!id) return null;
   try {
@@ -344,8 +355,8 @@ async function varianteDescatalogada(url: string, propiedades: string): Promise<
       cache: "no-store",
     });
     if (!res.ok) return null;
-    const j = await res.json() as { descatalogado?: string | number };
-    return String(j.descatalogado) === "1";
+    const j = await res.json() as { descatalogado?: string | number; stock?: string | number };
+    return { descatalogado: String(j.descatalogado) === "1", stock: stockDe(j.stock) };
   } catch {
     return null;
   }
@@ -380,7 +391,7 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<Mi
         if (estados.every(e => e !== null)) {
           return formatos.map((f, i): MiProducto => ({
             nombre: `${nombre} · ${f.titulo}`, url, precio: estados[i]!.precio, pvp: estados[i]!.pvp ?? estados[i]!.precio, esPack,
-            ean: i === 0 ? ean : null, propiedades: [f.id], formato: f.titulo, clave: `${url}#${f.id}`, descatalogado: estados[i]!.descatalogado,
+            ean: i === 0 ? ean : null, propiedades: [f.id], formato: f.titulo, clave: `${url}#${f.id}`, descatalogado: estados[i]!.descatalogado, stock: estados[i]!.stock,
           }));
         }
       }
@@ -699,20 +710,29 @@ export async function POST(req: NextRequest) {
         // 4) Mis productos que no tienen el mismo EAN que ninguno suyo
         const misSinEmparejarMp = mis.filter(m => !miUsados.has(m.clave));
         const misSinEmparejar: MiSinEmparejar[] = misSinEmparejarMp
-          .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, pvp: m.pvp, esPack: m.esPack, sinEan: !m.ean, ean: m.ean ?? undefined, formato: m.formato, descatalogado: m.descatalogado ?? undefined }));
-        for (const c of comparaciones) if (miDeFila.get(c)?.descatalogado) c.descatalogado = true;
+          .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, pvp: m.pvp, esPack: m.esPack, sinEan: !m.ean, ean: m.ean ?? undefined, formato: m.formato, descatalogado: m.descatalogado ?? undefined, stock: m.descatalogado && m.stock != null ? m.stock : undefined }));
+        for (const c of comparaciones) {
+          const mp = miDeFila.get(c);
+          if (mp?.descatalogado) { c.descatalogado = true; if (mp.stock != null) c.stock = mp.stock; }
+        }
 
         // 5) Fichas mías descatalogadas (una consulta por ficha, si queda tiempo).
         // Las de varios formatos ya lo saben por formato.
         if (Date.now() < limiteEans + 8_000) {
           const misPorUrl = new Map(mis.map(m => [m.url, m]));
           const urlsMias = [...new Set([...comparaciones.filter(c => !miDeFila.get(c)?.formato).map(c => c.miUrl), ...misSinEmparejarMp.filter(m => !m.formato).map(m => m.url)])];
-          const estados = new Map<string, boolean | null>();
+          const estados = new Map<string, { descatalogado: boolean; stock: number | null } | null>();
           await enLotes(urlsMias, 5, async url => {
             estados.set(url, await descatalogadoEnMiWeb(url, misPorUrl.get(url)?.propiedades ?? []));
           });
-          for (const c of comparaciones) if (!miDeFila.get(c)?.formato && estados.get(c.miUrl)) c.descatalogado = true;
-          misSinEmparejar.forEach((m, i) => { if (!misSinEmparejarMp[i].formato && estados.get(m.url)) m.descatalogado = true; });
+          for (const c of comparaciones) {
+            const e = miDeFila.get(c)?.formato ? null : estados.get(c.miUrl);
+            if (e?.descatalogado) { c.descatalogado = true; if (e.stock != null) c.stock = e.stock; }
+          }
+          misSinEmparejar.forEach((m, i) => {
+            const e = misSinEmparejarMp[i].formato ? null : estados.get(m.url);
+            if (e?.descatalogado) { m.descatalogado = true; if (e.stock != null) m.stock = e.stock; }
+          });
         }
 
         // Ordenar: tú más caro primero; el resto por nombre

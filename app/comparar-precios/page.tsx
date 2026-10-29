@@ -11,11 +11,12 @@ type Comparacion = {
   miPvp?: number; suPvp?: number; // PVP sin descuento (faltan en resultados guardados antes)
   suPrecioWeb?: number; // precio de su web antes del cupón de carrito (suPrecio ya lo lleva aplicado)
   descatalogado?: boolean; // tu ficha está descatalogada en tu web
+  stock?: number;          // unidades que quedan si está descatalogada
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
   verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
 };
 type SoloEllos = { titulo: string; precio: number; tachado?: number; url: string; esPack: boolean; ean?: string };
-type MiSinEmparejar = { nombre: string; url: string; precio: number; pvp?: number; esPack: boolean; sinEan?: boolean; ean?: string; formato?: string; descatalogado?: boolean };
+type MiSinEmparejar = { nombre: string; url: string; precio: number; pvp?: number; esPack: boolean; sinEan?: boolean; ean?: string; formato?: string; descatalogado?: boolean; stock?: number };
 type ResultadoMarca = {
   marca: string; slug: string; error?: string;
   comparaciones: Comparacion[]; soloEllos: SoloEllos[]; misSinEmparejar: MiSinEmparejar[];
@@ -120,6 +121,18 @@ async function descargarPdf(r: ResultadoMarca, descuento: number | null, cupon: 
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// «Descatalogado (1 u)»; sin unidades, aviso para desactivar la ficha
+function EtiquetaDescat({ stock }: { stock?: number }) {
+  return (
+    <>
+      <span className="cp-descat-tag" title="Tu ficha está marcada como descatalogada en tu web">
+        Descatalogado{stock != null && ` (${stock} u)`}
+      </span>
+      {stock === 0 && <span className="cp-desactivar-tag" title="Descatalogado y sin unidades: no se puede vender, conviene desactivar la ficha">Sin stock: desactivar ficha</span>}
+    </>
+  );
+}
+
 // Listas de productos sin pareja, con el mismo diseño que la tabla de comparación
 function TablaSoloEllos({ filas, cupon, onOcultar }: { filas: SoloEllos[]; cupon: CuponExcel; onOcultar: (s: SoloEllos) => void }) {
   const hayCupon = !!cupon && cupon.pct > 0;
@@ -183,7 +196,7 @@ function TablaSoloNosotros({ filas }: { filas: MiSinEmparejar[] }) {
                 </td>
                 <td className="cp-izq">
                   {m.esPack && <span className="cp-pack-tag">pack</span>}
-                  {m.descatalogado && <span className="cp-descat-tag" title="Tu ficha está marcada como descatalogada en tu web">Descatalogado</span>}
+                  {m.descatalogado && <EtiquetaDescat stock={m.stock} />}
                   <a href={m.url} target="_blank" rel="noreferrer" className="cp-prod">{m.nombre}</a>
                 </td>
                 <td>{eur(pvp)}</td>
@@ -230,7 +243,7 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
               <tr key={i}>
                 <td className="cp-suave">{f.ean ?? ""}</td>
                 <td className="cp-izq">
-                  {f.descatalogado && <span className="cp-descat-tag" title="Tu ficha está marcada como descatalogada en tu web">Descatalogado</span>}
+                  {f.descatalogado && <EtiquetaDescat stock={f.stock} />}
                   {k.bajoMinimo.suyo && <span className="cp-maxdto-tag" title="Cosméticos24h vende por debajo de nuestro PVP con el descuento máximo: no podemos igualarlos">Más allá de nuestro dto. máx.</span>}
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
@@ -241,9 +254,14 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                 <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
                 <td className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"}>{eur(k.suPvp)}</td>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
-                <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo" : "cp-rosa")}><a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-precio-enlace" title="Ver su ficha">{eur(f.suPrecio)}</a></td>
-                <td className={"cp-fuerte cp-pequena " + (k.bajoMinimo.suyo ? "cp-morado" : "cp-rosa")}>{pctW(k.suDto)}</td>
-                <td className={"cp-fuerte " + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>{f.diff > 0.005 ? "+" : ""}{eur(f.diff)}</td>
+                <td className="cp-fuerte cp-rosa"><a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-precio-enlace" title="Ver su ficha">{eur(f.suPrecio)}</a></td>
+                <td className="cp-fuerte cp-pequena cp-rosa">{pctW(k.suDto)}</td>
+                <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>
+                  {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
+                  {k.bajoMinimo.suyo && k.limite != null && (
+                    <span className="cp-dif-max" title="Diferencia aplicando nuestro descuento máximo: aun así seguimos más caros">con dto. máx. +{eur(k.limite - f.suPrecio)}</span>
+                  )}
+                </td>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
                 <td className={"cp-izq cp-pequena " + (k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
               </tr>
@@ -304,6 +322,7 @@ function MarcaBloque({
   const verificados = r.comparaciones.filter(c => c.verificado);
   const conPvpDistinto = r.comparaciones.filter(pvpDistinto);
   const conBajoMinimo = r.comparaciones.filter(c => bajoMinimo(c, descuento));
+  const paraDesactivar = [...r.comparaciones, ...(r.misSinEmparejar ?? [])].filter(x => x.descatalogado && x.stock === 0).length;
   const soloEllosReal = r.soloEllos.filter(s => !s.esPack);
   const packs = r.soloEllos.filter(s => s.esPack);
   const sinEmp = (r.misSinEmparejar ?? []).filter(m => !m.esPack);
@@ -343,6 +362,7 @@ function MarcaBloque({
           {conBajoMinimo.length > 0 && (
             <span className="vp-pill cp-pill-minimo" title={`Cosméticos24h vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento máximo`}>{conBajoMinimo.length} más allá de nuestro dto. máx.</span>
           )}
+          {paraDesactivar > 0 && <span className="vp-pill cp-pill-desactivar" title="Descatalogados sin unidades: conviene desactivar la ficha">{paraDesactivar} para desactivar</span>}
           {conPvpDistinto.length > 0 && (
             <span className="vp-pill cp-pill-pvp" title="El PVP sin descuento no coincide: puede que una tarifa no esté actualizada">{conPvpDistinto.length} PVP distinto{conPvpDistinto.length !== 1 ? "s" : ""}</span>
           )}

@@ -1200,6 +1200,7 @@ button:disabled {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: #b42318; background: #fdecec; border-radius: 4px; vertical-align: middle; cursor: help;
 }
+.cp-pill-desactivar { background: #b42318; color: #fff; }
 .cp-pill-minimo { background: #f1ebfb; color: #6b3fb5; }
 .cp-dto { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: var(--muted); }
 .cp-dto-input { width: 44px; padding: 2px 4px; font-size: 11px; text-align: right; margin: 0; }
@@ -1495,11 +1496,13 @@ button:disabled {
 .cp-informe .cp-verde { color: #067647; }
 .cp-informe td.cp-rojo-fondo { background: #fdecec !important; color: #b42318; }
 .cp-informe .cp-morado { color: #6b3fb5; }
-.cp-informe td.cp-morado-fondo { background: #f1ebfb !important; color: #6b3fb5; }
+.cp-informe .cp-dif-max { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 700; color: #6b3fb5; }
+.cp-informe td.cp-morado-fondo { background: #f1ebfb !important; }
 .cp-informe td.cp-morado-fondo .cp-precio-enlace { color: #6b3fb5; }
 .cp-informe td.cp-ambar { background: #fef6e7 !important; color: #b45309; font-weight: 700; }
 .cp-informe .cp-enlace-c24 { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #b5655f; text-decoration: none; }
-.cp-informe .cp-precio-enlace { color: inherit; text-decoration: underline; text-decoration-color: rgba(181, 101, 95, 0.4); }
+.cp-informe .cp-precio-enlace { color: inherit; text-decoration: none; }
+.cp-informe .cp-precio-enlace:hover { text-decoration: underline; }
 .cp-informe .cp-dto-celda { display: block; font-size: 10px; font-weight: 700; margin-top: 1px; }
 @media (max-width: 640px) {
   .cp-wrap .vp-accordion-header { flex-wrap: wrap; gap: 8px; }
@@ -1529,6 +1532,7 @@ button:disabled {
 }
 
 .cp-ean-copiable { user-select: all; cursor: text; }
+.cp-desactivar-tag { display: inline-block; margin: 0 6px 2px 0; padding: 1px 6px; border-radius: 4px; background: #b42318; color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
 .cp-maxdto-tag { display: inline-block; margin: 0 6px 2px 0; padding: 1px 6px; border-radius: 4px; background: #f1ebfb; color: #6b3fb5; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
 .cp-descat-tag { display: inline-block; margin: 0 6px 2px 0; padding: 1px 6px; border-radius: 4px; background: #374151; color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
 .cp-ean-linea { display: block; font-size: 11px; color: var(--muted); font-weight: 400; user-select: all; cursor: text; }

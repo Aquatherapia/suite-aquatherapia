@@ -84,9 +84,9 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     body: orden.map((f, i) => {
       const k = calc[i];
       return [
-        f.ean ?? "", [f.nombre, f.descatalogado ? "DESCATALOGADO EN NUESTRA WEB" : "", k.bajoMinimo.suyo ? "MÁS ALLÁ DE NUESTRO DTO. MÁX." : ""].filter(Boolean).join("\n"), eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
+        f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : "", k.bajoMinimo.suyo ? "MÁS ALLÁ DE NUESTRO DTO. MÁX." : ""].filter(Boolean).join("\n"), eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
-        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}`, k.masBarato, k.igualar.replace(/−/g, "-"),
+        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}${k.bajoMinimo.suyo && k.limite != null ? `\ncon dto. máx. +${eur(k.limite - f.suPrecio)}` : ""}`, k.masBarato, k.igualar.replace(/−/g, "-"),
       ];
     }),
     columnStyles: {
@@ -105,7 +105,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
       // Mismos resaltados que el Excel: precio bajo nuestro mínimo y PVP distinto
       if ((c === 4 || c === 5) && k.bajoMinimo.mio) { if (c === 4) s.fillColor = ROJO_FONDO; s.textColor = ROJO; s.fontStyle = "bold"; }
-      if ((c === 8 || c === 9) && k.bajoMinimo.suyo) { if (c === 8) s.fillColor = MORADO_FONDO; s.textColor = MORADO; }
+      if (c === 10 && k.bajoMinimo.suyo) s.fillColor = MORADO_FONDO;
       if (c === 1 && k.bajoMinimo.suyo && !f.descatalogado) s.textColor = MORADO;
       if ((c === 2 || c === 6) && k.pvpDistinto) { s.fillColor = AMBAR_FONDO; s.textColor = AMBAR; s.fontStyle = "bold"; }
       if (c === 1 && f.descatalogado) s.textColor = ROJO;
