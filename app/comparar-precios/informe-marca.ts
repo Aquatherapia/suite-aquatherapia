@@ -60,7 +60,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
   type ExcelJS_Valor = string | number | { text: string; hyperlink: string };
   const cols: Col[] = [
     { t: "EAN", w: 16, grupo: "base", v: f => f.ean },
-    { t: "PRODUCTO", w: 50, grupo: "base", v: f => ({ text: f.producto, hyperlink: f.miUrl }) },
+    { t: "PRODUCTO", w: 50, grupo: "base", v: f => f.producto },
     { t: "PVP", w: 11, grupo: "nos", v: f => f.pvp, fmt: EUROS },
     { t: `DTO. AUTORIZADO`, w: 12, grupo: "nos", v: () => descuento / 100, fmt: PORC },
     { t: "PRECIO MÍNIMO AUTORIZADO", w: 14, grupo: "nos", v: f => f.minimo, fmt: EUROS },
@@ -69,7 +69,8 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
     ...(hayCupon ? [{ t: "DTO.", w: 8, grupo: "ellos" as const, v: (f: FilaMarca) => f.suDtoWeb, fmt: PORC }, { t: textoCupon(cupon), w: 18, grupo: "ellos" as const, v: (f: FilaMarca) => f.suFinal, fmt: EUROS }] : []),
     { t: "DTO. TOTAL", w: 10, grupo: "ellos", v: f => f.suDto, fmt: PORC },
     { t: "POR DEBAJO DEL MÍNIMO", w: 14, grupo: "fin", v: f => f.porDebajo, fmt: EUROS },
-    { t: "COSMÉTICOS24H", w: 23, grupo: "fin", v: f => ({ text: "Ver ficha ↗", hyperlink: f.suUrl }) },
+    { t: "FICHA EN LA TIENDA DE COSMÉTICOS", w: 21, grupo: "fin", v: f => ({ text: "Ver ficha ↗", hyperlink: f.miUrl }) },
+    { t: "FICHA EN COSMÉTICOS24H", w: 18, grupo: "fin", v: f => ({ text: "Ver ficha ↗", hyperlink: f.suUrl }) },
   ];
   ws.columns = cols.map(c => ({ width: c.w }));
   const ult = String.fromCharCode(64 + cols.length);
@@ -113,7 +114,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
       const enlace = typeof cel.value === "object";
       const rojo = c.t === "POR DEBAJO DEL MÍNIMO";
       cel.font = fuente({
-        color: { argb: enlace ? (i === 1 ? TEXTO : ROSA) : rojo ? ROJO : c.grupo === "ellos" ? ROSA : i === 0 ? SUAVE : TEXTO },
+        color: { argb: enlace ? (i === cols.length - 1 ? ROSA : AZUL) : rojo ? ROJO : c.grupo === "ellos" ? ROSA : i === 0 ? SUAVE : TEXTO },
         bold: rojo || c.t === "PRECIO MÍNIMO AUTORIZADO", underline: enlace,
       });
       cel.fill = relleno(c.grupo === "nos" ? FONDO_AZUL : c.grupo === "ellos" ? FONDO_ROSA : c.grupo === "fin" ? FONDO_GRIS : "FFFFFFFF");
@@ -130,7 +131,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
 type RGB = [number, number, number];
 const P_AZUL: RGB = [18, 112, 182], P_ROSA: RGB = [181, 101, 95], P_GRIS: RGB = [75, 85, 99], P_TEXTO: RGB = [31, 41, 51], P_SUAVE: RGB = [107, 114, 128], P_ROJO: RGB = [180, 35, 24];
 const P_F_AZUL: RGB = [238, 245, 252], P_F_ROSA: RGB = [253, 240, 238], P_F_GRIS: RGB = [246, 247, 249];
-const VER_C24 = "Ver en Cosméticos24h >";
+const VER_LTC = "Ver en La Tienda de Cosméticos >", VER_C24 = "Ver en Cosméticos24h >";
 const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 const pct = (frac: number) => `${(Math.round(frac * 1000) / 10).toFixed(1).replace(".", ",").replace(/,0$/, "")} %`;
 
@@ -151,12 +152,12 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
 
   // Bloques: base (2) · marca (3) · Cosméticos24h (2 o 3) · por debajo del mínimo (1)
   // Su dto. va bajo cada precio; bajo el precio final, el dto. total.
-  // Enlaces como en la web: el nombre lleva a nuestra ficha y la línea de abajo, a la suya.
+  // Enlaces bajo el nombre: «Ver en La Tienda de Cosméticos» y «Ver en Cosméticos24h»
   const nEllos = hayCupon ? 3 : 2;
   const grupoDe = (c: number): "base" | "nos" | "ellos" | "fin" => c < 2 ? "base" : c < 5 ? "nos" : c < 5 + nEllos ? "ellos" : "fin";
   const colFin = 5 + nEllos;
   const cuerpo = datos.map(f => [
-    f.ean, `${f.producto}\n${VER_C24}`, eur(f.pvp), pct(descuento / 100), eur(f.minimo),
+    f.ean, `${f.producto}\n${VER_LTC}\n${VER_C24}`, eur(f.pvp), pct(descuento / 100), eur(f.minimo),
     eur(f.suPvp), f.suDtoWeb > 0.0005 ? `${eur(f.suWeb)}\n-${pct(f.suDtoWeb)}` : eur(f.suWeb), ...(hayCupon ? [`${eur(f.suFinal)}\n-${pct(f.suDto)}`] : []),
     eur(f.porDebajo),
   ]);
@@ -198,9 +199,11 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
       if (c === 4) s.fontStyle = "bold";
       if (c === colFin) { s.textColor = P_ROJO; s.fontStyle = "bold"; }
     },
-    // La línea «Ver en Cosméticos24h» se dibuja aparte, en rosa y con su enlace
+    // Las dos líneas de enlace se dibujan aparte, cada una en su color y con su enlace
     willDrawCell: d => {
-      if (d.section === "body" && d.column.index === 1 && d.cell.text[d.cell.text.length - 1] === VER_C24) d.cell.text[d.cell.text.length - 1] = "";
+      if (d.section !== "body" || d.column.index !== 1) return;
+      const t = d.cell.text, n = t.length;
+      if (t[n - 1] === VER_C24 && t[n - 2] === VER_LTC) { t[n - 1] = ""; t[n - 2] = ""; }
     },
     didDrawCell: d => {
       if (d.section !== "body" || d.column.index !== 1) return;
@@ -209,12 +212,14 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
       if (!f) return;
       const n = d.cell.text.length;
       const linea = (d.cell.styles.fontSize * doc.getLineHeightFactor() * 25.4) / 72;
-      const yVer = d.cell.y + (d.cell.height - n * linea) / 2 + (n - 1) * linea;
-      doc.link(d.cell.x, d.cell.y, d.cell.width, yVer - d.cell.y, { url: f.miUrl });
-      if (d.cell.text[n - 1] !== "") return;
-      doc.setTextColor(...P_ROSA); doc.setFont("helvetica", "bold");
-      doc.text(VER_C24, d.cell.x + d.cell.padding("left"), yVer, { baseline: "top" });
-      doc.link(d.cell.x + d.cell.padding("left"), yVer, doc.getTextWidth(VER_C24), linea, { url: f.suUrl });
+      if (d.cell.text[n - 1] !== "" || d.cell.text[n - 2] !== "") return;
+      const x = d.cell.x + d.cell.padding("left");
+      const y1 = d.cell.y + (d.cell.height - n * linea) / 2 + (n - 2) * linea, y2 = y1 + linea;
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...P_AZUL); doc.text(VER_LTC, x, y1, { baseline: "top" });
+      doc.link(x, y1, doc.getTextWidth(VER_LTC), linea, { url: f.miUrl });
+      doc.setTextColor(...P_ROSA); doc.text(VER_C24, x, y2, { baseline: "top" });
+      doc.link(x, y2, doc.getTextWidth(VER_C24), linea, { url: f.suUrl });
     },
   });
   return doc.output("blob");
