@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { calcularFila, explicaDtoMaxLarga, explicaPvp, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
+import { calcularFila, esPackFila, explicaDtoMaxLarga, explicaPvp, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
 import { construirPdf, nombrePdf } from "./pdf";
 import { descuentoBoardfy, reglaBoardfyInactiva } from "./boardfy";
 
@@ -25,6 +25,7 @@ type ResultadoMarca = {
   revisadoEn?: string; // cuándo se revisó ESTA marca (falta en resultados guardados antes)
   eanPendientes?: number; // productos suyos con el EAN aún sin leer
   misFallidas?: number;   // fichas nuestras que no se pudieron leer
+  sinPrecio?: string[];   // fichas nuestras activas con precio 0 € (URL)
   cambios?: { desde: string; nuevosCaros: string[]; yaNoCaros: string[]; novedades: string[] }; // respecto a la revisión anterior
 };
 
@@ -170,93 +171,21 @@ function EtiquetaDescat({ stock }: { stock?: number }) {
   );
 }
 
-// Listas de productos sin pareja, con el mismo diseño que la tabla de comparación
-function TablaSoloEllos({ filas, cupon, onOcultar }: { filas: SoloEllos[]; cupon: CuponExcel; onOcultar: (s: SoloEllos) => void }) {
-  const hayCupon = !!cupon && cupon.pct > 0;
-  return (
-    <div className="cp-informe-scroll">
-      <table className="cp-informe cp-informe-lista">
-        <thead>
-          <tr>
-            <th>EAN</th><th className="cp-izq">Producto</th>
-            <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th>
-            {hayCupon && <th className={"cp-h-ellos" + (cupon?.condiciones ? " cp-tip" : "")} data-tip={cupon?.condiciones}>{`Precio final (${cupon!.codigo ?? "cupón"} −${String(cupon!.pct).replace(".", ",")} %${cupon!.directo ? ", directo en carrito" : ""})`}</th>}
-            <th className="cp-h-ellos">Dto. total</th><th />
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((s, i) => {
-            const pvp = s.tachado && s.tachado > s.precio ? s.tachado : s.precio;
-            const final = hayCupon ? Math.round(s.precio * (1 - cupon!.pct / 100) * 100) / 100 : s.precio;
-            const dtoWeb = pvp > 0 ? 1 - s.precio / pvp : 0;
-            const dto = pvp > 0 ? 1 - final / pvp : 0;
-            return (
-              <tr key={i}>
-                <td className="cp-suave"><span className="cp-ean-copiable">{s.ean ?? ""}</span></td>
-                <td className="cp-izq">
-                  {s.esPack && <span className="cp-pack-tag">pack</span>}
-                  <a href={s.url} target="_blank" rel="noreferrer" className="cp-prod">{s.titulo}</a>
-                  <a href={s.url} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
-                </td>
-                <td className="cp-rosa">{eur(pvp)}</td>
-                <td className="cp-rosa">{eur(s.precio)}{dtoWeb > 0.0005 && <span className="cp-dto-celda">−{pctW(dtoWeb)}</span>}</td>
-                {hayCupon && <td className="cp-fuerte cp-rosa">{eur(final)}</td>}
-                <td className="cp-fuerte cp-pequena cp-rosa">{pctW(dto)}</td>
-                <td className="cp-centro"><button className="cp-ocultar" title="Ocultar" onClick={() => onOcultar(s)}>×</button></td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function TablaSoloNosotros({ filas }: { filas: MiSinEmparejar[] }) {
-  return (
-    <div className="cp-informe-scroll">
-      <table className="cp-informe cp-informe-lista">
-        <thead>
-          <tr>
-            <th>EAN</th><th className="cp-izq">Producto</th><th>PVP</th><th>Precio final</th><th>Dto.</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((m, i) => {
-            const pvp = m.pvp && m.pvp > m.precio ? m.pvp : m.precio;
-            const dto = pvp > 0 ? 1 - m.precio / pvp : 0;
-            return (
-              <tr key={i}>
-                <td className="cp-suave">
-                  {m.ean ? <span className="cp-ean-copiable">{m.ean}</span>
-                    : <span className="cp-sin-ean">{m.formato ? "EAN no publicado (formato)" : "Sin EAN en la ficha"}</span>}
-                </td>
-                <td className="cp-izq">
-                  {m.esPack && <span className="cp-pack-tag">pack</span>}
-                  {m.descatalogado && <EtiquetaDescat stock={m.stock} />}
-                  <a href={m.url} target="_blank" rel="noreferrer" className="cp-prod">{m.nombre}</a>
-                </td>
-                <td>{eur(pvp)}</td>
-                <td className="cp-fuerte">{eur(m.precio)}</td>
-                <td className="cp-dto-azul">{pctW(dto)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 // Misma tabla que el Excel: mismas columnas, colores y cálculos
 const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 const pctW = (frac: number) => `${(Math.round(frac * 1000) / 10).toFixed(1).replace(".", ",").replace(/,0$/, "")} %`;
-function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descuento: number | null; cupon: CuponExcel }) {
+// Al final van, en la misma tabla, los productos que solo tiene una de las dos webs (sin los datos de la otra)
+function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcultar }: {
+  filas: Comparacion[]; soloEllos: SoloEllos[]; soloNosotros: MiSinEmparejar[];
+  descuento: number | null; cupon: CuponExcel; onOcultar: (s: SoloEllos) => void;
+}) {
   const pct = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
   // Sin cupón, su precio final es el mismo que el precio web: esa columna no sale
   const conCupon = cupon && cupon.pct > 0
     ? `Precio final (${cupon.codigo ?? "cupón"} −${String(cupon.pct).replace(".", ",")} %${cupon.directo ? ", directo en carrito" : ""})`
     : null;
+  // Celdas vacías de la web que no tiene el producto (una a una: los colores van por columna)
+  const vacias = (n: number) => Array.from({ length: n }, (_, i) => <td key={`v${i}`} className="cp-vacia">—</td>);
   return (
     <div className="cp-informe-scroll">
       <table className="cp-informe">
@@ -300,7 +229,59 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                   {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
                 </Celda>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
-                <td className={"cp-izq cp-pequena " + (k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
+                <td className={"cp-izq cp-pequena " + (k.revisarPack ? "cp-fuerte cp-ambar-texto" : k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
+              </tr>
+            );
+          })}
+          {soloEllos.map((x, i) => {
+            const pvp = x.tachado && x.tachado > x.precio ? x.tachado : x.precio;
+            const final = conCupon ? Math.round(x.precio * (1 - cupon!.pct / 100) * 100) / 100 : x.precio;
+            const dtoWeb = pvp > 0 ? 1 - x.precio / pvp : 0;
+            return (
+              <tr key={`e${i}`} className="cp-fila-solo">
+                <td className="cp-suave"><span className="cp-ean-copiable">{x.ean ?? ""}</span></td>
+                <td className="cp-izq">
+                  {x.esPack && <span className="cp-pack-tag">pack</span>}
+                  <a href={x.url} target="_blank" rel="noreferrer" className="cp-prod">{x.titulo}</a>
+                  <span className="cp-no-esta cp-no-esta-nuestra">
+                    No está en nuestra web
+                    <button className="cp-ocultar-fila" title="Ocultar este producto de la lista" onClick={() => onOcultar(x)}>ocultar</button>
+                  </span>
+                </td>
+                {vacias(4)}
+                <td className="cp-rosa">{eur(pvp)}</td>
+                <td className="cp-rosa">{eur(x.precio)}{dtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(dtoWeb)}</small>}</td>
+                {conCupon && <td className="cp-fuerte cp-rosa">{eur(final)}</td>}
+                <td className="cp-fuerte cp-pequena cp-rosa">{pctW(pvp > 0 ? 1 - final / pvp : 0)}</td>
+                {vacias(2)}
+                <td className="cp-izq cp-pequena cp-rosa cp-fuerte">{x.esPack ? "Pack que no tenemos" : "Posible novedad"}</td>
+              </tr>
+            );
+          })}
+          {soloNosotros.map((m, i) => {
+            const pvp = m.pvp && m.pvp > m.precio ? m.pvp : m.precio;
+            const limite = descuento != null && !esPackFila(m) ? Math.round(pvp * (1 - descuento / 100) * 100) / 100 : null;
+            return (
+              <tr key={`n${i}`} className="cp-fila-solo">
+                <td className="cp-suave">
+                  {m.ean ? <span className="cp-ean-copiable">{m.ean}</span>
+                    : <span className="cp-sin-ean">{m.formato ? "EAN no publicado (formato)" : "Sin EAN en la ficha"}</span>}
+                </td>
+                <td className="cp-izq">
+                  {m.esPack && <span className="cp-pack-tag">pack</span>}
+                  {m.descatalogado && <EtiquetaDescat stock={m.stock} />}
+                  <a href={m.url} target="_blank" rel="noreferrer" className="cp-prod">{m.nombre}</a>
+                  <span className="cp-no-esta" title={m.ean ? "Cosméticos24h no tiene ningún producto con este EAN" : "Nuestra ficha no tiene EAN: no se puede saber si lo venden"}>
+                    {m.ean ? "No está en Cosméticos24h" : "Sin EAN: no se puede comparar"}
+                  </span>
+                </td>
+                <td>{eur(pvp)}</td>
+                <td className="cp-suave">{limite != null ? eur(limite) : "—"}</td>
+                <td className="cp-fuerte">{eur(m.precio)}</td>
+                <td className="cp-dto-azul">{pctW(pvp > 0 ? 1 - m.precio / pvp : 0)}</td>
+                {vacias(conCupon ? 4 : 3)}
+                {vacias(2)}
+                <td className="cp-izq cp-pequena cp-suave">{m.ean ? "Solo lo tenemos nosotros" : ""}</td>
               </tr>
             );
           })}
@@ -329,7 +310,6 @@ function MarcaBloque({
   const [verOcultos, setVerOcultos] = useState(false);
   // Quitar la marca pide un segundo clic: borra también sus resultados
   const [confirmarBorrar, setConfirmarBorrar] = useState(false);
-  const [verSinEmp, setVerSinEmp] = useState(false);
 
   // Editor del nombre mostrado del producto
   const [editandoNombre, setEditandoNombre] = useState<string | null>(null); // suUrl de la fila en edición
@@ -445,6 +425,12 @@ function MarcaBloque({
               No se pudieron leer {r.misFallidas} ficha{r.misFallidas !== 1 ? "s" : ""} de nuestra web en esta revisión (la web tardó o falló). Las que ya estaban comparadas salen con los precios de la revisión anterior, marcadas como «dato anterior».
             </div>
           )}
+          {(r.sinPrecio?.length ?? 0) > 0 && (
+            <div className="cp-ean-aviso cp-aviso-rojo">
+              <strong>{r.sinPrecio!.length} ficha{r.sinPrecio!.length !== 1 ? "s" : ""} activa{r.sinPrecio!.length !== 1 ? "s" : ""} con precio 0 €</strong> en nuestra web: falta ponerles precio.
+              <ul>{r.sinPrecio!.map(u => <li key={u}><a href={u} target="_blank" rel="noreferrer">{(u.split("/es/")[1] ?? u).replace(/-p\d+$/, "").replace(/-/g, " ")}</a></li>)}</ul>
+            </div>
+          )}
           {(r.eanPendientes ?? 0) > 0 && (
             <div className="cp-ean-aviso">
               Faltan por leer los EAN de {r.eanPendientes} producto{r.eanPendientes !== 1 ? "s" : ""} de Cosméticos24h: esos todavía no se han comparado. Vuelve a revisar la marca para completarlos.
@@ -460,45 +446,18 @@ function MarcaBloque({
             </div>
           )}
 
-          {r.comparaciones.length > 0 && (
+          {(r.comparaciones.length + r.soloEllos.length + sinEmp.length) > 0 && (
             <>
               <div className="cp-subtit">Comparación de precios (tú vs. Cosméticos24h)</div>
-              <TablaInforme filas={compOrden} descuento={descuento} cupon={cupon} />
-            </>
-          )}
-
-          {soloEllosReal.length > 0 && (
-            <>
-              <div className="cp-subtit" style={{ marginTop: 16 }}>
-                Tienen ellos y tú no ({soloEllosReal.length}) — posibles novedades
-              </div>
-              <TablaSoloEllos filas={soloEllosReal} cupon={cupon} onOcultar={s => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })} />
-            </>
-          )}
-
-          {packs.length > 0 && (
-            <>
-              <div className="cp-subtit" style={{ marginTop: 16 }}>
-                Packs/estuches que tienen ellos y tú no ({packs.length})
-              </div>
-              <TablaSoloEllos filas={packs} cupon={cupon} onOcultar={s => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })} />
-            </>
-          )}
-
-          {sinEmp.length > 0 && (
-            <div className="cp-ocultos-box">
-              <button className="cp-ocultos-toggle" onClick={() => setVerSinEmp(v => !v)}>
-                {verSinEmp ? "▲" : "▼"} Tus productos sin el mismo EAN en Cosméticos24h ({sinEmp.length})
-              </button>
-              {verSinEmp && (
-                <div className="cp-ocultos-lista">
-                  <div className="cp-packs-nota" style={{ padding: "0 0 8px" }}>
-                    Solo se comparan productos con el mismo EAN en las dos webs. Estos no lo tienen: o Cosméticos24h no los vende, o una de las dos fichas no tiene EAN (o lo tiene distinto).
-                  </div>
-                  <TablaSoloNosotros filas={sinEmp} />
+              <TablaInforme filas={compOrden} soloEllos={[...soloEllosReal, ...packs]} soloNosotros={sinEmp} descuento={descuento} cupon={cupon}
+                onOcultar={s => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })} />
+              {(r.soloEllos.length + sinEmp.length) > 0 && (
+                <div className="cp-packs-nota">
+                  Al final de la tabla: {r.soloEllos.length} que tienen ellos y nosotros no, y {sinEmp.length} nuestros sin el mismo EAN en Cosméticos24h.
+                  Solo se comparan productos con el mismo EAN en las dos webs.
                 </div>
               )}
-            </div>
+            </>
           )}
 
           {ocultos.length > 0 && (

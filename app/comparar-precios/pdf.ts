@@ -124,7 +124,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       if (c === 1 && f.descatalogado) s.textColor = ROJO;
       if (c === 10) s.textColor = f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO;
       if (c === 11) { s.textColor = k.masBarato === "Cosméticos24h" ? ROJO : k.masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE; s.fontStyle = k.masBarato === "Igual" ? "normal" : "bold"; }
-      if (c === 12) { s.textColor = k.igualar.startsWith("No") ? ROJO : VERDE; s.fontStyle = k.igualar.startsWith("No") ? "bold" : "normal"; }
+      if (c === 12) { s.textColor = k.revisarPack ? AMBAR : k.igualar.startsWith("No") ? ROJO : VERDE; s.fontStyle = k.igualar.startsWith("No") || k.revisarPack ? "bold" : "normal"; }
     },
     // La línea «Ver en Cosméticos24h» se dibuja aparte, en rosa y con su enlace
     willDrawCell: d => {

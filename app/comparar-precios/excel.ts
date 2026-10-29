@@ -94,6 +94,7 @@ export type FilaCalculada = {
   bajoMinimo: { mio: boolean; suyo: boolean }; pvpDistinto: boolean;
   revisarPvp: boolean; // PVP muy distinto (más de un 10 %): puede que una tarifa esté mal
   esPack: boolean;
+  revisarPack: boolean; // pack con el precio final muy distinto al suyo: revisar nuestra suma
   masBarato: "Cosméticos24h" | "Nosotros" | "Igual"; igualar: string;
 };
 // Por qué no podemos igualar cuando venden por debajo de nuestro dto. máx.
@@ -143,7 +144,10 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
   // Si vamos más caros: ¿llegamos a su precio final sin pasar nuestro descuento máximo?
   // Se da también el descuento total sobre nuestro PVP con el que quedaríamos.
   const dtoIgualar = pvp > 0 ? 1 - f.suPrecio / pvp : 0;
-  const igualar = f.diff < -0.01 ? "Tenemos bien el precio"
+  // Pack con un precio final muy distinto al suyo (más de un 5 %): puede que la suma de nuestro pack esté mal
+  const revisarPack = esPack && f.suPrecio > 0 && Math.abs(f.diff) / f.suPrecio > 0.05;
+  const igualar = revisarPack ? `Pack: revisar precio (un ${pctTexto(Math.abs(f.diff) / f.suPrecio)} ${f.diff < 0 ? "más barato" : "más caro"} que ellos)`
+    : f.diff < -0.01 ? "Tenemos bien el precio"
     : f.diff <= 0.01 ? "Tenemos bien el precio (mismo precio)"
     : esPack ? `Pack: habría que bajar ${coma(f.diff)} €`
     : limite == null || f.suPrecio >= limite - 0.005 ? `Sí, bajando ${coma(f.diff)} € (dto. total ${pctTexto(dtoIgualar)})`
@@ -157,7 +161,7 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
     bajoMinimo: { mio: limite != null && f.miPrecio < limite - 0.005, suyo: limite != null && f.suPrecio < limite - 0.005 },
     pvpDistinto: !esPack && f.suPvp != null && Math.abs(f.suPvp - pvp) > 0.01,
     revisarPvp: !esPack && f.suPvp != null && pvp > 0 && Math.abs(f.suPvp - pvp) / pvp > 0.10,
-    esPack,
+    esPack, revisarPack,
     masBarato: f.diff > 0.01 ? "Cosméticos24h" : f.diff < -0.01 ? "Nosotros" : "Igual",
     igualar,
   };
@@ -297,7 +301,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
     if (explica) c("diff").note = explica;
     c("diff").font = fuente({ bold: true, color: { argb: f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO } });
     c("barato").font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE } });
-    c("igualar").font = fuente({ size: 9, bold: igualar.startsWith("No"), color: { argb: igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
+    c("igualar").font = fuente({ size: 9, bold: igualar.startsWith("No") || k.revisarPack, color: { argb: k.revisarPack ? AMBAR : igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
   });
 
   const ultima = CAB + orden.length;
