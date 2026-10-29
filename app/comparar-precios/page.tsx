@@ -227,7 +227,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
         <thead>
           <tr className="cp-informe-grupos">
             <th colSpan={2} />
-            <th colSpan={3} className="cp-g-nos">Nosotros</th>
+            <th colSpan={3} className="cp-g-nos">La Tienda de Cosméticos</th>
             <th colSpan={conCupon ? 3 : 2} className="cp-g-ellos">Cosméticos24h</th>
             <th colSpan={3} className="cp-g-fin">Comparación</th>
           </tr>
@@ -266,7 +266,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <Celda className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>
                   {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
                 </Celda>
-                <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
+                <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "La Tienda de Cosméticos" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
                 <td className={"cp-izq cp-pequena " + (k.revisarPack ? "cp-fuerte cp-ambar-texto" : k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
               </tr>
             );

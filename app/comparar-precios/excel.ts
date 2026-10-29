@@ -95,7 +95,7 @@ export type FilaCalculada = {
   revisarPvp: boolean; // PVP muy distinto (más de un 10 %): puede que una tarifa esté mal
   esPack: boolean;
   revisarPack: boolean; // pack con el precio final muy distinto al suyo: revisar nuestra suma
-  masBarato: "Cosméticos24h" | "Nosotros" | "Igual"; igualar: string;
+  masBarato: "Cosméticos24h" | "La Tienda de Cosméticos" | "Igual"; igualar: string;
 };
 // Packs y cofres: nuestro PVP es la suma de los productos sueltos, así que el dto. autorizado sobre ese PVP
 // y la comparación de PVP no tienen sentido; solo cuenta el precio final.
@@ -141,7 +141,7 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
     pvpDistinto: !esPack && f.suPvp != null && Math.abs(f.suPvp - pvp) > 0.01,
     revisarPvp: !esPack && f.suPvp != null && pvp > 0 && Math.abs(f.suPvp - pvp) / pvp > 0.10,
     esPack, revisarPack,
-    masBarato: f.diff > 0.01 ? "Cosméticos24h" : f.diff < -0.01 ? "Nosotros" : "Igual",
+    masBarato: f.diff > 0.01 ? "Cosméticos24h" : f.diff < -0.01 ? "La Tienda de Cosméticos" : "Igual",
     igualar,
   };
 }
@@ -175,7 +175,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const col = (k: typeof COLS[number]) => COLS.indexOf(k) + 1;
   const letra = (k: typeof COLS[number]) => String.fromCharCode(64 + col(k));
   const ultimaCol = String.fromCharCode(64 + COLS.length);
-  const anchos: Record<typeof COLS[number], number> = { ean: 16, producto: 52, pvp: 12, limite: 12, precio: 12, dto: 8, suPvp: 11, suWeb: 12, suDtoWeb: 8, suFinal: 16, suDto: 10, diff: 14, barato: 15, igualar: 32, ficha: 16 };
+  const anchos: Record<typeof COLS[number], number> = { ean: 16, producto: 52, pvp: 12, limite: 12, precio: 12, dto: 8, suPvp: 11, suWeb: 12, suDtoWeb: 8, suFinal: 16, suDto: 10, diff: 14, barato: 22, igualar: 32, ficha: 16 };
   ws.columns = COLS.map(k => ({ width: anchos[k] }));
   encabezado(ws, ultimaCol,
     `Comparativa de precios · ${marca}`,
@@ -188,7 +188,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   // Fila 4: grupos de columnas
   const grupoEllos = `${letra("suPvp")}4:${letra("suDto")}4`;
   ws.mergeCells(`${letra("pvp")}4:${letra("dto")}4`); ws.mergeCells(grupoEllos);
-  for (const [celda, texto, fondo, color] of [[`${letra("pvp")}4`, "NOSOTROS", FONDO_NOSOTROS, AZUL], [`${letra("suPvp")}4`, "COSMÉTICOS24H", FONDO_ELLOS, ROSA]] as const) {
+  for (const [celda, texto, fondo, color] of [[`${letra("pvp")}4`, "LA TIENDA DE COSMÉTICOS", FONDO_NOSOTROS, AZUL], [`${letra("suPvp")}4`, "COSMÉTICOS24H", FONDO_ELLOS, ROSA]] as const) {
     const c = ws.getCell(celda);
     c.value = texto;
     c.font = fuente({ bold: true, size: 9, color: { argb: color } });
@@ -282,7 +282,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
     }
     if (k.bajoMinimo.suyo) c("diff").fill = relleno(MORADO_FONDO);
     c("diff").font = fuente({ bold: true, color: { argb: f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO } });
-    c("barato").font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE } });
+    c("barato").font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "La Tienda de Cosméticos" ? VERDE : TEXTO_SUAVE } });
     c("igualar").font = fuente({ size: 9, bold: igualar.startsWith("No") || k.revisarPack, color: { argb: k.revisarPack ? AMBAR : igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
   });
 

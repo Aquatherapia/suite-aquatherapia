@@ -97,7 +97,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     head: [
       [
         { content: "", colSpan: 2, styles: { fillColor: [255, 255, 255] } },
-        { content: "NOSOTROS", colSpan: 3, styles: { fillColor: FONDO_NOSOTROS, textColor: AZUL } },
+        { content: "LA TIENDA DE COSMÉTICOS", colSpan: 3, styles: { fillColor: FONDO_NOSOTROS, textColor: AZUL } },
         { content: "COSMÉTICOS24H", colSpan: hayCupon ? 3 : 2, styles: { fillColor: FONDO_ELLOS, textColor: ROSA } },
         { content: "", colSpan: 3, styles: { fillColor: [255, 255, 255] } },
       ],
@@ -122,7 +122,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       if ((c === 2 || c === 5) && k.pvpDistinto) { s.fillColor = AMBAR_FONDO; s.textColor = AMBAR; s.fontStyle = "bold"; }
       if (c === 1 && f.descatalogado) s.textColor = ROJO;
       if (c === 8) s.textColor = f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO;
-      if (c === 9) { s.textColor = k.masBarato === "Cosméticos24h" ? ROJO : k.masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE; s.fontStyle = k.masBarato === "Igual" ? "normal" : "bold"; }
+      if (c === 9) { s.textColor = k.masBarato === "Cosméticos24h" ? ROJO : k.masBarato === "La Tienda de Cosméticos" ? VERDE : TEXTO_SUAVE; s.fontStyle = k.masBarato === "Igual" ? "normal" : "bold"; }
       if (c === 10) { s.textColor = k.revisarPack ? AMBAR : k.igualar.startsWith("No") ? ROJO : VERDE; s.fontStyle = k.igualar.startsWith("No") || k.revisarPack ? "bold" : "normal"; }
     },
     // La línea «Ver en Cosméticos24h» se dibuja aparte, en rosa y con su enlace
