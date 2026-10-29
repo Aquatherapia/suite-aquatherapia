@@ -228,20 +228,20 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
         <colgroup>
           <col span={2} />
           <col span={3} className="cp-col-nos" />
-          <col span={conCupon ? 4 : 3} className="cp-col-ellos" />
+          <col span={conCupon ? 3 : 2} className="cp-col-ellos" />
           <col span={3} className="cp-col-fin" />
         </colgroup>
         <thead>
           <tr className="cp-informe-grupos">
             <th colSpan={2} />
             <th colSpan={3} className="cp-g-nos">Nosotros</th>
-            <th colSpan={conCupon ? 4 : 3} className="cp-g-ellos">Cosméticos24h</th>
+            <th colSpan={conCupon ? 3 : 2} className="cp-g-ellos">Cosméticos24h</th>
             <th colSpan={3} className="cp-g-fin">Comparación</th>
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
             <th>PVP</th><th className="cp-tip" data-tip="Nuestro PVP con el descuento autorizado de la marca: el de la regla de Boardfy, o el puesto a mano junto al nombre de la marca">{descuento != null ? `Con dto. autorizado (−${pct})` : "Con dto. autorizado"}</th><th>Precio final</th>
-            <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">{conCupon ? "Precio con dto." : "Precio final con dto."}</th>{conCupon && <th className={"cp-h-ellos" + (cupon?.condiciones ? " cp-tip" : "")} data-tip={cupon?.condiciones}>{conCupon}</th>}<th className="cp-h-ellos">Dto. total</th>
+            <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">{conCupon ? "Precio con dto." : "Precio final con dto."}</th>{conCupon && <th className={"cp-h-ellos" + (cupon?.condiciones ? " cp-tip" : "")} data-tip={cupon?.condiciones}>{conCupon}</th>}
             <th className="cp-h-fin">Diferencia</th><th className="cp-h-fin">Más barato</th><th className="cp-izq cp-h-fin">¿Podemos igualar?</th>
           </tr>
         </thead>
@@ -266,8 +266,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 </Celda>
                 <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
-                {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}</td>}
-                <td className="cp-fuerte cp-pequena cp-rosa">{pctW(k.suDto)}</td>
+                {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}{k.suDto > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDto)}</small>}</td>}
                 <Celda className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>
                   {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
                 </Celda>
@@ -294,8 +293,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 {vacias(3)}
                 <td className="cp-rosa">{eur(pvp)}</td>
                 <td className="cp-rosa">{eur(x.precio)}{dtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(dtoWeb)}</small>}</td>
-                {conCupon && <td className="cp-fuerte cp-rosa">{eur(final)}</td>}
-                <td className="cp-fuerte cp-pequena cp-rosa">{pctW(pvp > 0 ? 1 - final / pvp : 0)}</td>
+                {conCupon && <td className="cp-fuerte cp-rosa">{eur(final)}{pvp > 0 && 1 - final / pvp > 0.0005 && <small className="cp-dto-celda">−{pctW(1 - final / pvp)}</small>}</td>}
                 {vacias(2)}
                 <td className="cp-izq cp-pequena cp-rosa cp-fuerte">{x.esPack ? "Pack que no tenemos" : "Posible novedad"}</td>
               </tr>
@@ -321,7 +319,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <td>{eur(pvp)}</td>
                 <td className="cp-suave">{limite != null ? eur(limite) : "—"}</td>
                 <td className="cp-fuerte">{eur(m.precio)}{pvp > 0 && 1 - m.precio / pvp > 0.0005 && <small className="cp-dto-celda cp-dto-azul">−{pctW(1 - m.precio / pvp)}</small>}</td>
-                {vacias(conCupon ? 4 : 3)}
+                {vacias(conCupon ? 3 : 2)}
                 {vacias(2)}
                 <td className="cp-izq cp-pequena cp-suave">{m.ean ? "Solo lo tenemos nosotros" : ""}</td>
               </tr>
