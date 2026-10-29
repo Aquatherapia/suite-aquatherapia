@@ -1500,13 +1500,13 @@ button:disabled {
 .cp-informe .cp-azul-suave { color: #6a9bd0; }
 .cp-informe .cp-rojo { color: #b42318; }
 .cp-informe .cp-verde { color: #067647; }
-.cp-informe td.cp-rojo-fondo { background: #fdecec !important; color: #b42318; }
+/* Nuestro precio por debajo del dto. autorizado: turquesa, para no confundirse con el rojo de la comparación */
+.cp-informe td.cp-pasado-fondo { background: #dff4f7 !important; color: #0e7490; }
+.cp-informe .cp-pasado { color: #0e7490; }
 .cp-informe .cp-morado { color: #6b3fb5; }
 .cp-informe .cp-revisar-pvp { display: block; font-size: 10.5px; font-weight: 700; color: #b45309; }
 .cp-informe .cp-pack-pvp { display: block; font-size: 10px; font-weight: 400; color: #6b7280; }
 .cp-informe .cp-dif-max { display: block; margin-top: 3px; max-width: 150px; margin-left: auto; font-size: 10.5px; line-height: 1.3; font-weight: 600; color: #6b3fb5; white-space: normal; }
-.cp-informe td.cp-morado-fondo { background: #f1ebfb !important; }
-.cp-informe td.cp-morado-fondo .cp-precio-enlace { color: #6b3fb5; }
 .cp-informe td.cp-ambar { background: #fef6e7 !important; color: #b45309; font-weight: 700; }
 .cp-informe .cp-enlaces { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 2px; }
 .cp-informe .cp-enlace-c24, .cp-informe .cp-enlace-ltc { font-size: 11px; font-weight: 600; text-decoration: none; }
@@ -1593,7 +1593,6 @@ button:disabled {
 .cp-cambios .cp-rojo, .cp-cambios .cp-verde, .cp-cambios .cp-rosa { font-weight: 700; }
 .cp-cambios .cp-rojo { color: #b42318; } .cp-cambios .cp-verde { color: #067647; } .cp-cambios .cp-rosa { color: #c2367e; }
 
-.cp-dto-fuente.cp-dto-inactiva { color: #9ca3af; cursor: help; }
 
 /* Productos que solo tiene una de las dos webs, al final de la tabla */
 .cp-informe tr.cp-fila-solo td.cp-vacia { color: #c4c9d0; text-align: center; }
