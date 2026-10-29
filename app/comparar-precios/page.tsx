@@ -6,7 +6,7 @@ import Link from "next/link";
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
-  verificado?: boolean; nombreEditado?: boolean;
+  verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
 };
 type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean };
 type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean };
@@ -15,6 +15,7 @@ type ResultadoMarca = {
   comparaciones: Comparacion[]; soloEllos: SoloEllos[]; misSinEmparejar: MiSinEmparejar[];
   misProductos: number; susProductos: number;
   revisadoEn?: string; // cuándo se revisó ESTA marca (falta en resultados guardados antes)
+  eanPendientes?: number; // productos suyos con el EAN aún sin leer
 };
 
 function nombreDesdeUrl(url: string) {
@@ -72,7 +73,7 @@ function generarPDF(r: ResultadoMarca) {
 
   const filasComp = comp.map(c => {
     const cls = c.diff > 0.01 ? "caro" : c.diff < -0.01 ? "barato" : "";
-    const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (c.manual ? '<span class="tag tag-m">manual</span>' : "") + (c.verificado ? '<span class="tag tag-v">verificado</span>' : "");
+    const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (c.porEan ? '<span class="tag tag-e">EAN</span>' : "") + (c.manual ? '<span class="tag tag-m">manual</span>' : "") + (c.verificado ? '<span class="tag tag-v">verificado</span>' : "");
     const miPrecio = c.miUrl
       ? `<a class="lnk" href="${esc(c.miUrl)}">${c.miPrecio.toFixed(2)} €</a>`
       : `${c.miPrecio.toFixed(2)} €`;
@@ -113,6 +114,7 @@ function generarPDF(r: ResultadoMarca) {
   .caro { color: #b91c1c; font-weight: 700; }
   .barato { color: #15803d; }
   .tag { display: inline-block; font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 1px 4px; border-radius: 3px; margin-right: 5px; background: #ede9fe; color: #6d28d9; vertical-align: middle; }
+  .tag-e { background: #e0f2fe; color: #0369a1; }
   .tag-m { background: #dcfce7; color: #15803d; }
   .tag-v { background: #dbeafe; color: #1d4ed8; }
   .resumen { font-size: 11px; color: #555; margin-bottom: 4px; }
@@ -308,6 +310,11 @@ function MarcaBloque({
       {expandido && (
         <div className="vp-accordion-content">
           {r.error && <div className="error" style={{ margin: 8 }}>{r.error}</div>}
+          {(r.eanPendientes ?? 0) > 0 && (
+            <div className="cp-ean-aviso">
+              Faltan por leer los EAN de {r.eanPendientes} producto{r.eanPendientes !== 1 ? "s" : ""} de Cosméticos24h: esos se han emparejado por nombre. Vuelve a revisar la marca para completarlos.
+            </div>
+          )}
 
           {r.comparaciones.length > 0 && (
             <>
@@ -326,6 +333,7 @@ function MarcaBloque({
                     <div className="cp-fila">
                       <a href={c.miUrl} target="_blank" rel="noreferrer" className="cp-nombre">
                         {c.esPack && <span className="cp-pack-tag">pack</span>}
+                        {c.porEan && <span className="cp-ean-tag" title={`Mismo EAN en las dos webs: ${c.ean}`}>EAN</span>}
                         {c.manual && <span className="cp-manual-tag" title="Enlazado a mano">✓ manual</span>}
                         {c.verificado && <span className="cp-verificado-tag" title="Comprobado a mano: es el mismo producto">✓ verificado</span>}
                         {c.nombreEditado && <span className="cp-nombre-tag" title="Nombre editado a mano">✎ editado</span>}

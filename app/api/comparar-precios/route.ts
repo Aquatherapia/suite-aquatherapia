@@ -35,6 +35,8 @@ type Comparacion = {
   manual?: boolean;    // true si el enlace lo puso el usuario a mano
   verificado?: boolean; // true si el usuario ha confirmado a mano que es el mismo producto
   nombreEditado?: boolean; // true si el nombre mostrado lo ha escrito el usuario a mano
+  porEan?: boolean;    // true si se emparejó por EAN (mismo código de barras en las dos webs)
+  ean?: string;        // EAN con el que se emparejó
 };
 
 type SoloEllos = {
@@ -64,6 +66,8 @@ type ResultadoMarca = {
   // Cuándo se revisó ESTA marca (la revisión es marca a marca).
   // Opcional: los resultados guardados antes de existir este campo no lo tienen.
   revisadoEn?: string;
+  // Productos suyos cuyo EAN aún no se ha leído (se leen en la siguiente revisión)
+  eanPendientes?: number;
 };
 
 type Excluido = {
@@ -94,10 +98,13 @@ type Config = {
   verificados: Record<string, string[]>;
   // Por marca (slug): nombres editados a mano (con el original para poder restaurarlo)
   nombres: Record<string, NombreManual[]>;
+  // Caché de EAN de Cosméticos24h por suUrl ([] = leído y sin EAN válido).
+  // Leer el EAN cuesta una petición por producto, así que se guarda y no se repite.
+  eans: Record<string, string[]>;
 };
 
 function configVacia(): Config {
-  return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {}, nombres: {} };
+  return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {}, nombres: {}, eans: {} };
 }
 
 async function leerConfig(): Promise<Config> {
@@ -105,7 +112,7 @@ async function leerConfig(): Promise<Config> {
     const { kv } = await import("@vercel/kv");
     const data = await kv.get<Config>(KV_KEY);
     if (!data) return configVacia();
-    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {}, verificados: data.verificados ?? {}, nombres: data.nombres ?? {} };
+    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {}, verificados: data.verificados ?? {}, nombres: data.nombres ?? {}, eans: data.eans ?? {} };
   }
   try {
     const parsed = JSON.parse(await fs.readFile(CONFIG_PATH, "utf-8"));
@@ -117,6 +124,7 @@ async function leerConfig(): Promise<Config> {
       mapeos: parsed.mapeos ?? {},
       verificados: parsed.verificados ?? {},
       nombres: parsed.nombres ?? {},
+      eans: parsed.eans ?? {},
     };
   } catch {
     return configVacia();
@@ -177,6 +185,44 @@ function precioDesdeHtml(html: string): number | null {
   return m ? parseFloat(m[1]) : null;
 }
 
+// ── EAN ────────────────────────────────────────────────────────────────
+// Se comparan sin ceros a la izquierda (así un UPC-12 casa con su EAN-13).
+// Menos de 7 cifras no es un EAN: suele ser un código interno (p. ej. en packs).
+function normalizarEan(v: unknown): string | null {
+  const d = String(v ?? "").replace(/\D/g, "").replace(/^0+/, "");
+  return d.length >= 7 && d.length <= 14 ? d : null;
+}
+
+// Lee el EAN (gtin13 del JSON-LD o del microdato) de una ficha de la tienda propia
+function eanDesdeHtml(html: string): string | null {
+  const m = html.match(/"gtin(?:8|12|13|14)?"\s*:\s*"(\d+)"/) ?? html.match(/itemprop="gtin(?:8|12|13|14)?"[^>]*>\s*(\d+)/);
+  return m ? normalizarEan(m[1]) : null;
+}
+
+// Lee los EAN de los productos suyos que aún no están en la caché.
+// Una petición por producto (el listado de la colección no trae el barcode),
+// pocas a la vez y parando antes del límite de tiempo: lo que falte se lee en la siguiente revisión.
+async function leerSusEans(urls: string[], cache: Record<string, string[]>, limiteMs: number): Promise<number> {
+  const pendientes = urls.filter(u => !(u in cache));
+  let cortado = false;
+  for (let i = 0; i < pendientes.length && !cortado; i += 4) {
+    if (Date.now() > limiteMs) break;
+    await Promise.all(pendientes.slice(i, i + 4).map(async url => {
+      try {
+        const res = await fetch(`${url}.json`, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
+        if (res.status === 429) { cortado = true; return; }
+        if (!res.ok) return;
+        const data = await res.json();
+        const eans = (data.product?.variants ?? [])
+          .map((v: { barcode?: string | null }) => normalizarEan(v.barcode))
+          .filter((e: string | null): e is string => !!e);
+        cache[url] = Array.from(new Set<string>(eans));
+      } catch { /* se reintenta en la siguiente revisión */ }
+    }));
+  }
+  return urls.filter(u => !(u in cache)).length;
+}
+
 // Ejecuta tareas con concurrencia limitada
 async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = [];
@@ -187,7 +233,7 @@ async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promis
   return out;
 }
 
-type MiProducto = { nombre: string; url: string; precio: number; tok: Set<string>; esPack: boolean };
+type MiProducto = { nombre: string; url: string; precio: number; tok: Set<string>; esPack: boolean; ean: string | null };
 
 // Enumera y lee los productos de una marca en la tienda propia
 async function leerMisProductos(miToken: string, sitemapXml: string): Promise<MiProducto[]> {
@@ -210,7 +256,7 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<Mi
       const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
       const nombre = slug.replace(/-/g, " ");
       const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
-      return { nombre, url, precio, tok: tokens(nombre, miToken), esPack };
+      return { nombre, url, precio, tok: tokens(nombre, miToken), esPack, ean: eanDesdeHtml(html) };
     } catch {
       return null;
     }
@@ -456,6 +502,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Revisa las marcas de una en una (falta el slug de la marca)." }, { status: 400 });
     }
     const objetivo: Marca[] = config.marcas.filter(m => m.slug === body.slug);
+    // Margen de seguridad respecto a maxDuration (60 s) para guardar a tiempo
+    const limiteEans = Date.now() + 45_000;
 
     let sitemapXml = "";
     try {
@@ -486,6 +534,10 @@ export async function POST(req: NextRequest) {
         // 2) Mis productos (tienda propia)
         const mis = await leerMisProductos(marca.miToken, sitemapXml);
         const miPorUrl = new Map(mis.map(m => [m.url, m]));
+
+        // 2a) EAN de sus productos (de la caché; los nuevos se leen ahora)
+        const eanPendientes = await leerSusEans(suProdsAll.map(s => s.url), config.eans, limiteEans);
+        const susEans = (url: string) => config.eans[url] ?? [];
 
         // 2b) Rellenar datos de los ocultos "antiguos" (sin precio/tipo)
         for (const ex of config.excluidos[marca.slug] ?? []) {
@@ -524,13 +576,37 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // 3b) Emparejamiento automático (saltando ocultos y los ya forzados)
+        // 3b) Emparejamiento por EAN: mismo código de barras = mismo producto
+        const miPorEan = new Map<string, MiProducto>();
+        for (const m of mis) if (m.ean && !forzadoMi.has(m.url) && !miPorEan.has(m.ean)) miPorEan.set(m.ean, m);
+        const suPorEan = new Set<string>();
+        const miPorEanUsados = new Set<string>();
         for (const s of suProdsAll) {
           if (ocultos.has(s.url) || forzadoSu.has(s.url)) continue;
-          // Del mismo tipo (pack con pack, suelto con suelto) y sin usar los míos ya forzados
+          const ean = susEans(s.url).find(e => miPorEan.has(e) && !miPorEanUsados.has(miPorEan.get(e)!.url));
+          if (!ean) continue;
+          const mp = miPorEan.get(ean)!;
+          miUsados.add(mp.url);
+          miPorEanUsados.add(mp.url);
+          suPorEan.add(s.url);
+          comparaciones.push({
+            nombre: nombresOverride.get(s.url) ?? s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
+            diff: Math.round((mp.precio - s.precio) * 100) / 100,
+            confianza: 1, miUrl: mp.url, suUrl: s.url, esPack: s.esPack || mp.esPack, porEan: true, ean,
+            verificado: verificados.has(s.url), nombreEditado: nombresOverride.has(s.url),
+          });
+        }
+
+        // 3c) Por nombre, solo para lo que no casó por EAN (saltando ocultos y los ya forzados)
+        for (const s of suProdsAll) {
+          if (ocultos.has(s.url) || forzadoSu.has(s.url) || suPorEan.has(s.url)) continue;
+          const sEans = susEans(s.url);
+          // Del mismo tipo (pack con pack, suelto con suelto) y sin usar los míos ya forzados o casados por EAN.
+          // Si los dos tienen EAN y no coincide, son productos distintos aunque se llamen parecido.
           let mejor = -1, mejorJ = 0;
           for (let j = 0; j < mis.length; j++) {
-            if (mis[j].esPack !== s.esPack || forzadoMi.has(mis[j].url)) continue;
+            if (mis[j].esPack !== s.esPack || forzadoMi.has(mis[j].url) || miPorEanUsados.has(mis[j].url)) continue;
+            if (sEans.length > 0 && mis[j].ean && !sEans.includes(mis[j].ean!)) continue;
             const jj = jaccard(s.tok, mis[j].tok);
             if (jj > mejorJ) { mejorJ = jj; mejor = j; }
           }
@@ -549,7 +625,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 3c) Mis productos que no se emparejaron con ninguno suyo
+        // 3d) Mis productos que no se emparejaron con ninguno suyo
         const misSinEmparejar: MiSinEmparejar[] = mis
           .filter(m => !miUsados.has(m.url))
           .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, esPack: m.esPack }));
@@ -565,6 +641,7 @@ export async function POST(req: NextRequest) {
           comparaciones, soloEllos, misSinEmparejar,
           misProductos: mis.length, susProductos: suProdsAll.length,
           revisadoEn: new Date().toISOString(),
+          eanPendientes,
         });
       } catch (e) {
         nuevos.push({ marca: marca.nombre, slug: marca.slug, error: String(e), comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() });
