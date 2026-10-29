@@ -1,6 +1,6 @@
 // PDF por marca con el mismo diseño que la tabla de la web y el Excel:
 // mismas columnas, cálculos (calcularFila) y colores. A4 apaisado, para descargar o enviar.
-import { calcularFila, explicaDtoMax, type CuponExcel, type FilaExcel, type SoloEllosExcel } from "./excel";
+import { calcularFila, explicaDtoMax, filaSoloEllos, type CuponExcel, type FilaExcel, type SoloEllosExcel } from "./excel";
 
 type RGB = [number, number, number];
 const AZUL: RGB = [18, 112, 182];
@@ -68,7 +68,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
   const cuerpo: string[][] = orden.map((f, i) => {
       const k = calc[i];
       return [
-        f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : ""].filter(Boolean).join("\n"), eur(k.pvp) + (k.revisarPvp ? "\n(revisar precio)" : k.esPack ? "\nsuma de productos" : ""), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
+        f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : "", f.deAntes ? "DATO ANTERIOR (no se pudo leer nuestra ficha)" : ""].filter(Boolean).join("\n"), eur(k.pvp) + (k.revisarPvp ? "\n(revisar precio)" : k.esPack ? "\nsuma de productos" : ""), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
         `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}${explicaDtoMax(f, k, descuento) ? `\n${explicaDtoMax(f, k, descuento)!.replace(/−/g, "-")}` : ""}`, k.masBarato, k.igualar.replace(/−/g, "-"),
       ].filter((_, c) => hayCupon || c !== COL_CUPON);
@@ -162,10 +162,13 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       margin: { left: M, right: M },
       theme: "plain",
       styles: { font: "helvetica", fontSize: 8, textColor: TEXTO, cellPadding: 1.8 },
-      headStyles: { fillColor: ROSA, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7, halign: "center" },
-      head: [["EAN", "PRODUCTO", "PRECIO", "TIPO"]],
-      body: soloEllos.map(s => [s.ean ?? "", s.titulo, eur(s.precio), s.esPack ? "Pack" : "Producto"]),
-      columnStyles: { 0: { cellWidth: 28, halign: "left", textColor: TEXTO_SUAVE }, 1: { halign: "left" }, 2: { cellWidth: 25, halign: "right" }, 3: { cellWidth: 22, halign: "center", textColor: TEXTO_SUAVE } },
+      headStyles: { textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7, halign: "center", valign: "middle" },
+      head: [[cab("EAN"), cab("PRODUCTO"), cab("PVP", true), cab("PRECIO WEB", true), ...(hayCupon ? [cab(`PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %)`, true)] : []), cab("DTO. TOTAL", true)]],
+      body: soloEllos.map(s => {
+        const k = filaSoloEllos(s, cupon);
+        return [s.ean ?? "", (s.esPack ? "PACK · " : "") + s.titulo, eur(k.pvp), k.dtoWeb > 0.0005 ? `${eur(k.web)}\n-${pct(k.dtoWeb)}` : eur(k.web), ...(hayCupon ? [eur(k.final)] : []), pct(k.dto)];
+      }),
+      columnStyles: { 0: { cellWidth: 28, halign: "left", textColor: TEXTO_SUAVE }, 1: { halign: "left" }, 2: { cellWidth: 22, halign: "right", textColor: ROSA }, 3: { cellWidth: 22, halign: "right", textColor: ROSA }, 4: { cellWidth: 26, halign: "right", textColor: ROSA, fontStyle: "bold" }, 5: { cellWidth: 20, halign: "right", textColor: ROSA, fontStyle: "bold" } },
       didParseCell: d => { if (d.section === "body" && d.row.index % 2 === 1) d.cell.styles.fillColor = CEBRA; },
       didDrawCell: d => { const s = soloEllos[d.row.index]; if (d.section === "body" && d.column.index === 1 && s) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: s.url }); },
     });

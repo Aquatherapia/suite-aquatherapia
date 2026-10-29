@@ -14,6 +14,7 @@ type Comparacion = {
   stock?: number;          // unidades que quedan si está descatalogada
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
   verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
+  deAntes?: string; // la ficha no se pudo leer: fila de la revisión de esa fecha
 };
 type SoloEllos = { titulo: string; precio: number; tachado?: number; url: string; esPack: boolean; ean?: string };
 type MiSinEmparejar = { nombre: string; url: string; precio: number; pvp?: number; esPack: boolean; sinEan?: boolean; ean?: string; formato?: string; descatalogado?: boolean; stock?: number };
@@ -24,6 +25,7 @@ type ResultadoMarca = {
   revisadoEn?: string; // cuándo se revisó ESTA marca (falta en resultados guardados antes)
   eanPendientes?: number; // productos suyos con el EAN aún sin leer
   misFallidas?: number;   // fichas nuestras que no se pudieron leer
+  cambios?: { desde: string; nuevosCaros: string[]; yaNoCaros: string[]; novedades: string[] }; // respecto a la revisión anterior
 };
 
 // PVP distinto en las dos webs: puede ser una tarifa sin actualizar
@@ -280,6 +282,7 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                 <td className="cp-suave">{f.ean ?? ""}</td>
                 <td className="cp-izq">
                   {f.descatalogado && <EtiquetaDescat stock={f.stock} />}
+                  {f.deAntes && <span className="cp-deantes-tag" title={`Nuestra ficha no se pudo leer en esta revisión: precios de la revisión del ${fechaCorta(f.deAntes)}`}>dato anterior</span>}
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
@@ -438,12 +441,21 @@ function MarcaBloque({
           {r.error && <div className="error" style={{ margin: 8 }}>{r.error}</div>}
           {(r.misFallidas ?? 0) > 0 && (
             <div className="cp-ean-aviso">
-              No se pudieron leer {r.misFallidas} ficha{r.misFallidas !== 1 ? "s" : ""} de nuestra web en esta revisión (la web tardó o falló): esos productos faltan en la comparación. Vuelve a revisar la marca.
+              No se pudieron leer {r.misFallidas} ficha{r.misFallidas !== 1 ? "s" : ""} de nuestra web en esta revisión (la web tardó o falló). Las que ya estaban comparadas salen con los precios de la revisión anterior, marcadas como «dato anterior».
             </div>
           )}
           {(r.eanPendientes ?? 0) > 0 && (
             <div className="cp-ean-aviso">
               Faltan por leer los EAN de {r.eanPendientes} producto{r.eanPendientes !== 1 ? "s" : ""} de Cosméticos24h: esos todavía no se han comparado. Vuelve a revisar la marca para completarlos.
+            </div>
+          )}
+
+          {r.cambios && (r.cambios.nuevosCaros.length + r.cambios.yaNoCaros.length + r.cambios.novedades.length) > 0 && (
+            <div className="cp-cambios">
+              <strong>Cambios desde la revisión del {r.cambios.desde ? fechaCorta(r.cambios.desde) : "día anterior"}:</strong>
+              {r.cambios.nuevosCaros.length > 0 && <div><span className="cp-rojo">Ahora vamos más caros ({r.cambios.nuevosCaros.length}):</span> {r.cambios.nuevosCaros.join(" · ")}</div>}
+              {r.cambios.yaNoCaros.length > 0 && <div><span className="cp-verde">Ya no vamos más caros ({r.cambios.yaNoCaros.length}):</span> {r.cambios.yaNoCaros.join(" · ")}</div>}
+              {r.cambios.novedades.length > 0 && <div><span className="cp-rosa">Nuevos en Cosméticos24h ({r.cambios.novedades.length}):</span> {r.cambios.novedades.join(" · ")}</div>}
             </div>
           )}
 

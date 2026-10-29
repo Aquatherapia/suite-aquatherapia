@@ -1576,3 +1576,11 @@ button:disabled {
 .cp-cupon-sinfecha { font-style: italic; }
 .cp-cupon-promo { display: block; flex-basis: 100%; margin-top: 6px; font-size: 11px; line-height: 1.4; color: #4b5563; text-transform: none; letter-spacing: 0; font-weight: 400; }
 .cp-cupon-promo a { color: #b5655f; }
+
+/* Fila con los precios de la revisión anterior (nuestra ficha no se pudo leer) */
+.cp-deantes-tag { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px; background: #e5e7eb; color: #4b5563; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; cursor: help; }
+/* Qué ha cambiado desde la revisión anterior */
+.cp-cambios { margin: 8px 0 12px; padding: 10px 12px; border-radius: 8px; background: #f1f6fb; border: 1px solid #d5e4f2; font-size: 12.5px; line-height: 1.5; color: #1f2933; }
+.cp-cambios > div { margin-top: 3px; }
+.cp-cambios .cp-rojo, .cp-cambios .cp-verde, .cp-cambios .cp-rosa { font-weight: 700; }
+.cp-cambios .cp-rojo { color: #b42318; } .cp-cambios .cp-verde { color: #067647; } .cp-cambios .cp-rosa { color: #b5655f; }
