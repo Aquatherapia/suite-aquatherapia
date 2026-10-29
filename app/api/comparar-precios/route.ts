@@ -435,7 +435,8 @@ function cambiosDesde(antes: ResultadoMarca, comparaciones: Comparacion[], soloE
 async function leerMiFicha(url: string): Promise<MiProducto[] | null> {
   const html = await fetchTexto(url);
   const precio = precioDesdeHtml(html);
-  if (precio === null) return null;
+  // Una ficha desactivada sigue abriéndose en la web, pero con precio 0 €: no se vende, no se compara
+  if (precio === null || precio <= 0) return null;
   const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
   const nombre = slug.replace(/-/g, " ");
   const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
