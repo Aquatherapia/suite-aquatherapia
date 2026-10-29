@@ -5,17 +5,24 @@ import Link from "next/link";
 
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
+  miPvp?: number; suPvp?: number; // PVP sin descuento (faltan en resultados guardados antes)
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
-  verificado?: boolean; nombreEditado?: boolean;
+  verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
 };
 type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean };
-type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean };
+type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean; sinEan?: boolean };
 type ResultadoMarca = {
   marca: string; slug: string; error?: string;
   comparaciones: Comparacion[]; soloEllos: SoloEllos[]; misSinEmparejar: MiSinEmparejar[];
   misProductos: number; susProductos: number;
   revisadoEn?: string; // cuándo se revisó ESTA marca (falta en resultados guardados antes)
+  eanPendientes?: number; // productos suyos con el EAN aún sin leer
 };
+
+// PVP distinto en las dos webs: puede ser una tarifa sin actualizar
+function pvpDistinto(c: Comparacion): boolean {
+  return c.miPvp != null && c.suPvp != null && Math.abs(c.miPvp - c.suPvp) > 0.01;
+}
 
 function nombreDesdeUrl(url: string) {
   return (url.split("/es/")[1] ?? url).replace(/-p\d+$/, "").replace(/-/g, " ");
@@ -72,7 +79,7 @@ function generarPDF(r: ResultadoMarca) {
 
   const filasComp = comp.map(c => {
     const cls = c.diff > 0.01 ? "caro" : c.diff < -0.01 ? "barato" : "";
-    const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (c.manual ? '<span class="tag tag-m">manual</span>' : "") + (c.verificado ? '<span class="tag tag-v">verificado</span>' : "");
+    const tags = (c.esPack ? '<span class="tag">pack</span>' : "") + (pvpDistinto(c) ? '<span class="tag tag-p">PVP distinto</span>' : "") + (c.porEan ? '<span class="tag tag-e">EAN</span>' : "") + (c.verificado ? '<span class="tag tag-v">verificado</span>' : "");
     const miPrecio = c.miUrl
       ? `<a class="lnk" href="${esc(c.miUrl)}">${c.miPrecio.toFixed(2)} €</a>`
       : `${c.miPrecio.toFixed(2)} €`;
@@ -81,7 +88,9 @@ function generarPDF(r: ResultadoMarca) {
       : `${c.suPrecio.toFixed(2)} €`;
     return `<tr>
       <td>${tags}${esc(c.nombre)}</td>
+      <td class="num pvp ${pvpDistinto(c) ? "pvp-dif" : ""}">${c.miPvp != null ? c.miPvp.toFixed(2) + " €" : "—"}</td>
       <td class="num">${miPrecio}</td>
+      <td class="num pvp ${pvpDistinto(c) ? "pvp-dif" : ""}">${c.suPvp != null ? c.suPvp.toFixed(2) + " €" : "—"}</td>
       <td class="num">${suPrecio}</td>
       <td class="num ${cls}">${c.diff > 0 ? "+" : ""}${c.diff.toFixed(2)} €</td>
     </tr>`;
@@ -113,6 +122,10 @@ function generarPDF(r: ResultadoMarca) {
   .caro { color: #b91c1c; font-weight: 700; }
   .barato { color: #15803d; }
   .tag { display: inline-block; font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 1px 4px; border-radius: 3px; margin-right: 5px; background: #ede9fe; color: #6d28d9; vertical-align: middle; }
+  .tag-e { background: #e0f2fe; color: #0369a1; }
+  .tag-p { background: #ffedd5; color: #c2410c; }
+  .pvp { color: #666; }
+  .pvp-dif { color: #c2410c; font-weight: 700; }
   .tag-m { background: #dcfce7; color: #15803d; }
   .tag-v { background: #dbeafe; color: #1d4ed8; }
   .resumen { font-size: 11px; color: #555; margin-bottom: 4px; }
@@ -125,11 +138,11 @@ function generarPDF(r: ResultadoMarca) {
   <div class="meta">Generado el ${fechaHora}</div>
 </div>
 
-<div class="resumen">${comp.length} productos comparados · <strong>${masCaro.length} en los que vas más caro</strong> que Cosméticos24h.</div>
+<div class="resumen">${comp.length} productos comparados · <strong>${masCaro.length} en los que vas más caro</strong> que Cosméticos24h · ${comp.filter(pvpDistinto).length} con PVP distinto (¿tarifa sin actualizar?).</div>
 
 ${comp.length ? `<h2>Comparación de precios</h2>
 <table>
-  <thead><tr><th>Producto</th><th class="num">Tú</th><th class="num">Cosméticos24h</th><th class="num">Diferencia</th></tr></thead>
+  <thead><tr><th>Producto</th><th class="num">Tu PVP</th><th class="num">Tu precio</th><th class="num">Su PVP</th><th class="num">Su precio</th><th class="num">Diferencia</th></tr></thead>
   <tbody>${filasComp}</tbody>
 </table>` : ""}
 
@@ -139,7 +152,7 @@ ${soloEllosReal.length ? `<h2>Tienen ellos y tú no (${soloEllosReal.length})</h
 ${packs.length ? `<h2>Packs que tienen ellos y tú no (${packs.length})</h2>
 <table><tbody>${lista(packs.map(s => ({ titulo: s.titulo, precio: s.precio, url: s.url })))}</tbody></table>` : ""}
 
-<div class="footer">La Tienda de Cosméticos · Comparativa con Cosméticos24h · ${fechaHora}. Los precios son los de venta actuales de cada tienda (si Cosméticos24h tiene la marca en oferta, la diferencia lo refleja).</div>
+<div class="footer">La Tienda de Cosméticos · Comparativa con Cosméticos24h · ${fechaHora}. Los precios son los de venta actuales de cada tienda (si Cosméticos24h tiene la marca en oferta, la diferencia lo refleja). El PVP es el precio sin descuento de cada tienda.</div>
 <script>window.onload = function(){ window.print(); }<\/script>
 </body></html>`;
 
@@ -148,15 +161,13 @@ ${packs.length ? `<h2>Packs que tienen ellos y tú no (${packs.length})</h2>
 }
 
 function MarcaBloque({
-  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onMapear, onDesmapear, onVerificar, onDesverificar, onRenombrar, onRestaurarNombre,
+  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onVerificar, onDesverificar, onRenombrar, onRestaurarNombre,
 }: {
   r: ResultadoMarca; ocultos: Excluido[]; expandido: boolean; onToggle: () => void;
   mostrarTodos: boolean; onToggleMostrar: () => void;
   onExcluir: (item: Excluido) => void;
   onIncluir: (suUrl: string) => void;
   onMotivo: (suUrl: string, motivo: string) => void;
-  onMapear: (miUrl: string, suUrl: string, previos?: { miUrlPrevio?: string; suUrlPrevio?: string }) => Promise<void>;
-  onDesmapear: (miUrl: string) => void;
   onVerificar: (suUrl: string) => void;
   onDesverificar: (suUrl: string) => void;
   onRenombrar: (suUrl: string, nombre: string) => Promise<void>;
@@ -164,28 +175,6 @@ function MarcaBloque({
 }) {
   const [verOcultos, setVerOcultos] = useState(false);
   const [verSinEmp, setVerSinEmp] = useState(false);
-  const [editando, setEditando] = useState<string | null>(null); // suUrl de la fila en edición
-  const [urlInput, setUrlInput] = useState("");     // URL de Cosméticos24h
-  const [miUrlInput, setMiUrlInput] = useState(""); // URL de mi web (latiendadecosmeticos.com)
-  const [guardando, setGuardando] = useState(false);
-  const [errLink, setErrLink] = useState("");
-
-  // Guarda la fila corrigiendo las DOS urls: la mía y la de Cosméticos24h
-  async function guardarEnlace(miUrlPrevio: string, suUrlPrevio: string) {
-    if (!urlInput.trim() || !miUrlInput.trim()) return;
-    setGuardando(true); setErrLink("");
-    try {
-      await onMapear(miUrlInput.trim(), urlInput.trim(), { miUrlPrevio, suUrlPrevio });
-      setEditando(null); setUrlInput(""); setMiUrlInput("");
-    } catch (e) {
-      setErrLink(e instanceof Error ? e.message : String(e));
-    } finally {
-      setGuardando(false);
-    }
-  }
-  function abrirEditor(filaId: string, suUrlActual: string, miUrlActual = "") {
-    setEditando(filaId); setUrlInput(suUrlActual); setMiUrlInput(miUrlActual); setErrLink("");
-  }
 
   // Editor del nombre mostrado del producto
   const [editandoNombre, setEditandoNombre] = useState<string | null>(null); // suUrl de la fila en edición
@@ -209,65 +198,11 @@ function MarcaBloque({
     setEditandoNombre(suUrl); setNombreInput(nombreActual); setErrNombre("");
   }
 
-  // Enlace en sentido inverso: producto SUYO (suUrl) → pego la URL de MI producto
-  async function guardarEnlaceInverso(suUrl: string) {
-    if (!urlInput.trim()) return;
-    setGuardando(true); setErrLink("");
-    try {
-      await onMapear(urlInput.trim(), suUrl);
-      setEditando(null); setUrlInput("");
-    } catch (e) {
-      setErrLink(e instanceof Error ? e.message : String(e));
-    } finally {
-      setGuardando(false);
-    }
-  }
 
-  // Editor para las filas "tienen ellos y tú no": pego la URL de MI web
-  function editorMio(suUrl: string) {
-    if (editando !== suUrl) return null;
-    return (
-      <div className="cp-editor">
-        <div className="cp-editor-lbl">¿Ya lo tienes? Pega la URL de este producto en TU web (latiendadecosmeticos.com):</div>
-        <div className="cp-editor-row">
-          <input
-            className="cp-editor-input"
-            value={urlInput}
-            onChange={e => setUrlInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && guardarEnlaceInverso(suUrl)}
-            placeholder="https://www.latiendadecosmeticos.com/es/…"
-            autoFocus
-          />
-          <button className="cp-editor-save" disabled={guardando} onClick={() => guardarEnlaceInverso(suUrl)}>
-            {guardando ? "…" : "Enlazar"}
-          </button>
-          <button className="cp-editor-cancel" onClick={() => { setEditando(null); setErrLink(""); }}>Cancelar</button>
-        </div>
-        {errLink && <div className="cp-editor-err">{errLink}</div>}
-      </div>
-    );
-  }
-
-  // Estado de la sección "sin emparejar"
-  const [linkVals, setLinkVals] = useState<Record<string, string>>({});
-  const [guardandoSin, setGuardandoSin] = useState<string | null>(null);
-  const [errSin, setErrSin] = useState<Record<string, string>>({});
-  async function guardarEnlaceSin(miUrl: string) {
-    const val = (linkVals[miUrl] ?? "").trim();
-    if (!val) return;
-    setGuardandoSin(miUrl); setErrSin(e => ({ ...e, [miUrl]: "" }));
-    try {
-      await onMapear(miUrl, val);
-      setLinkVals(v => { const n = { ...v }; delete n[miUrl]; return n; });
-    } catch (e) {
-      setErrSin(er => ({ ...er, [miUrl]: e instanceof Error ? e.message : String(e) }));
-    } finally {
-      setGuardandoSin(null);
-    }
-  }
 
   const masCaro = r.comparaciones.filter(c => c.diff > 0.01);
   const verificados = r.comparaciones.filter(c => c.verificado);
+  const conPvpDistinto = r.comparaciones.filter(pvpDistinto);
   const soloEllosReal = r.soloEllos.filter(s => !s.esPack);
   const packs = r.soloEllos.filter(s => s.esPack);
   const sinEmp = (r.misSinEmparejar ?? []).filter(m => !m.esPack);
@@ -287,6 +222,9 @@ function MarcaBloque({
         <div className="vp-accordion-right">
           {masCaro.length > 0 && (
             <span className="vp-pill vp-pill-nuevo">{masCaro.length} caro{masCaro.length !== 1 ? "s" : ""}</span>
+          )}
+          {conPvpDistinto.length > 0 && (
+            <span className="vp-pill cp-pill-pvp" title="El PVP sin descuento no coincide: puede que una tarifa no esté actualizada">{conPvpDistinto.length} PVP distinto{conPvpDistinto.length !== 1 ? "s" : ""}</span>
           )}
           {verificados.length > 0 && (
             <span className="vp-pill vp-pill-verificado" title="Productos que has comprobado a mano">✓ {verificados.length} verificado{verificados.length !== 1 ? "s" : ""}</span>
@@ -308,31 +246,40 @@ function MarcaBloque({
       {expandido && (
         <div className="vp-accordion-content">
           {r.error && <div className="error" style={{ margin: 8 }}>{r.error}</div>}
+          {(r.eanPendientes ?? 0) > 0 && (
+            <div className="cp-ean-aviso">
+              Faltan por leer los EAN de {r.eanPendientes} producto{r.eanPendientes !== 1 ? "s" : ""} de Cosméticos24h: esos todavía no se han comparado. Vuelve a revisar la marca para completarlos.
+            </div>
+          )}
 
           {r.comparaciones.length > 0 && (
             <>
               <div className="cp-subtit">Comparación de precios (tú vs. Cosméticos24h)</div>
-              <div className="cp-tabla-head">
+              <div className="cp-tabla-head cp-tabla-pvp">
                 <span>Producto</span>
-                <span className="cp-col-num">Tú</span>
-                <span className="cp-col-num">C24h</span>
-                <span className="cp-col-num">Dif.</span>
+                <span className="cp-col-num" title="Tu PVP sin descuento">Tu PVP</span>
+                <span className="cp-col-num" title="Tu precio con descuento">Tu precio</span>
+                <span className="cp-col-num" title="PVP sin descuento en Cosméticos24h">Su PVP</span>
+                <span className="cp-col-num" title="Precio con descuento en Cosméticos24h">Su precio</span>
+                <span className="cp-col-num" title="Tu precio − su precio">Dif.</span>
                 <span />
               </div>
               {compMostrar.map((c, i) => {
                 const caro = c.diff > 0.01;
                 return (
                   <div key={i}>
-                    <div className="cp-fila">
+                    <div className="cp-fila cp-tabla-pvp">
                       <a href={c.miUrl} target="_blank" rel="noreferrer" className="cp-nombre">
                         {c.esPack && <span className="cp-pack-tag">pack</span>}
-                        {c.manual && <span className="cp-manual-tag" title="Enlazado a mano">✓ manual</span>}
+                        {pvpDistinto(c) && <span className="cp-pvp-tag" title={`PVP distinto: tú ${c.miPvp!.toFixed(2)} € · C24h ${c.suPvp!.toFixed(2)} €`}>PVP ≠</span>}
+                        {c.porEan && <span className="cp-ean-tag" title={`Mismo EAN en las dos webs: ${c.ean}`}>EAN</span>}
                         {c.verificado && <span className="cp-verificado-tag" title="Comprobado a mano: es el mismo producto">✓ verificado</span>}
                         {c.nombreEditado && <span className="cp-nombre-tag" title="Nombre editado a mano">✎ editado</span>}
                         {c.nombre}
-                        {!c.manual && !c.verificado && c.confianza < 0.5 && <span className="cp-baja" title="Emparejamiento de baja confianza: revísalo o enlázalo a mano con ✎">≈</span>}
                       </a>
+                      <span className={"cp-col-num cp-pvp" + (pvpDistinto(c) ? " cp-pvp-dif" : "")}>{c.miPvp != null ? `${c.miPvp.toFixed(2)}€` : "—"}</span>
                       <span className="cp-col-num">{c.miPrecio.toFixed(2)}€</span>
+                      <span className={"cp-col-num cp-pvp" + (pvpDistinto(c) ? " cp-pvp-dif" : "")}>{c.suPvp != null ? `${c.suPvp.toFixed(2)}€` : "—"}</span>
                       <a href={c.suUrl} target="_blank" rel="noreferrer" className="cp-col-num cp-c24">{c.suPrecio.toFixed(2)}€</a>
                       <span className={"cp-col-num " + (caro ? "cp-caro" : c.diff < -0.01 ? "cp-barato" : "")}>
                         {c.diff > 0 ? "+" : ""}{c.diff.toFixed(2)}€
@@ -346,7 +293,6 @@ function MarcaBloque({
                           ✓
                         </button>
                         <button className="cp-renombrar" title="Editar el nombre mostrado" onClick={() => abrirEditorNombre(c.suUrl, c.nombre)}>Aa</button>
-                        <button className="cp-editar" title="Corregir el enlace: tu URL y/o la de Cosméticos24h" onClick={() => abrirEditor(c.suUrl, c.suUrl, c.miUrl)}>✎</button>
                         <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecio, miUrl: c.miUrl })}>×</button>
                       </div>
                     </div>
@@ -372,42 +318,6 @@ function MarcaBloque({
                         {errNombre && <div className="cp-editor-err">{errNombre}</div>}
                       </div>
                     )}
-                    {editando === c.suUrl && (
-                      <div className="cp-editor">
-                        <div className="cp-editor-lbl">Corrige las URLs de esta fila (puedes cambiar una o las dos):</div>
-                        <div className="cp-editor-campo">
-                          <span className="cp-editor-tag">Tú</span>
-                          <input
-                            className="cp-editor-input"
-                            value={miUrlInput}
-                            onChange={e => setMiUrlInput(e.target.value)}
-                            onKeyDown={e => e.key === "Enter" && guardarEnlace(c.miUrl, c.suUrl)}
-                            placeholder="https://www.latiendadecosmeticos.com/es/…"
-                            autoFocus
-                          />
-                        </div>
-                        <div className="cp-editor-campo">
-                          <span className="cp-editor-tag">C24h</span>
-                          <input
-                            className="cp-editor-input"
-                            value={urlInput}
-                            onChange={e => setUrlInput(e.target.value)}
-                            onKeyDown={e => e.key === "Enter" && guardarEnlace(c.miUrl, c.suUrl)}
-                            placeholder="https://cosmeticos24h.com/products/…"
-                          />
-                        </div>
-                        <div className="cp-editor-row">
-                          <button className="cp-editor-save" disabled={guardando} onClick={() => guardarEnlace(c.miUrl, c.suUrl)}>
-                            {guardando ? "…" : "Enlazar"}
-                          </button>
-                          <button className="cp-editor-cancel" onClick={() => { setEditando(null); setErrLink(""); }}>Cancelar</button>
-                        </div>
-                        {c.manual && (
-                          <button className="cp-editor-undo" onClick={() => { onDesmapear(c.miUrl); setEditando(null); }}>Quitar enlace manual (volver al automático)</button>
-                        )}
-                        {errLink && <div className="cp-editor-err">{errLink}</div>}
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -430,11 +340,9 @@ function MarcaBloque({
                     <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
                     <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
                     <div className="cp-acciones">
-                      <button className="cp-editar" title="Ya lo tengo: enlazar con mi producto" onClick={() => abrirEditor(s.url, "")}>✎</button>
                       <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
                     </div>
                   </div>
-                  {editorMio(s.url)}
                 </div>
               ))}
             </>
@@ -451,11 +359,9 @@ function MarcaBloque({
                     <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
                     <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
                     <div className="cp-acciones">
-                      <button className="cp-editar" title="Ya lo tengo: enlazar con mi producto" onClick={() => abrirEditor(s.url, "")}>✎</button>
                       <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
                     </div>
                   </div>
-                  {editorMio(s.url)}
                 </div>
               ))}
             </>
@@ -464,12 +370,12 @@ function MarcaBloque({
           {sinEmp.length > 0 && (
             <div className="cp-ocultos-box">
               <button className="cp-ocultos-toggle" onClick={() => setVerSinEmp(v => !v)}>
-                {verSinEmp ? "▲" : "▼"} Tus productos sin emparejar ({sinEmp.length}) — enlázalos a mano
+                {verSinEmp ? "▲" : "▼"} Tus productos sin el mismo EAN en Cosméticos24h ({sinEmp.length})
               </button>
               {verSinEmp && (
                 <div className="cp-ocultos-lista">
                   <div className="cp-packs-nota" style={{ padding: "0 0 8px" }}>
-                    Estos productos tuyos no se han cruzado con ninguno de Cosméticos24h. Si tienen equivalente, pega su URL de C24h para enlazarlos (queda guardado).
+                    Solo se comparan productos con el mismo EAN en las dos webs. Estos no lo tienen: o Cosméticos24h no los vende, o una de las dos fichas no tiene EAN (o lo tiene distinto).
                   </div>
                   {sinEmp.map((m, i) => (
                     <div key={i} className="cp-sinemp-item">
@@ -477,20 +383,7 @@ function MarcaBloque({
                         <a href={m.url} target="_blank" rel="noreferrer" className="cp-oculto-nombre">
                           {m.esPack && <span className="cp-pack-tag">pack</span>}{m.nombre}
                         </a>
-                        <div className="cp-oculto-precios">Tu precio: <strong>{m.precio.toFixed(2)}€</strong></div>
-                        <div className="cp-editor-row">
-                          <input
-                            className="cp-editor-input"
-                            value={linkVals[m.url] ?? ""}
-                            onChange={e => setLinkVals(v => ({ ...v, [m.url]: e.target.value }))}
-                            onKeyDown={e => e.key === "Enter" && guardarEnlaceSin(m.url)}
-                            placeholder="URL de este producto en cosmeticos24h.com…"
-                          />
-                          <button className="cp-editor-save" disabled={guardandoSin === m.url} onClick={() => guardarEnlaceSin(m.url)}>
-                            {guardandoSin === m.url ? "…" : "Enlazar"}
-                          </button>
-                        </div>
-                        {errSin[m.url] && <div className="cp-editor-err">{errSin[m.url]}</div>}
+                        <div className="cp-oculto-precios">Tu precio: <strong>{m.precio.toFixed(2)}€</strong>{m.sinEan && <> · <span className="cp-sin-ean">tu ficha no tiene EAN</span></>}</div>
                       </div>
                     </div>
                   ))}
@@ -622,24 +515,6 @@ export default function CompararPrecios() {
     const res = await fetch("/api/comparar-precios", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "incluir", slug, suUrl }),
-    });
-    setConfig(await res.json());
-  }
-
-  async function mapear(slug: string, miUrl: string, suUrl: string, previos?: { miUrlPrevio?: string; suUrlPrevio?: string }) {
-    const res = await fetch("/api/comparar-precios", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "mapear", slug, miUrl, suUrl, ...previos }),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    setConfig(data);
-  }
-
-  async function desmapear(slug: string, miUrl: string) {
-    const res = await fetch("/api/comparar-precios", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "desmapear", slug, miUrl }),
     });
     setConfig(await res.json());
   }
@@ -780,8 +655,6 @@ export default function CompararPrecios() {
               onExcluir={(item) => excluir(r.slug, item)}
               onIncluir={(suUrl) => incluir(r.slug, suUrl)}
               onMotivo={(suUrl, motivo) => cambiarMotivo(r.slug, suUrl, motivo)}
-              onMapear={(miUrl, suUrl, previos) => mapear(r.slug, miUrl, suUrl, previos)}
-              onDesmapear={(miUrl) => desmapear(r.slug, miUrl)}
               onVerificar={(suUrl) => verificar(r.slug, suUrl)}
               onDesverificar={(suUrl) => desverificar(r.slug, suUrl)}
               onRenombrar={(suUrl, nombre) => renombrar(r.slug, suUrl, nombre)}

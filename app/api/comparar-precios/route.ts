@@ -27,6 +27,8 @@ type Comparacion = {
   miPrecio: number;
   suPrecio: number;
   suPrecioTachado?: number;
+  miPvp?: number;      // PVP sin descuento en tu web
+  suPvp?: number;      // PVP sin descuento en Cosméticos24h (precio tachado, o el de venta si no hay oferta)
   diff: number;        // miPrecio - suPrecio (positivo = tú más caro)
   confianza: number;   // 0-1, calidad del emparejamiento por nombre
   miUrl: string;
@@ -35,6 +37,8 @@ type Comparacion = {
   manual?: boolean;    // true si el enlace lo puso el usuario a mano
   verificado?: boolean; // true si el usuario ha confirmado a mano que es el mismo producto
   nombreEditado?: boolean; // true si el nombre mostrado lo ha escrito el usuario a mano
+  porEan?: boolean;    // true si se emparejó por EAN (mismo código de barras en las dos webs)
+  ean?: string;        // EAN con el que se emparejó
 };
 
 type SoloEllos = {
@@ -49,7 +53,9 @@ type MiSinEmparejar = {
   nombre: string;
   url: string;
   precio: number;
+  pvp?: number;
   esPack: boolean;
+  sinEan?: boolean; // true si tu ficha no tiene EAN
 };
 
 type ResultadoMarca = {
@@ -64,6 +70,8 @@ type ResultadoMarca = {
   // Cuándo se revisó ESTA marca (la revisión es marca a marca).
   // Opcional: los resultados guardados antes de existir este campo no lo tienen.
   revisadoEn?: string;
+  // Productos suyos cuyo EAN aún no se ha leído (se leen en la siguiente revisión)
+  eanPendientes?: number;
 };
 
 type Excluido = {
@@ -88,16 +96,19 @@ type Config = {
   resultados: ResultadoMarca[];
   // Por marca (slug): productos de Cosméticos24h que el usuario ha ocultado a mano
   excluidos: Record<string, Excluido[]>;
-  // Por marca (slug): enlaces manuales tuyo↔suyo (tienen prioridad sobre el automático)
+  // Por marca (slug): enlaces manuales tuyo↔suyo. Ya no se usan (se compara solo por EAN); se conservan guardados
   mapeos: Record<string, Mapeo[]>;
   // Por marca (slug): suUrl de los productos que el usuario ha comprobado a mano que son el mismo
   verificados: Record<string, string[]>;
   // Por marca (slug): nombres editados a mano (con el original para poder restaurarlo)
   nombres: Record<string, NombreManual[]>;
+  // Caché de EAN de Cosméticos24h por suUrl: uno por variante, en su orden (null = sin EAN válido).
+  // Leer el EAN cuesta una petición por producto, así que se guarda y no se repite.
+  eanVariantes: Record<string, (string | null)[]>;
 };
 
 function configVacia(): Config {
-  return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {}, nombres: {} };
+  return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {}, nombres: {}, eanVariantes: {} };
 }
 
 async function leerConfig(): Promise<Config> {
@@ -105,7 +116,7 @@ async function leerConfig(): Promise<Config> {
     const { kv } = await import("@vercel/kv");
     const data = await kv.get<Config>(KV_KEY);
     if (!data) return configVacia();
-    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {}, verificados: data.verificados ?? {}, nombres: data.nombres ?? {} };
+    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {}, verificados: data.verificados ?? {}, nombres: data.nombres ?? {}, eanVariantes: data.eanVariantes ?? {} };
   }
   try {
     const parsed = JSON.parse(await fs.readFile(CONFIG_PATH, "utf-8"));
@@ -117,6 +128,7 @@ async function leerConfig(): Promise<Config> {
       mapeos: parsed.mapeos ?? {},
       verificados: parsed.verificados ?? {},
       nombres: parsed.nombres ?? {},
+      eanVariantes: parsed.eanVariantes ?? {},
     };
   } catch {
     return configVacia();
@@ -133,36 +145,10 @@ async function guardarConfig(config: Config) {
   await fs.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
-// ── Emparejamiento por nombre ──────────────────────────────────────────
-const STOP = new Set([
-  "de", "la", "el", "los", "las", "para", "con", "sin", "y", "a", "en",
-  "pack", "profesional", "prof", "ml", "spf",
-]);
-
+// ── Normalización ──────────────────────────────────────────────────────
 function normalizar(s: string): string {
   return s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
-
-function tokens(s: string, tokenMarca: string): Set<string> {
-  let t = normalizar(s).replace(/[^a-z0-9 ]/g, " ");
-  t = t.replace(/\b\d+\s*ml\b/g, " ").replace(/\b\d+\s*spf\b/g, " ");
-  const marcaToks = normalizar(tokenMarca).split(/[^a-z0-9]+/).filter(Boolean);
-  const out = new Set<string>();
-  for (const w of t.split(/\s+/)) {
-    if (!w || w.length < 3 || STOP.has(w) || marcaToks.includes(w) || /^\d+$/.test(w)) continue;
-    out.add(w);
-  }
-  return out;
-}
-
-function jaccard(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 || b.size === 0) return 0;
-  let inter = 0;
-  for (const x of a) if (b.has(x)) inter++;
-  return inter / (a.size + b.size - inter);
-}
-
-const UMBRAL = 0.34;
 
 // ── Utilidades de red ──────────────────────────────────────────────────
 async function fetchTexto(url: string): Promise<string> {
@@ -177,6 +163,55 @@ function precioDesdeHtml(html: string): number | null {
   return m ? parseFloat(m[1]) : null;
 }
 
+// ── EAN ────────────────────────────────────────────────────────────────
+// Se comparan sin ceros a la izquierda (así un UPC-12 casa con su EAN-13).
+// Menos de 7 cifras no es un EAN: suele ser un código interno (p. ej. en packs).
+function normalizarEan(v: unknown): string | null {
+  const d = String(v ?? "").replace(/\D/g, "").replace(/^0+/, "");
+  return d.length >= 7 && d.length <= 14 ? d : null;
+}
+
+// Lee el EAN (gtin13 del JSON-LD o del microdato) de una ficha de la tienda propia
+function eanDesdeHtml(html: string): string | null {
+  const m = html.match(/"gtin(?:8|12|13|14)?"\s*:\s*"(\d+)"/) ?? html.match(/itemprop="gtin(?:8|12|13|14)?"[^>]*>\s*(\d+)/);
+  return m ? normalizarEan(m[1]) : null;
+}
+
+// Lee los EAN de los productos suyos que aún no están en la caché.
+// Una petición por producto (el listado de la colección no trae el barcode),
+// pocas a la vez y parando antes del límite de tiempo: lo que falte se lee en la siguiente revisión.
+// Se guarda un EAN por variante (tono/formato), en el mismo orden que las variantes del listado.
+async function leerSusEans(urls: string[], cache: Record<string, (string | null)[]>, limiteMs: number): Promise<number> {
+  const pendientes = urls.filter(u => !(u in cache));
+  let cortado = false;
+  for (let i = 0; i < pendientes.length && !cortado; i += 4) {
+    if (Date.now() > limiteMs) break;
+    await Promise.all(pendientes.slice(i, i + 4).map(async url => {
+      try {
+        const res = await fetch(`${url}.json`, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
+        if (res.status === 429) { cortado = true; return; }
+        if (!res.ok) return;
+        const data = await res.json();
+        cache[url] = (data.product?.variants ?? []).map((v: { barcode?: string | null }) => normalizarEan(v.barcode));
+      } catch { /* se reintenta en la siguiente revisión */ }
+    }));
+  }
+  return urls.filter(u => !(u in cache)).length;
+}
+
+// Lee el PVP sin descuento de una ficha de la tienda propia.
+// La ficha solo enseña el precio final; el original va en un bloque oculto (unit_price_original).
+// Sin él, el PVP es el mismo precio de venta.
+function pvpDesdeHtml(html: string): number | null {
+  const m = html.match(/class="unit_price_original">\s*([0-9]+\.?[0-9]*)/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// PVP de Cosméticos24h: el precio tachado si hay oferta; si no, el de venta
+function suPvp(s: { precio: number; tachado?: number }): number {
+  return s.tachado && s.tachado > s.precio ? s.tachado : s.precio;
+}
+
 // Ejecuta tareas con concurrencia limitada
 async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = [];
@@ -187,7 +222,7 @@ async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promis
   return out;
 }
 
-type MiProducto = { nombre: string; url: string; precio: number; tok: Set<string>; esPack: boolean };
+type MiProducto = { nombre: string; url: string; precio: number; pvp: number; esPack: boolean; ean: string | null };
 
 // Enumera y lee los productos de una marca en la tienda propia
 async function leerMisProductos(miToken: string, sitemapXml: string): Promise<MiProducto[]> {
@@ -210,7 +245,7 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<Mi
       const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
       const nombre = slug.replace(/-/g, " ");
       const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
-      return { nombre, url, precio, tok: tokens(nombre, miToken), esPack };
+      return { nombre, url, precio, pvp: pvpDesdeHtml(html) ?? precio, esPack, ean: eanDesdeHtml(html) };
     } catch {
       return null;
     }
@@ -218,28 +253,45 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<Mi
   return productos.filter((p): p is MiProducto => p !== null);
 }
 
-type SuProducto = { titulo: string; url: string; precio: number; tachado?: number; esPack: boolean; tok: Set<string> };
+type Variante = { titulo: string; precio: number; tachado?: number };
+type SuProducto = { titulo: string; url: string; precio: number; tachado?: number; esPack: boolean; variantes: Variante[] };
 
 // Lee los productos de una marca en Cosméticos24h (API Shopify pública)
-async function leerSusProductos(slug: string, nombreMarca: string): Promise<SuProducto[] | { error: string }> {
+async function leerSusProductos(slug: string): Promise<SuProducto[] | { error: string }> {
   const url = `https://cosmeticos24h.com/collections/${slug}/products.json?limit=250`;
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
   if (!res.ok) return { error: `Cosméticos24h HTTP ${res.status}` };
   const data = await res.json();
   return (data.products ?? []).map((p: {
     title: string; handle: string;
-    variants?: { price?: string; compare_at_price?: string }[];
+    variants?: { title?: string; price?: string; compare_at_price?: string }[];
   }) => {
-    const v = p.variants?.[0] ?? {};
+    const variantes: Variante[] = (p.variants ?? []).map(v => ({
+      titulo: v.title ?? "",
+      precio: parseFloat(v.price ?? "0"),
+      tachado: v.compare_at_price ? parseFloat(v.compare_at_price) : undefined,
+    }));
+    const v = variantes[0] ?? { titulo: "", precio: 0 };
     return {
       titulo: p.title as string,
       url: `https://cosmeticos24h.com/products/${p.handle}`,
-      precio: parseFloat(v.price ?? "0"),
-      tachado: v.compare_at_price ? parseFloat(v.compare_at_price) : undefined,
+      precio: v.precio,
+      tachado: v.tachado,
       esPack: EXCLUIR.some(w => (p.title as string).toLowerCase().includes(w)),
-      tok: tokens(p.title as string, nombreMarca),
+      variantes,
     };
   });
+}
+
+// Variantes suyas (tono/formato) con el mismo EAN que algún producto mío
+function variantesConEan(eans: (string | null)[], miPorEan: Map<string, MiProducto>): { i: number; ean: string; mp: MiProducto }[] {
+  const out: { i: number; ean: string; mp: MiProducto }[] = [];
+  for (let i = 0; i < eans.length; i++) {
+    const ean = eans[i];
+    const mp = ean ? miPorEan.get(ean) : undefined;
+    if (ean && mp) out.push({ i, ean, mp });
+  }
+  return out;
 }
 
 // ── Handlers ───────────────────────────────────────────────────────────
@@ -360,95 +412,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(config);
   }
 
-  // Enlazar a mano TU producto (miUrl) con el suyo (suUrl de Cosméticos24h).
-  // Actualiza el resultado al momento sin re-escanear toda tu web.
-  if (body.action === "mapear") {
-    const marca = config.marcas.find(m => m.slug === body.slug);
-    let { miUrl, suUrl } = body as { miUrl: string; suUrl: string };
-    // Fila que se estaba editando (para poder cambiar las DOS urls a la vez sin dejarla duplicada)
-    const { miUrlPrevio, suUrlPrevio } = body as { miUrlPrevio?: string; suUrlPrevio?: string };
-    const previoMi = (miUrlPrevio || "").trim();
-    const previoSu = (suUrlPrevio || "").trim();
-    if (!marca) return NextResponse.json({ error: "Marca no encontrada." }, { status: 400 });
-    miUrl = (miUrl || "").trim();
-    suUrl = (suUrl || "").trim().split("?")[0].replace(/\/$/, "");
-    // Normalizar la URL de Cosméticos24h que pega el usuario
-    const mSu = suUrl.match(/cosmeticos24h\.com\/products\/([^/?#]+)/i);
-    if (!miUrl || !mSu) {
-      return NextResponse.json({ error: "Pega la URL del producto en Cosméticos24h (…/products/…)." }, { status: 400 });
-    }
-    suUrl = `https://cosmeticos24h.com/products/${mSu[1]}`;
-    if (!/latiendadecosmeticos\.com/i.test(miUrl)) {
-      return NextResponse.json({ error: "La URL de tu producto debe ser de latiendadecosmeticos.com" }, { status: 400 });
-    }
-
-    // Buscar el producto suyo en la colección de la marca
-    const sus = await leerSusProductos(marca.slug, marca.nombre);
-    if ("error" in sus) return NextResponse.json({ error: sus.error }, { status: 502 });
-    const sp = sus.find(s => s.url === suUrl);
-    if (!sp) {
-      return NextResponse.json({ error: `Ese producto no está en la colección "${marca.slug}" de Cosméticos24h. ¿Es de otra marca o slug distinto?` }, { status: 404 });
-    }
-
-    // Precio/nombre de TU producto: primero del resultado guardado; si no, leyendo la ficha
-    const r = config.resultados.find(x => x.slug === marca.slug);
-    let miPrecio: number | undefined, miEsPack = false;
-    const enComp = r?.comparaciones.find(c => c.miUrl === miUrl);
-    const enSin = r?.misSinEmparejar?.find(m => m.url === miUrl);
-    if (enComp) miPrecio = enComp.miPrecio;
-    else if (enSin) { miPrecio = enSin.precio; miEsPack = enSin.esPack; }
-    else {
-      try {
-        const html = await fetchTexto(miUrl);
-        const p = precioDesdeHtml(html);
-        if (p !== null) miPrecio = p;
-        const slug = (miUrl.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
-        miEsPack = EXCLUIR.some(w => slug.replace(/-/g, " ").toLowerCase().includes(w));
-      } catch { /* se queda sin precio */ }
-    }
-    if (miPrecio == null) {
-      return NextResponse.json({ error: "No pude leer el precio de tu producto. Revisa la URL de tu web." }, { status: 502 });
-    }
-
-    // Guardar el enlace (reemplaza cualquiera previo de ese producto tuyo o suyo, y el de la fila editada)
-    const esViejo = (u: string, esMi: boolean) =>
-      (esMi ? u === miUrl || (!!previoMi && u === previoMi) : u === suUrl || (!!previoSu && u === previoSu));
-    const lista = (config.mapeos[marca.slug] ?? []).filter(f => !esViejo(f.miUrl, true) && !esViejo(f.suUrl, false));
-    lista.push({ miUrl, suUrl });
-    config.mapeos[marca.slug] = lista;
-    // Que no quede oculto ese producto suyo
-    config.excluidos[marca.slug] = (config.excluidos[marca.slug] ?? []).filter(e => e.suUrl !== suUrl);
-
-    // Actualizar el resultado al momento
-    if (r) {
-      const nombre = (miUrl.split("/es/")[1] ?? "").replace(/-p\d+$/, "").replace(/-/g, " ");
-      r.comparaciones = r.comparaciones.filter(c => !esViejo(c.miUrl, true) && !esViejo(c.suUrl, false));
-      r.soloEllos = r.soloEllos.filter(s => s.url !== suUrl);
-      r.misSinEmparejar = (r.misSinEmparejar ?? []).filter(m => !esViejo(m.url, true));
-      const nombreOverride = (config.nombres[marca.slug] ?? []).find(n => n.suUrl === suUrl)?.nombre;
-      r.comparaciones.push({
-        nombre: nombreOverride || sp.titulo || nombre, miPrecio, suPrecio: sp.precio, suPrecioTachado: sp.tachado,
-        diff: Math.round((miPrecio - sp.precio) * 100) / 100,
-        confianza: 1, miUrl, suUrl, esPack: sp.esPack || miEsPack, manual: true,
-        verificado: (config.verificados[marca.slug] ?? []).includes(suUrl),
-        nombreEditado: !!nombreOverride,
-      });
-      r.comparaciones.sort((a, b) => b.diff - a.diff);
-    }
-    await guardarConfig(config);
-    return NextResponse.json(config);
-  }
-
-  // Deshacer un enlace manual (vuelve al emparejamiento automático en la próxima revisión)
-  if (body.action === "desmapear") {
-    const { slug, miUrl } = body as { slug: string; miUrl: string };
-    config.mapeos[slug] = (config.mapeos[slug] ?? []).filter(f => f.miUrl !== miUrl);
-    const r = config.resultados.find(x => x.slug === slug);
-    if (r) r.comparaciones = r.comparaciones.filter(c => !(c.manual && c.miUrl === miUrl));
-    await guardarConfig(config);
-    return NextResponse.json(config);
-  }
-
   if (body.action === "revisar") {
     // La revisión es SIEMPRE marca a marca (una sola): evita esperas largas
     // y no satura la web propia. Sin slug se rechaza a propósito.
@@ -456,6 +419,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Revisa las marcas de una en una (falta el slug de la marca)." }, { status: 400 });
     }
     const objetivo: Marca[] = config.marcas.filter(m => m.slug === body.slug);
+    // Margen de seguridad respecto a maxDuration (60 s) para guardar a tiempo
+    const limiteEans = Date.now() + 45_000;
 
     let sitemapXml = "";
     try {
@@ -470,13 +435,9 @@ export async function POST(req: NextRequest) {
         const ocultos = new Set((config.excluidos[marca.slug] ?? []).map(e => e.suUrl));
         const verificados = new Set(config.verificados[marca.slug] ?? []);
         const nombresOverride = new Map((config.nombres[marca.slug] ?? []).map(n => [n.suUrl, n.nombre]));
-        const mapeos = config.mapeos[marca.slug] ?? [];
-        const forzadoPorMi = new Map(mapeos.map(f => [f.miUrl, f.suUrl]));
-        const forzadoSu = new Set(mapeos.map(f => f.suUrl));
-        const forzadoMi = new Set(mapeos.map(f => f.miUrl));
 
         // 1) Sus productos (cosmeticos24h) — incluidos ocultos, para el backfill
-        const suProdsAll = await leerSusProductos(marca.slug, marca.nombre);
+        const suProdsAll = await leerSusProductos(marca.slug);
         if ("error" in suProdsAll) {
           nuevos.push({ marca: marca.nombre, slug: marca.slug, error: suProdsAll.error, comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() });
           continue;
@@ -485,7 +446,12 @@ export async function POST(req: NextRequest) {
 
         // 2) Mis productos (tienda propia)
         const mis = await leerMisProductos(marca.miToken, sitemapXml);
-        const miPorUrl = new Map(mis.map(m => [m.url, m]));
+
+        // 2a) EAN de sus productos (de la caché; los nuevos se leen ahora)
+        const eanPendientes = await leerSusEans(suProdsAll.map(s => s.url), config.eanVariantes, limiteEans);
+        const susEans = (url: string) => config.eanVariantes[url] ?? [];
+        const miPorEan = new Map<string, MiProducto>();
+        for (const m of mis) if (m.ean && !miPorEan.has(m.ean)) miPorEan.set(m.ean, m);
 
         // 2b) Rellenar datos de los ocultos "antiguos" (sin precio/tipo)
         for (const ex of config.excluidos[marca.slug] ?? []) {
@@ -493,14 +459,9 @@ export async function POST(req: NextRequest) {
           const sp = suPorUrl.get(ex.suUrl);
           if (!sp) continue;
           ex.suPrecio = sp.precio;
-          let mejor = -1, mejorJ = 0;
-          for (let j = 0; j < mis.length; j++) {
-            if (mis[j].esPack !== sp.esPack) continue;
-            const jj = jaccard(sp.tok, mis[j].tok);
-            if (jj > mejorJ) { mejorJ = jj; mejor = j; }
-          }
-          if (mejorJ >= UMBRAL && mejor >= 0) {
-            ex.tipo = "comparacion"; ex.miPrecio = mis[mejor].precio; ex.miUrl = mis[mejor].url;
+          const match = variantesConEan(susEans(sp.url), miPorEan)[0];
+          if (match) {
+            ex.tipo = "comparacion"; ex.miPrecio = match.mp.precio; ex.miUrl = match.mp.url;
           } else {
             ex.tipo = "soloEllos";
           }
@@ -510,61 +471,47 @@ export async function POST(req: NextRequest) {
         const soloEllos: SoloEllos[] = [];
         const miUsados = new Set<string>();
 
-        // 3a) Enlaces manuales primero (prioridad sobre el automático)
-        for (const f of mapeos) {
-          const s = suPorUrl.get(f.suUrl);
-          const mp = miPorUrl.get(f.miUrl);
-          if (!s || !mp) continue; // producto ya no disponible; se ignora
-          miUsados.add(mp.url);
-          comparaciones.push({
-            nombre: nombresOverride.get(s.url) ?? s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
-            diff: Math.round((mp.precio - s.precio) * 100) / 100,
-            confianza: 1, miUrl: mp.url, suUrl: s.url, esPack: s.esPack, manual: true,
-            verificado: verificados.has(s.url), nombreEditado: nombresOverride.has(s.url),
-          });
-        }
-
-        // 3b) Emparejamiento automático (saltando ocultos y los ya forzados)
+        // 3) Solo se compara lo que tiene el mismo EAN en las dos webs.
+        // Se usa el precio de la variante (tono/formato) que lleva ese EAN.
+        // Un producto suyo con varios tonos puede casar con varias fichas mías (una fila por cada una).
         for (const s of suProdsAll) {
-          if (ocultos.has(s.url) || forzadoSu.has(s.url)) continue;
-          // Del mismo tipo (pack con pack, suelto con suelto) y sin usar los míos ya forzados
-          let mejor = -1, mejorJ = 0;
-          for (let j = 0; j < mis.length; j++) {
-            if (mis[j].esPack !== s.esPack || forzadoMi.has(mis[j].url)) continue;
-            const jj = jaccard(s.tok, mis[j].tok);
-            if (jj > mejorJ) { mejorJ = jj; mejor = j; }
+          if (ocultos.has(s.url)) continue;
+          const matches = variantesConEan(susEans(s.url), miPorEan).filter(m => !miUsados.has(m.mp.url));
+          if (matches.length === 0) {
+            soloEllos.push({ titulo: s.titulo, precio: s.precio, url: s.url, esPack: s.esPack });
+            continue;
           }
-          if (mejorJ >= UMBRAL && mejor >= 0) {
-            const mp = mis[mejor];
+          for (const { i, ean, mp } of matches) {
+            if (miUsados.has(mp.url)) continue;
+            const v = s.variantes[i] ?? s.variantes[0] ?? { titulo: "", precio: s.precio, tachado: s.tachado };
+            const tono = v.titulo && v.titulo !== "Default Title" && s.variantes.length > 1 ? ` · ${v.titulo}` : "";
             miUsados.add(mp.url);
             comparaciones.push({
-              nombre: nombresOverride.get(s.url) ?? s.titulo, miPrecio: mp.precio, suPrecio: s.precio, suPrecioTachado: s.tachado,
-              diff: Math.round((mp.precio - s.precio) * 100) / 100,
-              confianza: Math.round(mejorJ * 100) / 100,
-              miUrl: mp.url, suUrl: s.url, esPack: s.esPack,
+              nombre: nombresOverride.get(s.url) ?? s.titulo + tono, miPrecio: mp.precio, suPrecio: v.precio, suPrecioTachado: v.tachado,
+              miPvp: mp.pvp, suPvp: suPvp(v),
+              diff: Math.round((mp.precio - v.precio) * 100) / 100,
+              confianza: 1, miUrl: mp.url, suUrl: s.url, esPack: s.esPack || mp.esPack, porEan: true, ean,
               verificado: verificados.has(s.url), nombreEditado: nombresOverride.has(s.url),
             });
-          } else {
-            soloEllos.push({ titulo: s.titulo, precio: s.precio, url: s.url, esPack: s.esPack });
           }
         }
 
-        // 3c) Mis productos que no se emparejaron con ninguno suyo
+        // 4) Mis productos que no tienen el mismo EAN que ninguno suyo
         const misSinEmparejar: MiSinEmparejar[] = mis
           .filter(m => !miUsados.has(m.url))
-          .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, esPack: m.esPack }));
+          .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, pvp: m.pvp, esPack: m.esPack, sinEan: !m.ean }));
 
         // Ordenar: tú más caro primero; el resto por nombre
         comparaciones.sort((a, b) => b.diff - a.diff);
         soloEllos.sort((a, b) => Number(a.esPack) - Number(b.esPack));
         misSinEmparejar.sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-        void forzadoPorMi; // (reservado por si luego hace falta el sentido inverso)
         nuevos.push({
           marca: marca.nombre, slug: marca.slug,
           comparaciones, soloEllos, misSinEmparejar,
           misProductos: mis.length, susProductos: suProdsAll.length,
           revisadoEn: new Date().toISOString(),
+          eanPendientes,
         });
       } catch (e) {
         nuevos.push({ marca: marca.nombre, slug: marca.slug, error: String(e), comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() });

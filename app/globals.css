@@ -1177,6 +1177,26 @@ button:disabled {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: #6d28d9; background: #ede9fe; border-radius: 4px; vertical-align: middle;
 }
+.cp-ean-tag {
+  display: inline-block; margin-right: 6px; padding: 0 5px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #0369a1; background: #e0f2fe; border-radius: 4px; vertical-align: middle; cursor: help;
+}
+.cp-pvp-tag {
+  display: inline-block; margin-right: 6px; padding: 0 5px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #c2410c; background: #ffedd5; border-radius: 4px; vertical-align: middle; cursor: help;
+}
+.cp-tabla-head.cp-tabla-pvp { grid-template-columns: 1fr 58px 62px 58px 62px 60px 22px; }
+.cp-fila.cp-tabla-pvp { grid-template-columns: 1fr 58px 62px 58px 62px 60px 86px; }
+.cp-pvp { color: var(--muted); }
+.cp-pvp-dif { color: #c2410c; font-weight: 700; }
+.cp-sin-ean { color: #b45309; font-weight: 600; }
+.cp-pill-pvp { background: #ffedd5; color: #c2410c; }
+.cp-ean-aviso {
+  margin: 8px; padding: 8px 10px; font-size: 12px;
+  color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px;
+}
 .cp-manual-tag {
   display: inline-block; margin-right: 6px; padding: 0 5px;
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
@@ -1416,6 +1436,13 @@ button:disabled {
 }
 
 @media (max-width: 640px) {
+  /* En el móvil el nombre ocupa su propia línea y debajo van las cinco cifras */
+  .cp-tabla-head.cp-tabla-pvp, .cp-fila.cp-tabla-pvp { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .cp-tabla-head.cp-tabla-pvp { font-size: 10px; }
+  .cp-tabla-head.cp-tabla-pvp > span:first-child, .cp-tabla-head.cp-tabla-pvp > span:last-child { display: none; }
+  .cp-fila.cp-tabla-pvp { font-size: 12px; }
+  .cp-fila.cp-tabla-pvp .cp-nombre, .cp-fila.cp-tabla-pvp .cp-acciones { grid-column: 1 / -1; }
+  .cp-fila.cp-tabla-pvp .cp-acciones { justify-content: flex-start; }
   .mg-tabla-head { display: none; }
   .mg-fila {
     grid-template-columns: 70px 1fr; grid-auto-rows: auto; row-gap: 4px;
