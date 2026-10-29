@@ -46,6 +46,7 @@ type Comparacion = {
 type SoloEllos = {
   titulo: string;
   precio: number;
+  tachado?: number;
   url: string;
   esPack: boolean;
   ean?: string;
@@ -116,7 +117,7 @@ type Config = {
   cupon?: Cupon;
 };
 
-type Cupon = { pct: number | null; codigo?: string; manual?: boolean; detectadoEn?: string };
+type Cupon = { pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string };
 
 function configVacia(): Config {
   return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {}, nombres: {}, eanVariantes: {} };
@@ -171,14 +172,17 @@ async function fetchTexto(url: string): Promise<string> {
 
 // Cupón de carrito que anuncia Cosméticos24h en la barra superior de su web
 // (p. ej. «¡5% de DESCUENTO! OTOÑO5, directo en tu carrito»). null si no anuncia ninguno.
-async function detectarCupon(): Promise<{ pct: number; codigo?: string } | null> {
+async function detectarCupon(): Promise<{ pct: number; codigo?: string; directo: boolean } | null> {
   const html = await fetchTexto("https://cosmeticos24h.com/");
   const texto = html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
   const m = texto.match(/(\d{1,2}(?:[.,]\d)?)\s*%\s*de\s+descuento[!¡\s]*([A-ZÑ0-9]{4,})?/i);
   if (!m) return null;
   const pct = parseFloat(m[1].replace(",", "."));
   if (!(pct > 0 && pct <= 50)) return null;
-  return { pct, codigo: m[2] && /\d/.test(m[2]) ? m[2] : undefined };
+  // «directo en tu carrito»: se aplica solo, sin que el cliente tenga que escribir el código
+  const despues = texto.slice(m.index ?? 0, (m.index ?? 0) + m[0].length + 80);
+  const directo = /directo\s+en\s+(?:tu\s+|el\s+)?carrito|autom[aá]tic/i.test(despues);
+  return { pct, codigo: m[2] && /\d/.test(m[2]) ? m[2] : undefined, directo };
 }
 
 // Lee el precio (JSON-LD) de una ficha de la tienda propia
@@ -465,14 +469,14 @@ export async function POST(req: NextRequest) {
     if (pct == null) {
       try {
         const d = await detectarCupon();
-        config.cupon = { pct: d?.pct ?? null, codigo: d?.codigo, detectadoEn: new Date().toISOString() };
+        config.cupon = { pct: d?.pct ?? null, codigo: d?.codigo, directo: d?.directo, detectadoEn: new Date().toISOString() };
       } catch {
         config.cupon = { pct: null };
       }
     } else if (!(pct >= 0 && pct <= 50)) {
       return NextResponse.json({ error: "El cupón debe estar entre 0 y 50 %." }, { status: 400 });
     } else {
-      config.cupon = { pct: Math.round(pct * 10) / 10, codigo: config.cupon?.codigo, manual: true };
+      config.cupon = { pct: Math.round(pct * 10) / 10, codigo: config.cupon?.codigo, directo: config.cupon?.directo, manual: true };
     }
     await guardarConfig(config);
     return NextResponse.json(config);
@@ -599,7 +603,7 @@ export async function POST(req: NextRequest) {
     if (!config.cupon?.manual) {
       try {
         const d = await detectarCupon();
-        config.cupon = { pct: d?.pct ?? null, codigo: d?.codigo, detectadoEn: new Date().toISOString() };
+        config.cupon = { pct: d?.pct ?? null, codigo: d?.codigo, directo: d?.directo, detectadoEn: new Date().toISOString() };
       } catch { /* si su portada no responde, se conserva el último */ }
     }
 
@@ -672,7 +676,7 @@ export async function POST(req: NextRequest) {
           if (ocultos.has(s.url)) continue;
           const matches = variantesConEan(susEans(s.url), miPorEan).filter(m => !miUsados.has(m.mp.clave));
           if (matches.length === 0) {
-            soloEllos.push({ titulo: s.titulo, precio: s.precio, url: s.url, esPack: s.esPack, ean: susEans(s.url).find(e => e) ?? undefined });
+            soloEllos.push({ titulo: s.titulo, precio: s.precio, tachado: s.tachado, url: s.url, esPack: s.esPack, ean: susEans(s.url).find(e => e) ?? undefined });
             continue;
           }
           const variantesUsadas = new Set<number>();

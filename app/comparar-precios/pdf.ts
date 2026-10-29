@@ -77,7 +77,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       ],
       [
         cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. MÁX. (-${dto})` : "CON DTO. MÁX."), cab("PRECIO"), cab("DTO."),
-        cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %)` : "PRECIO FINAL (sin cupón)", true), cab("DTO. TOTAL", true),
+        cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""})` : "PRECIO FINAL (sin cupón)", true), cab("DTO. TOTAL", true),
         cab("DIFERENCIA"), cab("MÁS BARATO"), cab("¿PODEMOS IGUALAR?"),
       ],
     ],

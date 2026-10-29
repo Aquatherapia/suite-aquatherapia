@@ -1532,3 +1532,20 @@ button:disabled {
 .cp-maxdto-tag { display: inline-block; margin: 0 6px 2px 0; padding: 1px 6px; border-radius: 4px; background: #f1ebfb; color: #6b3fb5; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
 .cp-descat-tag { display: inline-block; margin: 0 6px 2px 0; padding: 1px 6px; border-radius: 4px; background: #374151; color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
 .cp-ean-linea { display: block; font-size: 11px; color: var(--muted); font-weight: 400; user-select: all; cursor: text; }
+
+/* Listas sin pareja (tienen ellos y no nosotros, y al revés) con el diseño del informe */
+.cp-informe.cp-informe-lista { min-width: 720px; }
+.cp-informe.cp-informe-lista td.cp-izq { width: 45%; }
+.cp-informe-lista td:first-child { text-align: left; }
+.cp-informe-lista th:last-child:empty { background: #b5655f; }
+.cp-informe-lista .cp-ocultar { opacity: 0.5; }
+.cp-informe-lista tr:hover .cp-ocultar { opacity: 0.9; }
+.cp-informe-lista .cp-sin-ean { font-size: 11px; white-space: normal; }
+
+/* Cabecera fija: cada tabla tiene su propio scroll (alto de la pantalla) y su cabecera se queda arriba,
+   así al pasar a otra marca se ve la cabecera de esa marca */
+.cp-informe-scroll { max-height: calc(100vh - 90px); overflow: auto; overscroll-behavior: auto; }
+.cp-informe thead { position: sticky; top: 0; z-index: 3; }
+.cp-informe .cp-informe-grupos th:not(.cp-g-nos):not(.cp-g-ellos) { background: #fff; }
+.cp-cupon-directo { display: block; flex-basis: 100%; margin-top: 4px; font-size: 11px; font-weight: 600; color: #067647; text-transform: none; letter-spacing: 0; }
+.cp-cupon-directo.cp-cupon-codigo { color: #b45309; }

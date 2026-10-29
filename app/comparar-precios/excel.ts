@@ -10,7 +10,7 @@ export type FilaExcel = {
   suPrecioWeb?: number; // precio de su web antes del cupón de carrito (suPrecio ya lo lleva aplicado)
   descatalogado?: boolean;
 };
-export type CuponExcel = { pct: number; codigo?: string } | null;
+export type CuponExcel = { pct: number; codigo?: string; directo?: boolean } | null;
 export type SoloEllosExcel = { titulo: string; precio: number; url: string; esPack: boolean; ean?: string };
 
 // Colores del logo (azul #1270B6, azul claro #1C9CD9) y neutros

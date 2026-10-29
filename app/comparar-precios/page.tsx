@@ -14,8 +14,8 @@ type Comparacion = {
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
   verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
 };
-type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean; ean?: string };
-type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean; sinEan?: boolean; ean?: string; formato?: string; descatalogado?: boolean };
+type SoloEllos = { titulo: string; precio: number; tachado?: number; url: string; esPack: boolean; ean?: string };
+type MiSinEmparejar = { nombre: string; url: string; precio: number; pvp?: number; esPack: boolean; sinEan?: boolean; ean?: string; formato?: string; descatalogado?: boolean };
 type ResultadoMarca = {
   marca: string; slug: string; error?: string;
   comparaciones: Comparacion[]; soloEllos: SoloEllos[]; misSinEmparejar: MiSinEmparejar[];
@@ -77,7 +77,7 @@ type Excluido = {
   tipo?: "comparacion" | "soloEllos";
   miPrecio?: number; suPrecio?: number; miUrl?: string; motivo?: string;
 };
-type Cupon = { pct: number | null; codigo?: string; manual?: boolean; detectadoEn?: string };
+type Cupon = { pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string };
 type Config = { marcas: Marca[]; ultimaRevision: string | null; resultados: ResultadoMarca[]; excluidos: Record<string, Excluido[]>; cupon?: Cupon };
 
 const MOTIVOS = [
@@ -120,13 +120,91 @@ async function descargarPdf(r: ResultadoMarca, descuento: number | null, cupon: 
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// Listas de productos sin pareja, con el mismo diseño que la tabla de comparación
+function TablaSoloEllos({ filas, cupon, onOcultar }: { filas: SoloEllos[]; cupon: CuponExcel; onOcultar: (s: SoloEllos) => void }) {
+  const hayCupon = !!cupon && cupon.pct > 0;
+  return (
+    <div className="cp-informe-scroll">
+      <table className="cp-informe cp-informe-lista">
+        <thead>
+          <tr>
+            <th>EAN</th><th className="cp-izq">Producto</th>
+            <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th>
+            <th className="cp-h-ellos">{hayCupon ? `Precio final (${cupon!.codigo ?? "cupón"} −${String(cupon!.pct).replace(".", ",")} %${cupon!.directo ? ", directo en carrito" : ""})` : "Precio final"}</th>
+            <th className="cp-h-ellos">Dto. total</th><th />
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((s, i) => {
+            const pvp = s.tachado && s.tachado > s.precio ? s.tachado : s.precio;
+            const final = hayCupon ? Math.round(s.precio * (1 - cupon!.pct / 100) * 100) / 100 : s.precio;
+            const dtoWeb = pvp > 0 ? 1 - s.precio / pvp : 0;
+            const dto = pvp > 0 ? 1 - final / pvp : 0;
+            return (
+              <tr key={i}>
+                <td className="cp-suave"><span className="cp-ean-copiable">{s.ean ?? ""}</span></td>
+                <td className="cp-izq">
+                  {s.esPack && <span className="cp-pack-tag">pack</span>}
+                  <a href={s.url} target="_blank" rel="noreferrer" className="cp-prod">{s.titulo}</a>
+                  <a href={s.url} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
+                </td>
+                <td className="cp-rosa">{eur(pvp)}</td>
+                <td className="cp-rosa">{eur(s.precio)}{dtoWeb > 0.0005 && <span className="cp-dto-celda">−{pctW(dtoWeb)}</span>}</td>
+                <td className="cp-fuerte cp-rosa">{eur(final)}</td>
+                <td className="cp-fuerte cp-pequena cp-rosa">{pctW(dto)}</td>
+                <td className="cp-centro"><button className="cp-ocultar" title="Ocultar" onClick={() => onOcultar(s)}>×</button></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TablaSoloNosotros({ filas }: { filas: MiSinEmparejar[] }) {
+  return (
+    <div className="cp-informe-scroll">
+      <table className="cp-informe cp-informe-lista">
+        <thead>
+          <tr>
+            <th>EAN</th><th className="cp-izq">Producto</th><th>PVP</th><th>Precio</th><th>Dto.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((m, i) => {
+            const pvp = m.pvp && m.pvp > m.precio ? m.pvp : m.precio;
+            const dto = pvp > 0 ? 1 - m.precio / pvp : 0;
+            return (
+              <tr key={i}>
+                <td className="cp-suave">
+                  {m.ean ? <span className="cp-ean-copiable">{m.ean}</span>
+                    : <span className="cp-sin-ean">{m.formato ? "EAN no publicado (formato)" : "Sin EAN en la ficha"}</span>}
+                </td>
+                <td className="cp-izq">
+                  {m.esPack && <span className="cp-pack-tag">pack</span>}
+                  {m.descatalogado && <span className="cp-descat-tag" title="Tu ficha está marcada como descatalogada en tu web">Descatalogado</span>}
+                  <a href={m.url} target="_blank" rel="noreferrer" className="cp-prod">{m.nombre}</a>
+                </td>
+                <td>{eur(pvp)}</td>
+                <td className="cp-fuerte">{eur(m.precio)}</td>
+                <td className="cp-dto-azul">{pctW(dto)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // Misma tabla que el Excel: mismas columnas, colores y cálculos
 const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 const pctW = (frac: number) => `${(Math.round(frac * 1000) / 10).toFixed(1).replace(".", ",").replace(/,0$/, "")} %`;
 function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descuento: number | null; cupon: CuponExcel }) {
   const pct = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
   const conCupon = cupon && cupon.pct > 0
-    ? `Precio final (${cupon.codigo ?? "cupón"} −${String(cupon.pct).replace(".", ",")} %)`
+    ? `Precio final (${cupon.codigo ?? "cupón"} −${String(cupon.pct).replace(".", ",")} %${cupon.directo ? ", directo en carrito" : ""})`
     : "Precio final (sin cupón)";
   return (
     <div className="cp-informe-scroll">
@@ -318,17 +396,7 @@ function MarcaBloque({
               <div className="cp-subtit" style={{ marginTop: 16 }}>
                 Tienen ellos y tú no ({soloEllosReal.length}) — posibles novedades
               </div>
-              {soloEllosReal.map((s, i) => (
-                <div key={i}>
-                  <div className="cp-fila cp-solo">
-                    <div><a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>{s.ean && <span className="cp-ean-linea">EAN {s.ean}</span>}</div>
-                    <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
-                    <div className="cp-acciones">
-                      <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <TablaSoloEllos filas={soloEllosReal} cupon={cupon} onOcultar={s => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })} />
             </>
           )}
 
@@ -337,17 +405,7 @@ function MarcaBloque({
               <div className="cp-subtit" style={{ marginTop: 16 }}>
                 Packs/estuches que tienen ellos y tú no ({packs.length})
               </div>
-              {packs.map((s, i) => (
-                <div key={i}>
-                  <div className="cp-fila cp-solo">
-                    <div><a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>{s.ean && <span className="cp-ean-linea">EAN {s.ean}</span>}</div>
-                    <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
-                    <div className="cp-acciones">
-                      <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              <TablaSoloEllos filas={packs} cupon={cupon} onOcultar={s => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })} />
             </>
           )}
 
@@ -361,16 +419,7 @@ function MarcaBloque({
                   <div className="cp-packs-nota" style={{ padding: "0 0 8px" }}>
                     Solo se comparan productos con el mismo EAN en las dos webs. Estos no lo tienen: o Cosméticos24h no los vende, o una de las dos fichas no tiene EAN (o lo tiene distinto).
                   </div>
-                  {sinEmp.map((m, i) => (
-                    <div key={i} className="cp-sinemp-item">
-                      <div className="cp-oculto-info">
-                        <a href={m.url} target="_blank" rel="noreferrer" className="cp-oculto-nombre">
-                          {m.esPack && <span className="cp-pack-tag">pack</span>}{m.descatalogado && <span className="cp-descat-tag">Descatalogado</span>}{m.nombre}
-                        </a>
-                        <div className="cp-oculto-precios">Tu precio: <strong>{m.precio.toFixed(2)}€</strong>{m.ean ? <> · <span className="cp-ean-copiable">EAN {m.ean}</span></> : m.formato ? <> · <span className="cp-sin-ean">nuestra web no publica el EAN de este formato</span></> : m.sinEan && <> · <span className="cp-sin-ean">tu ficha no tiene EAN</span></>}</div>
-                      </div>
-                    </div>
-                  ))}
+                  <TablaSoloNosotros filas={sinEmp} />
                 </div>
               )}
             </div>
@@ -582,7 +631,7 @@ export default function CompararPrecios() {
   }
 
   const resultados = config?.resultados ?? [];
-  const cuponActivo: CuponExcel = config?.cupon?.pct != null && config.cupon.pct > 0 ? { pct: config.cupon.pct, codigo: config.cupon.codigo } : null;
+  const cuponActivo: CuponExcel = config?.cupon?.pct != null && config.cupon.pct > 0 ? { pct: config.cupon.pct, codigo: config.cupon.codigo, directo: config.cupon.directo } : null;
 
   return (
     <div className="wrap cp-wrap">
@@ -606,6 +655,11 @@ export default function CompararPrecios() {
               onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
             />
             %{!config?.cupon?.manual && config?.cupon?.pct != null && <span className="cp-dto-fuente cp-cupon-fuente">{config.cupon.codigo ?? "su web"}</span>}
+            {config?.cupon?.pct != null && config.cupon.pct > 0 && (
+              <span className={"cp-cupon-directo" + (config.cupon.directo ? "" : " cp-cupon-codigo")}>
+                {config.cupon.directo ? "Directo en carrito, sin poner código" : "Hay que poner el código en el carrito"}
+              </span>
+            )}
           </label>
 
           <div className="vp-section-title">Añadir marca</div>
