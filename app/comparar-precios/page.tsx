@@ -23,6 +23,7 @@ type ResultadoMarca = {
   misProductos: number; susProductos: number;
   revisadoEn?: string; // cuándo se revisó ESTA marca (falta en resultados guardados antes)
   eanPendientes?: number; // productos suyos con el EAN aún sin leer
+  misFallidas?: number;   // fichas nuestras que no se pudieron leer
 };
 
 // PVP distinto en las dos webs: puede ser una tarifa sin actualizar
@@ -78,7 +79,16 @@ type Excluido = {
   tipo?: "comparacion" | "soloEllos";
   miPrecio?: number; suPrecio?: number; miUrl?: string; motivo?: string;
 };
-type Cupon = { pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string; desde?: string; hasta?: string };
+type PromoCupon = { texto: string; inicio?: string; fin?: string; excluidas: string[] };
+type Cupon = { pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string; desde?: string; hasta?: string; promo?: PromoCupon };
+
+const sinAcentos = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+// Marcas en las que su cupón no se aplica (según su página de promociones)
+function cuponExcluye(c: Cupon | undefined, marca: string): boolean {
+  const m = sinAcentos(marca);
+  return (c?.promo?.excluidas ?? []).some(x => { const e = sinAcentos(x); return e.length > 2 && (m.includes(e) || e.includes(m)); });
+}
+const fechaCorta = (iso: string) => new Date(iso + (iso.length === 10 ? "T12:00:00" : "")).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 type Config = { marcas: Marca[]; ultimaRevision: string | null; resultados: ResultadoMarca[]; excluidos: Record<string, Excluido[]>; cupon?: Cupon };
 
 const MOTIVOS = [
@@ -413,6 +423,11 @@ function MarcaBloque({
       {expandido && (
         <div className="vp-accordion-content">
           {r.error && <div className="error" style={{ margin: 8 }}>{r.error}</div>}
+          {(r.misFallidas ?? 0) > 0 && (
+            <div className="cp-ean-aviso">
+              No se pudieron leer {r.misFallidas} ficha{r.misFallidas !== 1 ? "s" : ""} de nuestra web en esta revisión (la web tardó o falló): esos productos faltan en la comparación. Vuelve a revisar la marca.
+            </div>
+          )}
           {(r.eanPendientes ?? 0) > 0 && (
             <div className="cp-ean-aviso">
               Faltan por leer los EAN de {r.eanPendientes} producto{r.eanPendientes !== 1 ? "s" : ""} de Cosméticos24h: esos todavía no se han comparado. Vuelve a revisar la marca para completarlos.
@@ -711,12 +726,20 @@ export default function CompararPrecios() {
                 Hasta{" "}
                 <input
                   type="date" className="cp-cupon-hasta"
-                  defaultValue={config.cupon.hasta ?? ""}
+                  defaultValue={config.cupon.hasta ?? config.cupon.promo?.fin ?? ""}
                   key={`hasta-${config.cupon.hasta ?? ""}`}
                   onChange={e => guardarHastaCupon(e.target.value)}
                   title="Su web no publica la fecha de fin: ponla si la sabes. Si deja de anunciarlo, al revisar el cupón desaparece."
                 />
-                {!config.cupon.hasta && <span className="cp-cupon-sinfecha"> (su web no lo indica)</span>}
+                {!config.cupon.hasta && !config.cupon.promo?.fin && <span className="cp-cupon-sinfecha"> (su web no lo indica)</span>}
+              </span>
+            )}
+            {config?.cupon?.promo && (
+              <span className="cp-cupon-promo" title={config.cupon.promo.texto}>
+                Según su <a href="https://cosmeticos24h.com/pages/promociones" target="_blank" rel="noreferrer">página de promociones</a>
+                {config.cupon.promo.fin && <>: {config.cupon.promo.inicio ? `del ${fechaCorta(config.cupon.promo.inicio)} ` : ""}al {fechaCorta(config.cupon.promo.fin)}
+                  {config.cupon.promo.fin < new Date().toISOString().slice(0, 10) && " (ya pasó, pero sigue en su web)"}</>}
+                {config.cupon.promo.excluidas.length > 0 && <>. No se aplica en <strong>{config.cupon.promo.excluidas.join(", ")}</strong>: en esas marcas se compara sin cupón.</>}
               </span>
             )}
           </label>
@@ -766,7 +789,7 @@ export default function CompararPrecios() {
               ?? { marca: m.nombre, slug: m.slug, comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0 };
             return (
             <MarcaBloque
-              key={r.slug} r={aplicarCupon(r, cuponActivo)} cupon={cuponActivo}
+              key={r.slug} r={aplicarCupon(r, cuponExcluye(config?.cupon, m.nombre) ? null : cuponActivo)} cupon={cuponExcluye(config?.cupon, m.nombre) ? null : cuponActivo}
               marca={m} revisando={revisando === m.slug} ocupado={revisando !== null}
               onRevisar={() => revisar(m.slug)} onBorrar={() => deleteMarca(m.slug)}
               onGuardarDescuento={(valor) => guardarDescuento(m.slug, valor)}

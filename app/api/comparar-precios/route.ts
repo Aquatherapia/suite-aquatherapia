@@ -81,6 +81,7 @@ type ResultadoMarca = {
   revisadoEn?: string;
   // Productos suyos cuyo EAN aún no se ha leído (se leen en la siguiente revisión)
   eanPendientes?: number;
+  misFallidas?: number; // fichas nuestras que no se pudieron leer en esta revisión
 };
 
 type Excluido = {
@@ -120,13 +121,21 @@ type Config = {
 };
 
 // desde: primera vez que se vio este código en su web; hasta: fecha de fin, puesta a mano (su web no la publica)
-type Cupon = { pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string; desde?: string; hasta?: string };
+type Cupon = {
+  pct: number | null; codigo?: string; directo?: boolean; manual?: boolean; detectadoEn?: string; desde?: string; hasta?: string;
+  promo?: PromoCupon; // lo que dice su página de promociones sobre este cupón
+};
+type PromoCupon = { texto: string; inicio?: string; fin?: string; excluidas: string[] };
 
 // Cupón recién detectado: conserva desde/hasta si es el mismo código que ya había
-function cuponDetectado(d: { pct: number; codigo?: string; directo: boolean } | null, antes?: Cupon): Cupon {
+async function cuponDetectado(d: { pct: number; codigo?: string; directo: boolean } | null, antes?: Cupon): Promise<Cupon> {
   const ahora = new Date().toISOString();
   const mismo = !!d && !!antes?.codigo && antes.codigo === d.codigo;
-  return { pct: d?.pct ?? null, codigo: d?.codigo, directo: d?.directo, detectadoEn: ahora, desde: d ? (mismo ? antes!.desde ?? ahora : ahora) : undefined, hasta: mismo ? antes!.hasta : undefined };
+  let promo: PromoCupon | undefined;
+  if (d?.codigo) {
+    try { promo = (await leerPromoCupon(d.codigo)) ?? undefined; } catch { promo = mismo ? antes!.promo : undefined; }
+  }
+  return { pct: d?.pct ?? null, codigo: d?.codigo, directo: d?.directo, detectadoEn: ahora, desde: d ? (mismo ? antes!.desde ?? ahora : ahora) : undefined, hasta: mismo ? antes!.hasta : undefined, promo };
 }
 
 function configVacia(): Config {
@@ -178,6 +187,37 @@ async function fetchTexto(url: string): Promise<string> {
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
+}
+
+// Su página de promociones (https://cosmeticos24h.com/pages/promociones) explica cada cupón:
+// «Cupón Otoño5 · Del 11 hasta el 30 de Septiembre. … a todo el catálogo web excepto en las firmas Eberlin, Sothys y Atache.»
+// De ahí salen las fechas y las marcas en las que no se aplica.
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+async function leerPromoCupon(codigo: string): Promise<PromoCupon | null> {
+  const html = await fetchTexto("https://cosmeticos24h.com/pages/promociones");
+  const texto = html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<\/?(h\d|p|div|li|br|section)[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&")
+    .replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n");
+  const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const lineas = texto.split("\n").map(l => l.trim()).filter(Boolean);
+  const i = lineas.findIndex(l => norm(l).includes(norm(codigo)) && /cup[oó]n/i.test(l));
+  if (i < 0) return null;
+  const bloque = lineas.slice(i + 1, i + 3).join(" ");
+  const m = bloque.match(/del\s+(\d{1,2})(?:\s+de\s+([a-záéíóú]+))?\s+(?:hasta\s+el|al)\s+(\d{1,2})\s+de\s+([a-záéíóú]+)/i);
+  const anio = new Date().getFullYear();
+  const fecha = (d: string, mes: string) => {
+    const n = MESES.indexOf(norm(mes));
+    return n < 0 ? undefined : `${anio}-${String(n + 1).padStart(2, "0")}-${d.padStart(2, "0")}`;
+  };
+  const exc = bloque.match(/excepto\s+(?:en\s+)?(?:las\s+|los\s+)?(?:firmas|marcas)\s+([^.]+)/i);
+  return {
+    texto: bloque.slice(0, 400),
+    inicio: m ? fecha(m[1], m[2] ?? m[4]) : undefined,
+    fin: m ? fecha(m[3], m[4]) : undefined,
+    excluidas: exc ? exc[1].split(/,|\sy\s/).map(x => x.trim()).filter(Boolean) : [],
+  };
 }
 
 // Cupón de carrito que anuncia Cosméticos24h en la barra superior de su web
@@ -371,7 +411,7 @@ async function varianteDescatalogada(url: string, propiedades: string): Promise<
 }
 
 // Enumera y lee los productos de una marca en la tienda propia
-async function leerMisProductos(miToken: string, sitemapXml: string): Promise<MiProducto[]> {
+async function leerMisProductos(miToken: string, sitemapXml: string): Promise<{ productos: MiProducto[]; fallidas: number }> {
   const tokLower = normalizar(miToken);
   const urls = new Set<string>();
   const re = /<loc>([^<]+-p\d+)<\/loc>/gi;
@@ -385,7 +425,8 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<Mi
   const lista = Array.from(urls).slice(0, 300); // cota de seguridad
   const productos = await enLotes(lista, 10, async (url): Promise<MiProducto[] | null> => {
     try {
-      const html = await fetchTexto(url);
+      // Un segundo intento si la web tarda o falla: si no, la ficha desaparece de la comparación
+      const html = await fetchTexto(url).catch(() => new Promise<string>(r => setTimeout(r, 800)).then(() => fetchTexto(url)));
       const precio = precioDesdeHtml(html);
       if (precio === null) return null;
       const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
@@ -408,7 +449,7 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<Mi
       return null;
     }
   });
-  return productos.flatMap(p => p ?? []);
+  return { productos: productos.flatMap(p => p ?? []), fallidas: productos.filter(p => p === null).length };
 }
 
 type Variante = { titulo: string; precio: number; tachado?: number };
@@ -496,14 +537,14 @@ export async function POST(req: NextRequest) {
     if (pct == null) {
       try {
         const d = await detectarCupon();
-        config.cupon = cuponDetectado(d, config.cupon);
+        config.cupon = await cuponDetectado(d, config.cupon);
       } catch {
         config.cupon = { pct: null };
       }
     } else if (!(pct >= 0 && pct <= 50)) {
       return NextResponse.json({ error: "El cupón debe estar entre 0 y 50 %." }, { status: 400 });
     } else {
-      config.cupon = { pct: Math.round(pct * 10) / 10, codigo: config.cupon?.codigo, directo: config.cupon?.directo, desde: config.cupon?.desde, hasta: config.cupon?.hasta, manual: true };
+      config.cupon = { pct: Math.round(pct * 10) / 10, codigo: config.cupon?.codigo, directo: config.cupon?.directo, desde: config.cupon?.desde, hasta: config.cupon?.hasta, promo: config.cupon?.promo, manual: true };
     }
     await guardarConfig(config);
     return NextResponse.json(config);
@@ -630,7 +671,7 @@ export async function POST(req: NextRequest) {
     if (!config.cupon?.manual) {
       try {
         const d = await detectarCupon();
-        config.cupon = cuponDetectado(d, config.cupon);
+        config.cupon = await cuponDetectado(d, config.cupon);
       } catch { /* si su portada no responde, se conserva el último */ }
     }
 
@@ -650,7 +691,7 @@ export async function POST(req: NextRequest) {
         const suPorUrl = new Map(suProdsAll.map(s => [s.url, s]));
 
         // 2) Mis productos (tienda propia)
-        const mis = await leerMisProductos(marca.miToken, sitemapXml);
+        const { productos: mis, fallidas: misFallidas } = await leerMisProductos(marca.miToken, sitemapXml);
 
         // 2a) EAN de sus productos (de la caché; los nuevos se leen ahora)
         const eanPendientes = await leerSusEans(suProdsAll.map(s => s.url), config.eanVariantes, limiteEans);
@@ -768,7 +809,7 @@ export async function POST(req: NextRequest) {
           comparaciones, soloEllos, misSinEmparejar,
           misProductos: mis.length, susProductos: suProdsAll.length,
           revisadoEn: new Date().toISOString(),
-          eanPendientes,
+          eanPendientes, misFallidas,
         });
       } catch (e) {
         nuevos.push({ marca: marca.nombre, slug: marca.slug, error: String(e), comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() });
