@@ -83,6 +83,17 @@ export type FilaCalculada = {
   bajoMinimo: { mio: boolean; suyo: boolean }; pvpDistinto: boolean;
   masBarato: "Cosméticos24h" | "Nosotros" | "Igual"; igualar: string;
 };
+// Por qué no podemos igualar cuando venden por debajo de nuestro dto. máx.
+// Si nuestro precio ya pasa del máximo, lo que queda es la diferencia de ahora; si no, la que quedaría al bajar al máximo.
+export function explicaDtoMax(f: { miPrecio: number; suPrecio: number; diff: number }, k: { limite: number | null; bajoMinimo: { suyo: boolean } }, descuento: number | null): string | null {
+  if (!k.bajoMinimo.suyo || k.limite == null || descuento == null) return null;
+  const d = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+  const pct = `${String(descuento).replace(".", ",")} %`;
+  if (Math.abs(f.miPrecio - k.limite) <= 0.005) return `Ya estamos en el máximo (−${pct}) y seguimos ${d(f.diff)} más caros`;
+  if (f.miPrecio < k.limite) return `Ya pasamos del máximo (−${pct}) y aún seguimos ${d(f.diff)} más caros`;
+  return `Bajando al máximo (−${pct}) seguiríamos ${d(k.limite - f.suPrecio)} más caros`;
+}
+
 export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalculada {
   const pvp = f.miPvp ?? f.miPrecio;
   const limite = descuento != null ? Math.round(pvp * (1 - descuento / 100) * 100) / 100 : null;

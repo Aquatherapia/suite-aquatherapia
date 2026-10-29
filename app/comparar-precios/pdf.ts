@@ -1,6 +1,6 @@
 // PDF por marca con el mismo diseño que la tabla de la web y el Excel:
 // mismas columnas, cálculos (calcularFila) y colores. A4 apaisado, para descargar o enviar.
-import { calcularFila, type CuponExcel, type FilaExcel, type SoloEllosExcel } from "./excel";
+import { calcularFila, explicaDtoMax, type CuponExcel, type FilaExcel, type SoloEllosExcel } from "./excel";
 
 type RGB = [number, number, number];
 const AZUL: RGB = [18, 112, 182];
@@ -76,7 +76,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
         { content: "", colSpan: 3, styles: { fillColor: [255, 255, 255] } },
       ],
       [
-        cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. MÁX. (-${dto})` : "CON DTO. MÁX."), cab("PRECIO"), cab("DTO."),
+        cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. MÁX. (-${dto})` : "CON DTO. MÁX."), cab("PRECIO FINAL"), cab("DTO."),
         cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""})` : "PRECIO FINAL (sin cupón)", true), cab("DTO. TOTAL", true),
         cab("DIFERENCIA"), cab("MÁS BARATO"), cab("¿PODEMOS IGUALAR?"),
       ],
@@ -84,9 +84,9 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     body: orden.map((f, i) => {
       const k = calc[i];
       return [
-        f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : "", k.bajoMinimo.suyo ? "MÁS ALLÁ DE NUESTRO DTO. MÁX." : ""].filter(Boolean).join("\n"), eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
+        f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : ""].filter(Boolean).join("\n"), eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
-        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}${k.bajoMinimo.suyo && k.limite != null ? `\ncon dto. máx. +${eur(k.limite - f.suPrecio)}` : ""}`, k.masBarato, k.igualar.replace(/−/g, "-"),
+        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}${explicaDtoMax(f, k, descuento) ? `\n${explicaDtoMax(f, k, descuento)!.replace(/−/g, "-")}` : ""}`, k.masBarato, k.igualar.replace(/−/g, "-"),
       ];
     }),
     columnStyles: {
@@ -106,7 +106,6 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       // Mismos resaltados que el Excel: precio bajo nuestro mínimo y PVP distinto
       if ((c === 4 || c === 5) && k.bajoMinimo.mio) { if (c === 4) s.fillColor = ROJO_FONDO; s.textColor = ROJO; s.fontStyle = "bold"; }
       if (c === 10 && k.bajoMinimo.suyo) s.fillColor = MORADO_FONDO;
-      if (c === 1 && k.bajoMinimo.suyo && !f.descatalogado) s.textColor = MORADO;
       if ((c === 2 || c === 6) && k.pvpDistinto) { s.fillColor = AMBAR_FONDO; s.textColor = AMBAR; s.fontStyle = "bold"; }
       if (c === 1 && f.descatalogado) s.textColor = ROJO;
       if (c === 10) s.textColor = f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO;

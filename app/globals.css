@@ -1496,7 +1496,7 @@ button:disabled {
 .cp-informe .cp-verde { color: #067647; }
 .cp-informe td.cp-rojo-fondo { background: #fdecec !important; color: #b42318; }
 .cp-informe .cp-morado { color: #6b3fb5; }
-.cp-informe .cp-dif-max { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 700; color: #6b3fb5; }
+.cp-informe .cp-dif-max { display: block; margin-top: 3px; max-width: 150px; margin-left: auto; font-size: 10.5px; line-height: 1.3; font-weight: 600; color: #6b3fb5; white-space: normal; }
 .cp-informe td.cp-morado-fondo { background: #f1ebfb !important; }
 .cp-informe td.cp-morado-fondo .cp-precio-enlace { color: #6b3fb5; }
 .cp-informe td.cp-ambar { background: #fef6e7 !important; color: #b45309; font-weight: 700; }
