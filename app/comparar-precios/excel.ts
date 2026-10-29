@@ -38,8 +38,6 @@ const PASADO_FONDO = "FFDFF4F7", PASADO = "FF0E7490";
 const AMBAR = "FFB45309";
 const AMBAR_FONDO = "FFFEF6E7";
 const VERDE = "FF067647";
-const MORADO = "FF6B3FB5";
-const MORADO_FONDO = "FFF1EBFB";
 const EUROS = '#,##0.00 "€"';
 const PORCENTAJE = '0.0 %';
 const EUROS_SIGNO = '+#,##0.00 "€";-#,##0.00 "€";0.00 "€"';
@@ -280,7 +278,6 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       c("dto").font = fuente({ size: 9, bold: true, color: { argb: PASADO } });
       c("precio").note = `Nuestro precio está por debajo del PVP con el dto. autorizado (${coma(limite)} €).`;
     }
-    if (k.bajoMinimo.suyo) c("diff").fill = relleno(MORADO_FONDO);
     c("diff").font = fuente({ bold: true, color: { argb: f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO } });
     c("barato").font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "La Tienda de Cosméticos" ? VERDE : TEXTO_SUAVE } });
     c("igualar").font = fuente({ size: 9, bold: igualar.startsWith("No") || k.revisarPack, color: { argb: k.revisarPack ? AMBAR : igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
@@ -293,7 +290,6 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   // Leyenda
   const ley = ultima + 2;
   const leyenda: [string, string, string][] = [
-    [MORADO_FONDO, MORADO, descuento != null ? `Más allá de nuestro dto. autorizado: venden por debajo de nuestro PVP −${pct} y no podemos igualarlos` : "Esta marca no tiene descuento autorizado"],
     [PASADO_FONDO, PASADO, "Nuestro precio está por debajo del PVP con el descuento autorizado"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?). Si la diferencia pasa del 10 %, la nota dice «revisar precio»"],
   ];

@@ -13,8 +13,6 @@ const TEXTO: RGB = [31, 41, 51];
 const TEXTO_SUAVE: RGB = [107, 114, 128];
 const ROJO: RGB = [180, 35, 24];
 const PASADO_FONDO: RGB = [223, 244, 247], PASADO: RGB = [14, 116, 144];
-const MORADO: RGB = [107, 63, 181];
-const MORADO_FONDO: RGB = [241, 235, 251];
 const AMBAR: RGB = [180, 83, 9];
 const AMBAR_FONDO: RGB = [254, 246, 231];
 const VERDE: RGB = [6, 118, 71];
@@ -118,7 +116,6 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
       // Mismos resaltados que el Excel: precio bajo nuestro mínimo y PVP distinto
       if (c === 4 && k.bajoMinimo.mio) { s.fillColor = PASADO_FONDO; s.textColor = PASADO; s.fontStyle = "bold"; }
-      if (c === 8 && k.bajoMinimo.suyo) s.fillColor = MORADO_FONDO;
       if ((c === 2 || c === 5) && k.pvpDistinto) { s.fillColor = AMBAR_FONDO; s.textColor = AMBAR; s.fontStyle = "bold"; }
       if (c === 1 && f.descatalogado) s.textColor = ROJO;
       if (c === 8) s.textColor = f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO;
@@ -151,7 +148,6 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
   // Leyenda
   let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   const leyenda: [RGB, RGB, string][] = [
-    [MORADO_FONDO, MORADO, descuento != null ? `Más allá de nuestro dto. autorizado: venden por debajo de nuestro PVP -${dto} y no podemos igualarlos` : "Esta marca no tiene descuento autorizado"],
     [PASADO_FONDO, PASADO, "Nuestro precio está por debajo del PVP con el descuento autorizado"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?)"],
   ];

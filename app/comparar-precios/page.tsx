@@ -263,7 +263,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
                 {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}{k.suDto > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDto)}</small>}</td>}
-                <Celda className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>
+                <Celda className={"cp-fuerte " + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>
                   {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
                 </Celda>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "La Tienda de Cosméticos" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
