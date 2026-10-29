@@ -1482,7 +1482,7 @@ button:disabled {
 .cp-informe .cp-informe-grupos th.cp-g-ellos { background: #fbe9f3; color: #c2367e; }
 .cp-informe td { padding: 7px 5px; border-bottom: 1px solid #e5e7eb; text-align: right; white-space: nowrap; }
 /* Bloques de columnas: nosotros (azul), Cosméticos24h (rosa) y comparación (gris); la cebra oscurece un poco cada fila par */
-.cp-informe tbody tr:nth-child(even) td { background-image: linear-gradient(rgba(15, 23, 42, 0.035), rgba(15, 23, 42, 0.035)); }
+.cp-informe tbody tr:nth-child(even) td { background-image: linear-gradient(rgba(15, 23, 42, 0.018), rgba(15, 23, 42, 0.018)); }
 .cp-informe th.cp-h-fin { background: #4b5563; }
 .cp-informe .cp-informe-grupos th.cp-g-fin { background: #eceef1; color: #4b5563; }
 .cp-informe .cp-izq { text-align: left; }
@@ -1508,7 +1508,10 @@ button:disabled {
 .cp-informe td.cp-morado-fondo { background: #f1ebfb !important; }
 .cp-informe td.cp-morado-fondo .cp-precio-enlace { color: #6b3fb5; }
 .cp-informe td.cp-ambar { background: #fef6e7 !important; color: #b45309; font-weight: 700; }
-.cp-informe .cp-enlace-c24 { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #c2367e; text-decoration: none; }
+.cp-informe .cp-enlaces { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 2px; }
+.cp-informe .cp-enlace-c24, .cp-informe .cp-enlace-ltc { font-size: 11px; font-weight: 600; text-decoration: none; }
+.cp-informe .cp-enlace-c24 { color: #c2367e; }
+.cp-informe .cp-enlace-ltc { color: #1270b6; }
 .cp-informe .cp-precio-enlace { color: inherit; text-decoration: none; }
 .cp-informe .cp-precio-enlace:hover { text-decoration: underline; }
 .cp-informe .cp-dto-celda { display: block; font-size: 10px; font-weight: 700; margin-top: 1px; }
