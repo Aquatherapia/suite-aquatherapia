@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { calcularFila, explicaDtoMaxLarga, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
+import { calcularFila, explicaDtoMaxLarga, explicaPvp, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
 import { construirPdf, nombrePdf } from "./pdf";
 import { descuentoBoardfy, reglaBoardfyInactiva } from "./boardfy";
 
@@ -286,13 +286,13 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
-                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. máx. ni se compara el PVP." : k.pvpDistinto ? `PVP distinto: nuestro ${eur(k.pvp)}, el suyo ${eur(k.suPvp)}. ¿Tarifa sin actualizar?` : undefined}>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. máx. ni se compara el PVP." : k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>
                   {eur(k.pvp)}{k.revisarPvp && <span className="cp-revisar-pvp">(revisar precio)</span>}
                 </Celda>
                 <td className="cp-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
                 <Celda className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. máx. (${eur(k.limite)}).` : undefined}>{eur(f.miPrecio)}</Celda>
                 <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
-                <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? `PVP distinto: el suyo ${eur(k.suPvp)}, el nuestro ${eur(k.pvp)}.` : undefined}>{eur(k.suPvp)}</Celda>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
                 {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}</td>}
                 <td className="cp-fuerte cp-pequena cp-rosa">{pctW(k.suDto)}</td>
@@ -596,28 +596,7 @@ export default function CompararPrecios() {
     setNuevaMarca(""); setNuevoSlug(""); setSlugManual(false);
   }
 
-  async function guardarHastaCupon(hasta: string) {
-    const res = await fetch("/api/comparar-precios", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "cupon-hasta", hasta: hasta || null }),
-    });
-    const data = await res.json();
-    if (data.error) { setError(data.error); return; }
-    setConfig(data);
-  }
 
-  async function guardarCupon(valor: string) {
-    const limpio = valor.trim().replace(",", ".");
-    const pct = limpio === "" ? null : Number(limpio);
-    if (pct != null && Number.isNaN(pct)) return;
-    const res = await fetch("/api/comparar-precios", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "cupon", pct }),
-    });
-    const data = await res.json();
-    if (data.error) { setError(data.error); return; }
-    setConfig(data);
-  }
 
   async function guardarDescuento(slug: string, valor: string) {
     const limpio = valor.trim().replace(",", ".");
@@ -728,39 +707,6 @@ export default function CompararPrecios() {
       <div className="two-col cp-layout">
         {/* ── Columna izquierda ── */}
         <div className="left-col">
-          <div className="vp-section-title">Cupón de Cosméticos24h</div>
-          <label className="cp-dto cp-cupon" title="Descuento que Cosméticos24h aplica en el carrito. Se detecta en su web al revisar; vacío = detectarlo">
-            En carrito
-            <input
-              key={`cupon-${config?.cupon?.pct ?? "x"}-${config?.cupon?.manual ? "m" : "a"}`}
-              className="cp-dto-input"
-              inputMode="decimal"
-              defaultValue={config?.cupon?.manual && config.cupon.pct != null ? String(config.cupon.pct).replace(".", ",") : ""}
-              placeholder={!config?.cupon?.manual && config?.cupon?.pct != null ? String(config.cupon.pct).replace(".", ",") : "0"}
-              onBlur={e => { if (e.target.value !== (config?.cupon?.manual && config.cupon.pct != null ? String(config.cupon.pct).replace(".", ",") : "")) guardarCupon(e.target.value); }}
-              onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-            />
-            %{!config?.cupon?.manual && config?.cupon?.pct != null && <span className="cp-dto-fuente cp-cupon-fuente">{config.cupon.codigo ?? "su web"}</span>}
-            {config?.cupon?.pct != null && config.cupon.pct > 0 && (
-              <span className={"cp-cupon-directo" + (config.cupon.directo ? "" : " cp-cupon-codigo")}>
-                {config.cupon.directo ? "Directo en carrito, sin poner código" : "Hay que poner el código en el carrito"}
-              </span>
-            )}
-            {config?.cupon?.pct != null && config.cupon.pct > 0 && (
-              <span className="cp-cupon-fechas">
-                {config.cupon.desde && <>Visto desde el {new Date(config.cupon.desde).toLocaleDateString("es-ES", { day: "numeric", month: "short" })} · </>}
-                Hasta{" "}
-                <input
-                  type="date" className="cp-cupon-hasta"
-                  defaultValue={config.cupon.hasta ?? config.cupon.promo?.fin ?? ""}
-                  key={`hasta-${config.cupon.hasta ?? ""}`}
-                  onChange={e => guardarHastaCupon(e.target.value)}
-                  title="Su web no publica la fecha de fin: ponla si la sabes. Si deja de anunciarlo, al revisar el cupón desaparece."
-                />
-                {!config.cupon.hasta && !config.cupon.promo?.fin && <span className="cp-cupon-sinfecha"> (su web no lo indica)</span>}
-              </span>
-            )}
-          </label>
 
           <div className="vp-section-title">Añadir marca</div>
           <div className="vp-add-form">

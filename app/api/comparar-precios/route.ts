@@ -706,13 +706,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `No se pudo leer el sitemap: ${e}` }, { status: 502 });
     }
 
-    // El cupón de carrito puede cambiar (campañas): se vuelve a mirar en cada revisión
-    if (!config.cupon?.manual) {
-      try {
-        const d = await detectarCupon();
-        config.cupon = await cuponDetectado(d, config.cupon);
-      } catch { /* si su portada no responde, se conserva el último */ }
-    }
+    // El cupón de carrito puede cambiar (campañas): se vuelve a mirar en su web en cada revisión
+    try {
+      const d = await detectarCupon();
+      config.cupon = await cuponDetectado(d, config.cupon);
+    } catch { /* si su portada no responde, se conserva el último */ }
 
     const nuevos: ResultadoMarca[] = [];
     for (const marca of objetivo) {
@@ -879,7 +877,7 @@ export async function POST(req: NextRequest) {
       ...nuevos,
     ];
     actual.eanVariantes = { ...actual.eanVariantes, ...config.eanVariantes };
-    if (!actual.cupon?.manual) actual.cupon = config.cupon;
+    actual.cupon = config.cupon;
     actual.ultimaRevision = new Date().toISOString();
     await guardarConfig(actual);
     return NextResponse.json(actual);
