@@ -243,14 +243,17 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
             return (
               <tr key={i}>
                 <td className="cp-suave">{f.ean ?? ""}</td>
-                <td className="cp-izq"><a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a></td>
+                <td className="cp-izq">
+                  <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
+                  <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
+                </td>
                 <td className={k.pvpDistinto ? "cp-ambar" : ""}>{eur(k.pvp)}</td>
                 <td className="cp-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
                 <td className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")}>{eur(f.miPrecio)}</td>
                 <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
                 <td className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"}>{eur(k.suPvp)}</td>
                 <td className="cp-rosa">{eur(k.suWeb)}</td>
-                <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-rojo-fondo" : "cp-rosa")}>{eur(f.suPrecio)}</td>
+                <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-rojo-fondo" : "cp-rosa")}><a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-precio-enlace" title="Ver su ficha">{eur(f.suPrecio)}</a></td>
                 <td className={"cp-fuerte cp-pequena " + (k.bajoMinimo.suyo ? "cp-rojo" : "cp-rosa")}>{pctW(k.suDto)}</td>
                 <td className={"cp-fuerte " + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>{f.diff > 0.005 ? "+" : ""}{eur(f.diff)}</td>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>

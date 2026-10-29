@@ -1495,6 +1495,8 @@ button:disabled {
 .cp-informe .cp-verde { color: #067647; }
 .cp-informe td.cp-rojo-fondo { background: #fdecec !important; color: #b42318; }
 .cp-informe td.cp-ambar { background: #fef6e7 !important; color: #b45309; font-weight: 700; }
+.cp-informe .cp-enlace-c24 { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #b5655f; text-decoration: none; }
+.cp-informe .cp-precio-enlace { color: inherit; text-decoration: underline; text-decoration-color: rgba(181, 101, 95, 0.4); }
 .cp-informe .cp-ficha { color: #b5655f; font-size: 11px; text-decoration: underline; }
 @media (max-width: 640px) {
   .cp-wrap .vp-accordion-header { flex-wrap: wrap; gap: 8px; }
