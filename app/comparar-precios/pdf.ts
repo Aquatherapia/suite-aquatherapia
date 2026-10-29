@@ -35,6 +35,9 @@ export function nombrePdf(marca: string, fecha = new Date()): string {
   return `${limpio}_COSMETICOS24H_${dd}-${mm}-${fecha.getFullYear()}_informe.pdf`;
 }
 
+// Columna de su precio final con cupón (se quita si no hay cupón)
+const COL_CUPON = 8;
+
 export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos: SoloEllosExcel[], descuento: number | null, cupon: CuponExcel, fecha = new Date()): Promise<Blob> {
   const { jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
@@ -68,8 +71,20 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
         f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : ""].filter(Boolean).join("\n"), eur(k.pvp) + (k.revisarPvp ? "\n(revisar precio)" : k.esPack ? "\nsuma de productos" : ""), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
         `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}${explicaDtoMax(f, k, descuento) ? `\n${explicaDtoMax(f, k, descuento)!.replace(/−/g, "-")}` : ""}`, k.masBarato, k.igualar.replace(/−/g, "-"),
-      ];
+      ].filter((_, c) => hayCupon || c !== COL_CUPON);
     });
+  // Sin cupón, su precio final es el mismo que el precio web: esa columna no sale.
+  // col() pasa del índice de la tabla al de la tabla completa (con la columna del cupón)
+  const col = (c: number) => hayCupon || c < COL_CUPON ? c : c + 1;
+  const anchos: Record<number, object> = {
+    0: { cellWidth: 18, halign: "left", textColor: TEXTO_SUAVE },
+    1: { cellWidth: 64, halign: "left" },
+    2: { cellWidth: 15 }, 3: { cellWidth: 15, textColor: TEXTO_SUAVE }, 4: { cellWidth: 15, fontStyle: "bold" }, 5: { cellWidth: 11, textColor: AZUL },
+    6: { cellWidth: 15, textColor: ROSA }, 7: { cellWidth: 15, textColor: ROSA }, 8: { cellWidth: 18, textColor: ROSA, fontStyle: "bold" }, 9: { cellWidth: 12, textColor: ROSA, fontStyle: "bold" },
+    10: { cellWidth: 19, fontStyle: "bold" }, 11: { cellWidth: 22, halign: "center" },
+    12: { halign: "left" },
+  };
+  const columnStyles = Object.fromEntries(Array.from({ length: hayCupon ? 13 : 12 }, (_, c) => [c, anchos[col(c)]]));
   autoTable(doc, {
     startY: 31,
     margin: { left: M, right: M },
@@ -80,27 +95,22 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       [
         { content: "", colSpan: 2, styles: { fillColor: [255, 255, 255] } },
         { content: "NOSOTROS", colSpan: 4, styles: { fillColor: FONDO_NOSOTROS, textColor: AZUL } },
-        { content: "COSMÉTICOS24H", colSpan: 4, styles: { fillColor: FONDO_ELLOS, textColor: ROSA } },
+        { content: "COSMÉTICOS24H", colSpan: hayCupon ? 4 : 3, styles: { fillColor: FONDO_ELLOS, textColor: ROSA } },
         { content: "", colSpan: 3, styles: { fillColor: [255, 255, 255] } },
       ],
       [
         cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. MÁX. (-${dto})` : "CON DTO. MÁX."), cab("PRECIO FINAL"), cab("DTO."),
-        cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""}${cupon!.hasta ? `, HASTA ${cupon!.hasta.slice(8, 10)}/${cupon!.hasta.slice(5, 7)}` : ""})` : "PRECIO FINAL (sin cupón)", true), cab("DTO. TOTAL", true),
+        cab("PVP", true), cab("PRECIO WEB", true),
+        ...(hayCupon ? [cab(`PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %${cupon!.directo ? ", DIRECTO EN CARRITO" : ""}${cupon!.hasta ? `, HASTA ${cupon!.hasta.slice(8, 10)}/${cupon!.hasta.slice(5, 7)}` : ""})`, true)] : []),
+        cab("DTO. TOTAL", true),
         cab("DIFERENCIA"), cab("MÁS BARATO"), cab("¿PODEMOS IGUALAR?"),
       ],
     ],
     body: cuerpo,
-    columnStyles: {
-      0: { cellWidth: 18, halign: "left", textColor: TEXTO_SUAVE },
-      1: { cellWidth: 64, halign: "left" },
-      2: { cellWidth: 15 }, 3: { cellWidth: 15, textColor: TEXTO_SUAVE }, 4: { cellWidth: 15, fontStyle: "bold" }, 5: { cellWidth: 11, textColor: AZUL },
-      6: { cellWidth: 15, textColor: ROSA }, 7: { cellWidth: 15, textColor: ROSA }, 8: { cellWidth: 18, textColor: ROSA, fontStyle: "bold" }, 9: { cellWidth: 12, textColor: ROSA, fontStyle: "bold" },
-      10: { cellWidth: 19, fontStyle: "bold" }, 11: { cellWidth: 22, halign: "center" },
-      12: { halign: "left" },
-    },
+    columnStyles,
     didParseCell: d => {
       if (d.section !== "body") return;
-      const i = d.row.index, c = d.column.index, f = orden[i], k = calc[i];
+      const i = d.row.index, c = col(d.column.index), f = orden[i], k = calc[i];
       const s = d.cell.styles;
       s.fillColor = i % 2 === 1 ? CEBRA : [255, 255, 255];
       s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };

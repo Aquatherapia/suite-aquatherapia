@@ -12,7 +12,7 @@ export type FilaExcel = {
   stock?: number;
   esPack?: boolean;
 };
-export type CuponExcel = { pct: number; codigo?: string; directo?: boolean; hasta?: string } | null;
+export type CuponExcel = { pct: number; codigo?: string; directo?: boolean; hasta?: string; condiciones?: string } | null;
 export type SoloEllosExcel = { titulo: string; precio: number; url: string; esPack: boolean; ean?: string };
 
 // Colores del logo (azul #1270B6, azul claro #1C9CD9) y neutros

@@ -89,6 +89,18 @@ function cuponExcluye(c: Cupon | undefined, marca: string): boolean {
   return (c?.promo?.excluidas ?? []).some(x => { const e = sinAcentos(x); return e.length > 2 && (m.includes(e) || e.includes(m)); });
 }
 const fechaCorta = (iso: string) => new Date(iso + (iso.length === 10 ? "T12:00:00" : "")).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+// Duración y marcas excluidas del cupón, según su página de promociones (sale al pasar el ratón por la cabecera)
+function condicionesCupon(c: Cupon): string | undefined {
+  const p = c.promo;
+  if (!p) return undefined;
+  const partes: string[] = [];
+  if (p.fin) {
+    const pasado = p.fin < new Date().toISOString().slice(0, 10) ? " (ya pasó, pero sigue en su web)" : "";
+    partes.push(`Duración: ${p.inicio ? `del ${fechaCorta(p.inicio)} al` : "hasta el"} ${fechaCorta(p.fin)}${pasado}.`);
+  }
+  partes.push(p.excluidas.length ? `No se aplica en ${p.excluidas.join(", ")}: en esas marcas se compara sin cupón.` : "Sin marcas excluidas.");
+  return partes.join(" ");
+}
 type Config = { marcas: Marca[]; ultimaRevision: string | null; resultados: ResultadoMarca[]; excluidos: Record<string, Excluido[]>; cupon?: Cupon };
 
 const MOTIVOS = [
@@ -166,7 +178,7 @@ function TablaSoloEllos({ filas, cupon, onOcultar }: { filas: SoloEllos[]; cupon
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
             <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th>
-            <th className="cp-h-ellos">{hayCupon ? `Precio final (${cupon!.codigo ?? "cupón"} −${String(cupon!.pct).replace(".", ",")} %${cupon!.directo ? ", directo en carrito" : ""})` : "Precio final"}</th>
+            {hayCupon && <th className={"cp-h-ellos" + (cupon?.condiciones ? " cp-tip" : "")} data-tip={cupon?.condiciones}>{`Precio final (${cupon!.codigo ?? "cupón"} −${String(cupon!.pct).replace(".", ",")} %${cupon!.directo ? ", directo en carrito" : ""})`}</th>}
             <th className="cp-h-ellos">Dto. total</th><th />
           </tr>
         </thead>
@@ -186,7 +198,7 @@ function TablaSoloEllos({ filas, cupon, onOcultar }: { filas: SoloEllos[]; cupon
                 </td>
                 <td className="cp-rosa">{eur(pvp)}</td>
                 <td className="cp-rosa">{eur(s.precio)}{dtoWeb > 0.0005 && <span className="cp-dto-celda">−{pctW(dtoWeb)}</span>}</td>
-                <td className="cp-fuerte cp-rosa">{eur(final)}</td>
+                {hayCupon && <td className="cp-fuerte cp-rosa">{eur(final)}</td>}
                 <td className="cp-fuerte cp-pequena cp-rosa">{pctW(dto)}</td>
                 <td className="cp-centro"><button className="cp-ocultar" title="Ocultar" onClick={() => onOcultar(s)}>×</button></td>
               </tr>
@@ -239,9 +251,10 @@ const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 const pctW = (frac: number) => `${(Math.round(frac * 1000) / 10).toFixed(1).replace(".", ",").replace(/,0$/, "")} %`;
 function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descuento: number | null; cupon: CuponExcel }) {
   const pct = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
+  // Sin cupón, su precio final es el mismo que el precio web: esa columna no sale
   const conCupon = cupon && cupon.pct > 0
     ? `Precio final (${cupon.codigo ?? "cupón"} −${String(cupon.pct).replace(".", ",")} %${cupon.directo ? ", directo en carrito" : ""})`
-    : "Precio final (sin cupón)";
+    : null;
   return (
     <div className="cp-informe-scroll">
       <table className="cp-informe">
@@ -249,13 +262,13 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
           <tr className="cp-informe-grupos">
             <th colSpan={2} />
             <th colSpan={4} className="cp-g-nos">Nosotros</th>
-            <th colSpan={4} className="cp-g-ellos">Cosméticos24h</th>
+            <th colSpan={conCupon ? 4 : 3} className="cp-g-ellos">Cosméticos24h</th>
             <th colSpan={3} />
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
             <th>PVP</th><th>{descuento != null ? `Con dto. máx. (−${pct})` : "Con dto. máx."}</th><th>Precio final</th><th>Dto.</th>
-            <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th><th className="cp-h-ellos">{conCupon}</th><th className="cp-h-ellos">Dto. total</th>
+            <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th>{conCupon && <th className={"cp-h-ellos" + (cupon?.condiciones ? " cp-tip" : "")} data-tip={cupon?.condiciones}>{conCupon}</th>}<th className="cp-h-ellos">Dto. total</th>
             <th>Diferencia</th><th>Más barato</th><th className="cp-izq">¿Podemos igualar?</th>
           </tr>
         </thead>
@@ -278,7 +291,7 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                 <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
                 <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? `PVP distinto: el suyo ${eur(k.suPvp)}, el nuestro ${eur(k.pvp)}.` : undefined}>{eur(k.suPvp)}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
-                <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}</td>
+                {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}</td>}
                 <td className="cp-fuerte cp-pequena cp-rosa">{pctW(k.suDto)}</td>
                 <Celda className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")} tip={explicaDtoMaxLarga(f, k, descuento) ?? undefined}>
                   {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
@@ -691,7 +704,7 @@ export default function CompararPrecios() {
   }
 
   const resultados = config?.resultados ?? [];
-  const cuponActivo: CuponExcel = config?.cupon?.pct != null && config.cupon.pct > 0 ? { pct: config.cupon.pct, codigo: config.cupon.codigo, directo: config.cupon.directo, hasta: config.cupon.hasta } : null;
+  const cuponActivo: CuponExcel = config?.cupon?.pct != null && config.cupon.pct > 0 ? { pct: config.cupon.pct, codigo: config.cupon.codigo, directo: config.cupon.directo, hasta: config.cupon.hasta, condiciones: condicionesCupon(config.cupon) } : null;
 
   return (
     <div className="wrap cp-wrap">
@@ -732,14 +745,6 @@ export default function CompararPrecios() {
                   title="Su web no publica la fecha de fin: ponla si la sabes. Si deja de anunciarlo, al revisar el cupón desaparece."
                 />
                 {!config.cupon.hasta && !config.cupon.promo?.fin && <span className="cp-cupon-sinfecha"> (su web no lo indica)</span>}
-              </span>
-            )}
-            {config?.cupon?.promo && (
-              <span className="cp-cupon-promo" title={config.cupon.promo.texto}>
-                Según su <a href="https://cosmeticos24h.com/pages/promociones" target="_blank" rel="noreferrer">página de promociones</a>
-                {config.cupon.promo.fin && <>: {config.cupon.promo.inicio ? `del ${fechaCorta(config.cupon.promo.inicio)} ` : ""}al {fechaCorta(config.cupon.promo.fin)}
-                  {config.cupon.promo.fin < new Date().toISOString().slice(0, 10) && " (ya pasó, pero sigue en su web)"}</>}
-                {config.cupon.promo.excluidas.length > 0 && <>. No se aplica en <strong>{config.cupon.promo.excluidas.join(", ")}</strong>: en esas marcas se compara sin cupón.</>}
               </span>
             )}
           </label>
