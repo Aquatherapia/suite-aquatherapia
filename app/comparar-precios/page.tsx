@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { calcularFila, type CuponExcel } from "./excel";
+import { calcularFila, explicaDtoMax, type CuponExcel } from "./excel";
 import { construirPdf, nombrePdf } from "./pdf";
 import { descuentoBoardfy } from "./boardfy";
 
@@ -181,7 +181,7 @@ function TablaSoloNosotros({ filas }: { filas: MiSinEmparejar[] }) {
       <table className="cp-informe cp-informe-lista">
         <thead>
           <tr>
-            <th>EAN</th><th className="cp-izq">Producto</th><th>PVP</th><th>Precio</th><th>Dto.</th>
+            <th>EAN</th><th className="cp-izq">Producto</th><th>PVP</th><th>Precio final</th><th>Dto.</th>
           </tr>
         </thead>
         <tbody>
@@ -231,7 +231,7 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
-            <th>PVP</th><th>{descuento != null ? `Con dto. máx. (−${pct})` : "Con dto. máx."}</th><th>Precio</th><th>Dto.</th>
+            <th>PVP</th><th>{descuento != null ? `Con dto. máx. (−${pct})` : "Con dto. máx."}</th><th>Precio final</th><th>Dto.</th>
             <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th><th className="cp-h-ellos">{conCupon}</th><th className="cp-h-ellos">Dto. total</th>
             <th>Diferencia</th><th>Más barato</th><th className="cp-izq">¿Podemos igualar?</th>
           </tr>
@@ -244,7 +244,6 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                 <td className="cp-suave">{f.ean ?? ""}</td>
                 <td className="cp-izq">
                   {f.descatalogado && <EtiquetaDescat stock={f.stock} />}
-                  {k.bajoMinimo.suyo && <span className="cp-maxdto-tag" title="Cosméticos24h vende por debajo de nuestro PVP con el descuento máximo: no podemos igualarlos">Más allá de nuestro dto. máx.</span>}
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
@@ -258,9 +257,7 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                 <td className="cp-fuerte cp-pequena cp-rosa">{pctW(k.suDto)}</td>
                 <td className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>
                   {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
-                  {k.bajoMinimo.suyo && k.limite != null && (
-                    <span className="cp-dif-max" title="Diferencia aplicando nuestro descuento máximo: aun así seguimos más caros">con dto. máx. +{eur(k.limite - f.suPrecio)}</span>
-                  )}
+                  {explicaDtoMax(f, k, descuento) && <span className="cp-dif-max">{explicaDtoMax(f, k, descuento)}</span>}
                 </td>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
                 <td className={"cp-izq cp-pequena " + (k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>

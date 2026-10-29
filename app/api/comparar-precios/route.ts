@@ -665,7 +665,9 @@ export async function POST(req: NextRequest) {
 
         const anadirFila = (s: SuProducto, i: number, ean: string | undefined, mp: MiProducto) => {
           const v = s.variantes[i] ?? s.variantes[0] ?? { titulo: "", precio: s.precio, tachado: s.tachado };
-          const tono = v.titulo && v.titulo !== "Default Title" && s.variantes.length > 1 ? ` · ${v.titulo}` : mp.formato ? ` · ${mp.formato}` : "";
+          // El formato va siempre en el nombre: su variante, el formato de nuestra ficha o el tamaño que lleva nuestra URL (…-50-ml-…)
+          const tamanoUrl = !TAMANO.test(s.titulo) ? mp.nombre.match(TAMANO)?.[0] : undefined;
+          const tono = v.titulo && v.titulo !== "Default Title" && s.variantes.length > 1 ? ` · ${v.titulo}` : mp.formato ? ` · ${mp.formato}` : tamanoUrl ? ` · ${tamanoUrl.replace(/\s+/g, " ")}` : "";
           miUsados.add(mp.clave);
           const c: Comparacion = {
             nombre: nombresOverride.get(s.url) ?? s.titulo + tono, miPrecio: mp.precio, suPrecio: v.precio, suPrecioTachado: v.tachado,
