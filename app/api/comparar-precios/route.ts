@@ -20,6 +20,7 @@ type Marca = {
   nombre: string;
   slug: string;    // colección en cosmeticos24h (/collections/{slug})
   miToken: string; // texto que aparece en el slug de TUS URLs (normalmente = slug)
+  descuentoMax?: number | null; // % máximo de descuento sobre el PVP puesto a mano (si falta, el de Boardfy)
 };
 
 type Comparacion = {
@@ -105,7 +106,12 @@ type Config = {
   // Caché de EAN de Cosméticos24h por suUrl: uno por variante, en su orden (null = sin EAN válido).
   // Leer el EAN cuesta una petición por producto, así que se guarda y no se repite.
   eanVariantes: Record<string, (string | null)[]>;
+  // Descuento extra que Cosméticos24h aplica en el carrito (p. ej. «5% de DESCUENTO OTOÑO5»).
+  // Se detecta en su web al revisar, salvo que se haya puesto a mano.
+  cupon?: Cupon;
 };
+
+type Cupon = { pct: number | null; codigo?: string; manual?: boolean; detectadoEn?: string };
 
 function configVacia(): Config {
   return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {}, nombres: {}, eanVariantes: {} };
@@ -155,6 +161,18 @@ async function fetchTexto(url: string): Promise<string> {
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
+}
+
+// Cupón de carrito que anuncia Cosméticos24h en la barra superior de su web
+// (p. ej. «¡5% de DESCUENTO! OTOÑO5, directo en tu carrito»). null si no anuncia ninguno.
+async function detectarCupon(): Promise<{ pct: number; codigo?: string } | null> {
+  const html = await fetchTexto("https://cosmeticos24h.com/");
+  const texto = html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+  const m = texto.match(/(\d{1,2}(?:[.,]\d)?)\s*%\s*de\s+descuento[!¡\s]*([A-ZÑ0-9]{4,})?/i);
+  if (!m) return null;
+  const pct = parseFloat(m[1].replace(",", "."));
+  if (!(pct > 0 && pct <= 50)) return null;
+  return { pct, codigo: m[2] && /\d/.test(m[2]) ? m[2] : undefined };
 }
 
 // Lee el precio (JSON-LD) de una ficha de la tienda propia
@@ -312,6 +330,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(config);
   }
 
+  // Descuento máximo de la marca (null = volver al de Boardfy)
+  if (body.action === "descuento") {
+    const { slug, descuentoMax } = body as { slug: string; descuentoMax: number | null };
+    const m = config.marcas.find(x => x.slug === slug);
+    if (!m) return NextResponse.json({ error: "Marca no encontrada." }, { status: 404 });
+    if (descuentoMax == null) delete m.descuentoMax;
+    else if (!(descuentoMax >= 0 && descuentoMax <= 90)) return NextResponse.json({ error: "El descuento debe estar entre 0 y 90 %." }, { status: 400 });
+    else m.descuentoMax = Math.round(descuentoMax * 10) / 10;
+    await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
+  // Cupón de carrito de Cosméticos24h puesto a mano (null = volver a detectarlo en su web)
+  if (body.action === "cupon") {
+    const { pct } = body as { pct: number | null };
+    if (pct == null) {
+      try {
+        const d = await detectarCupon();
+        config.cupon = { pct: d?.pct ?? null, codigo: d?.codigo, detectadoEn: new Date().toISOString() };
+      } catch {
+        config.cupon = { pct: null };
+      }
+    } else if (!(pct >= 0 && pct <= 50)) {
+      return NextResponse.json({ error: "El cupón debe estar entre 0 y 50 %." }, { status: 400 });
+    } else {
+      config.cupon = { pct: Math.round(pct * 10) / 10, codigo: config.cupon?.codigo, manual: true };
+    }
+    await guardarConfig(config);
+    return NextResponse.json(config);
+  }
+
   if (body.action === "deleteMarca") {
     config.marcas = config.marcas.filter(x => x.slug !== body.slug);
     config.resultados = config.resultados.filter(r => r.slug !== body.slug);
@@ -427,6 +476,14 @@ export async function POST(req: NextRequest) {
       sitemapXml = await fetchTexto(SITEMAP);
     } catch (e) {
       return NextResponse.json({ error: `No se pudo leer el sitemap: ${e}` }, { status: 502 });
+    }
+
+    // El cupón de carrito puede cambiar (campañas): se vuelve a mirar en cada revisión
+    if (!config.cupon?.manual) {
+      try {
+        const d = await detectarCupon();
+        config.cupon = { pct: d?.pct ?? null, codigo: d?.codigo, detectadoEn: new Date().toISOString() };
+      } catch { /* si su portada no responde, se conserva el último */ }
     }
 
     const nuevos: ResultadoMarca[] = [];

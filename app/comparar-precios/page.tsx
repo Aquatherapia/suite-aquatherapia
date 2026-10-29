@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { construirExcel, nombreArchivo, type CuponExcel } from "./excel";
+import { descuentoBoardfy } from "./boardfy";
 
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
   miPvp?: number; suPvp?: number; // PVP sin descuento (faltan en resultados guardados antes)
+  suPrecioWeb?: number; // precio de su web antes del cupón de carrito (suPrecio ya lo lleva aplicado)
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
   verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
 };
@@ -24,16 +27,56 @@ function pvpDistinto(c: Comparacion): boolean {
   return c.miPvp != null && c.suPvp != null && Math.abs(c.miPvp - c.suPvp) > 0.01;
 }
 
+// Descuento aplicado sobre el PVP (en %), o null si no hay PVP o no hay rebaja
+function dtoSobrePvp(pvp: number | undefined, precio: number): number | null {
+  if (pvp == null || pvp <= 0 || precio >= pvp - 0.005) return null;
+  return Math.round((1 - precio / pvp) * 1000) / 10;
+}
+
+// Cosméticos24h aplica un cupón en el carrito (p. ej. 5 % OTOÑO5): su precio final es el de la web
+// menos ese cupón, y con ese se comparan la diferencia, el mínimo y su descuento total.
+function aplicarCupon(r: ResultadoMarca, cupon: CuponExcel): ResultadoMarca {
+  if (!cupon || !(cupon.pct > 0)) return r;
+  const f = 1 - cupon.pct / 100;
+  return {
+    ...r,
+    comparaciones: r.comparaciones.map(c => {
+      const final = Math.round(c.suPrecio * f * 100) / 100;
+      return { ...c, suPrecioWeb: c.suPrecio, suPrecio: final, diff: Math.round((c.miPrecio - final) * 100) / 100 };
+    }),
+  };
+}
+
+// Nuestro precio mínimo: PVP menos el descuento máximo de la marca
+function precioMinimo(c: Comparacion, descuento: number | null): number | null {
+  if (descuento == null) return null;
+  return Math.round((c.miPvp ?? c.miPrecio) * (1 - descuento / 100) * 100) / 100;
+}
+
+// Cosméticos24h vende por debajo de lo mínimo que podemos bajar nosotros
+function bajoMinimo(c: Comparacion, descuento: number | null): boolean {
+  const min = precioMinimo(c, descuento);
+  return min != null && c.suPrecio < min - 0.005;
+}
+
 function nombreDesdeUrl(url: string) {
   return (url.split("/es/")[1] ?? url).replace(/-p\d+$/, "").replace(/-/g, " ");
 }
-type Marca = { nombre: string; slug: string; miToken: string };
+type Marca = { nombre: string; slug: string; miToken: string; descuentoMax?: number | null };
+
+// Descuento máximo de la marca: el puesto a mano en la app o, si no, el de Boardfy
+function descuentoDe(m?: Marca): { pct: number | null; deBoardfy: boolean } {
+  if (!m) return { pct: null, deBoardfy: false };
+  if (m.descuentoMax != null) return { pct: m.descuentoMax, deBoardfy: false };
+  return { pct: descuentoBoardfy(m.nombre), deBoardfy: true };
+}
 type Excluido = {
   suUrl: string; titulo: string;
   tipo?: "comparacion" | "soloEllos";
   miPrecio?: number; suPrecio?: number; miUrl?: string; motivo?: string;
 };
-type Config = { marcas: Marca[]; ultimaRevision: string | null; resultados: ResultadoMarca[]; excluidos: Record<string, Excluido[]> };
+type Cupon = { pct: number | null; codigo?: string; manual?: boolean; detectadoEn?: string };
+type Config = { marcas: Marca[]; ultimaRevision: string | null; resultados: ResultadoMarca[]; excluidos: Record<string, Excluido[]>; cupon?: Cupon };
 
 const MOTIVOS = [
   "Compara productos diferentes",
@@ -160,10 +203,20 @@ ${packs.length ? `<h2>Packs que tienen ellos y tú no (${packs.length})</h2>
   if (win) { win.document.write(html); win.document.close(); }
 }
 
+async function descargarExcel(r: ResultadoMarca, descuento: number | null, cupon: CuponExcel) {
+  const buf = await construirExcel(r.marca, r.comparaciones, r.soloEllos, descuento, cupon);
+  const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = nombreArchivo(r.marca);
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function MarcaBloque({
-  r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onVerificar, onDesverificar, onRenombrar, onRestaurarNombre,
+  r, descuento, deBoardfy, cupon, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onVerificar, onDesverificar, onRenombrar, onRestaurarNombre,
 }: {
-  r: ResultadoMarca; ocultos: Excluido[]; expandido: boolean; onToggle: () => void;
+  r: ResultadoMarca; descuento: number | null; deBoardfy: boolean; cupon: CuponExcel;
+  ocultos: Excluido[]; expandido: boolean; onToggle: () => void;
   mostrarTodos: boolean; onToggleMostrar: () => void;
   onExcluir: (item: Excluido) => void;
   onIncluir: (suUrl: string) => void;
@@ -203,6 +256,7 @@ function MarcaBloque({
   const masCaro = r.comparaciones.filter(c => c.diff > 0.01);
   const verificados = r.comparaciones.filter(c => c.verificado);
   const conPvpDistinto = r.comparaciones.filter(pvpDistinto);
+  const conBajoMinimo = r.comparaciones.filter(c => bajoMinimo(c, descuento));
   const soloEllosReal = r.soloEllos.filter(s => !s.esPack);
   const packs = r.soloEllos.filter(s => s.esPack);
   const sinEmp = (r.misSinEmparejar ?? []).filter(m => !m.esPack);
@@ -218,10 +272,16 @@ function MarcaBloque({
               Revisada el {fechaExacta(r.revisadoEn)} · {tiempoDesde(r.revisadoEn)}
             </span>
           )}
+          <span className="cp-revisado" title={deBoardfy ? "Descuento máximo de la regla de Boardfy (cámbialo en la columna de marcas)" : "Descuento máximo puesto a mano"}>
+            Dto. máx. {descuento != null ? `${String(descuento).replace(".", ",")} %` : "sin límite"}{deBoardfy && descuento != null ? " (Boardfy)" : ""}
+          </span>
         </span>
         <div className="vp-accordion-right">
           {masCaro.length > 0 && (
             <span className="vp-pill vp-pill-nuevo">{masCaro.length} caro{masCaro.length !== 1 ? "s" : ""}</span>
+          )}
+          {conBajoMinimo.length > 0 && (
+            <span className="vp-pill cp-pill-minimo" title={`Cosméticos24h vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento máximo`}>{conBajoMinimo.length} bajo nuestro mínimo</span>
           )}
           {conPvpDistinto.length > 0 && (
             <span className="vp-pill cp-pill-pvp" title="El PVP sin descuento no coincide: puede que una tarifa no esté actualizada">{conPvpDistinto.length} PVP distinto{conPvpDistinto.length !== 1 ? "s" : ""}</span>
@@ -238,6 +298,13 @@ function MarcaBloque({
             title="Descargar PDF de esta marca"
           >
             PDF
+          </button>
+          <button
+            className="regen-btn"
+            onClick={e => { e.stopPropagation(); descargarExcel(r, descuento, cupon); }}
+            title="Descargar Excel de esta marca (formato de informe de marca)"
+          >
+            Excel
           </button>
           <span className="vp-chevron">{expandido ? "▲" : "▼"}</span>
         </div>
@@ -260,7 +327,7 @@ function MarcaBloque({
                 <span className="cp-col-num" title="Tu PVP sin descuento">Tu PVP</span>
                 <span className="cp-col-num" title="Tu precio con descuento">Tu precio</span>
                 <span className="cp-col-num" title="PVP sin descuento en Cosméticos24h">Su PVP</span>
-                <span className="cp-col-num" title="Precio con descuento en Cosméticos24h">Su precio</span>
+                <span className="cp-col-num" title={cupon && cupon.pct > 0 ? `Precio final en Cosméticos24h: el de su web con el cupón de carrito del ${cupon.pct} %` : "Precio con descuento en Cosméticos24h"}>{cupon && cupon.pct > 0 ? "Su precio final" : "Su precio"}</span>
                 <span className="cp-col-num" title="Tu precio − su precio">Dif.</span>
                 <span />
               </div>
@@ -271,6 +338,7 @@ function MarcaBloque({
                     <div className="cp-fila cp-tabla-pvp">
                       <a href={c.miUrl} target="_blank" rel="noreferrer" className="cp-nombre">
                         {c.esPack && <span className="cp-pack-tag">pack</span>}
+                        {bajoMinimo(c, descuento) && <span className="cp-minimo-tag" title={`Su precio está por debajo de nuestro mínimo (${precioMinimo(c, descuento)!.toFixed(2)} € = PVP −${descuento} %)`}>Bajo mínimo</span>}
                         {pvpDistinto(c) && <span className="cp-pvp-tag" title={`PVP distinto: tú ${c.miPvp!.toFixed(2)} € · C24h ${c.suPvp!.toFixed(2)} €`}>PVP ≠</span>}
                         {c.porEan && <span className="cp-ean-tag" title={`Mismo EAN en las dos webs: ${c.ean}`}>EAN</span>}
                         {c.verificado && <span className="cp-verificado-tag" title="Comprobado a mano: es el mismo producto">✓ verificado</span>}
@@ -278,9 +346,9 @@ function MarcaBloque({
                         {c.nombre}
                       </a>
                       <span className={"cp-col-num cp-pvp" + (pvpDistinto(c) ? " cp-pvp-dif" : "")}>{c.miPvp != null ? `${c.miPvp.toFixed(2)}€` : "—"}</span>
-                      <span className="cp-col-num">{c.miPrecio.toFixed(2)}€</span>
+                      <span className="cp-col-num">{c.miPrecio.toFixed(2)}€{dtoSobrePvp(c.miPvp, c.miPrecio) != null && <small className="cp-dto-pct">−{dtoSobrePvp(c.miPvp, c.miPrecio)} %</small>}</span>
                       <span className={"cp-col-num cp-pvp" + (pvpDistinto(c) ? " cp-pvp-dif" : "")}>{c.suPvp != null ? `${c.suPvp.toFixed(2)}€` : "—"}</span>
-                      <a href={c.suUrl} target="_blank" rel="noreferrer" className="cp-col-num cp-c24">{c.suPrecio.toFixed(2)}€</a>
+                      <a href={c.suUrl} target="_blank" rel="noreferrer" className="cp-col-num cp-c24" title={c.suPrecioWeb != null ? `En su web ${c.suPrecioWeb.toFixed(2)} € · con el cupón de carrito ${c.suPrecio.toFixed(2)} €` : "Ver su ficha"}>{c.suPrecio.toFixed(2)}€{c.suPrecioWeb != null && <small className="cp-web">web {c.suPrecioWeb.toFixed(2)}€</small>}{dtoSobrePvp(c.suPvp, c.suPrecio) != null && <small className="cp-dto-pct">−{dtoSobrePvp(c.suPvp, c.suPrecio)} %</small>}</a>
                       <span className={"cp-col-num " + (caro ? "cp-caro" : c.diff < -0.01 ? "cp-barato" : "")}>
                         {c.diff > 0 ? "+" : ""}{c.diff.toFixed(2)}€
                       </span>
@@ -293,7 +361,7 @@ function MarcaBloque({
                           ✓
                         </button>
                         <button className="cp-renombrar" title="Editar el nombre mostrado" onClick={() => abrirEditorNombre(c.suUrl, c.nombre)}>Aa</button>
-                        <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecio, miUrl: c.miUrl })}>×</button>
+                        <button className="cp-ocultar" title="Ocultar (match erróneo)" onClick={() => onExcluir({ suUrl: c.suUrl, titulo: c.nombre, tipo: "comparacion", miPrecio: c.miPrecio, suPrecio: c.suPrecioWeb ?? c.suPrecio, miUrl: c.miUrl })}>×</button>
                       </div>
                     </div>
                     {editandoNombre === c.suUrl && (
@@ -487,6 +555,32 @@ export default function CompararPrecios() {
     setNuevaMarca(""); setNuevoSlug(""); setSlugManual(false);
   }
 
+  async function guardarCupon(valor: string) {
+    const limpio = valor.trim().replace(",", ".");
+    const pct = limpio === "" ? null : Number(limpio);
+    if (pct != null && Number.isNaN(pct)) return;
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cupon", pct }),
+    });
+    const data = await res.json();
+    if (data.error) { setError(data.error); return; }
+    setConfig(data);
+  }
+
+  async function guardarDescuento(slug: string, valor: string) {
+    const limpio = valor.trim().replace(",", ".");
+    const descuentoMax = limpio === "" ? null : Number(limpio);
+    if (descuentoMax != null && Number.isNaN(descuentoMax)) return;
+    const res = await fetch("/api/comparar-precios", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "descuento", slug, descuentoMax }),
+    });
+    const data = await res.json();
+    if (data.error) { setError(data.error); return; }
+    setConfig(data);
+  }
+
   async function deleteMarca(slug: string) {
     const res = await fetch("/api/comparar-precios", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -572,6 +666,7 @@ export default function CompararPrecios() {
   }
 
   const resultados = config?.resultados ?? [];
+  const cuponActivo: CuponExcel = config?.cupon?.pct != null && config.cupon.pct > 0 ? { pct: config.cupon.pct, codigo: config.cupon.codigo } : null;
 
   return (
     <div className="wrap">
@@ -582,6 +677,21 @@ export default function CompararPrecios() {
       <div className="two-col">
         {/* ── Columna izquierda ── */}
         <div className="left-col">
+          <div className="vp-section-title">Cupón de Cosméticos24h</div>
+          <label className="cp-dto cp-cupon" title="Descuento que Cosméticos24h aplica en el carrito. Se detecta en su web al revisar; vacío = detectarlo">
+            En carrito
+            <input
+              key={`cupon-${config?.cupon?.pct ?? "x"}-${config?.cupon?.manual ? "m" : "a"}`}
+              className="cp-dto-input"
+              inputMode="decimal"
+              defaultValue={config?.cupon?.manual && config.cupon.pct != null ? String(config.cupon.pct).replace(".", ",") : ""}
+              placeholder={!config?.cupon?.manual && config?.cupon?.pct != null ? String(config.cupon.pct).replace(".", ",") : "0"}
+              onBlur={e => { if (e.target.value !== (config?.cupon?.manual && config.cupon.pct != null ? String(config.cupon.pct).replace(".", ",") : "")) guardarCupon(e.target.value); }}
+              onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            />
+            %{!config?.cupon?.manual && config?.cupon?.pct != null && <span className="cp-dto-fuente cp-cupon-fuente">{config.cupon.codigo ?? "su web"}</span>}
+          </label>
+
           <div className="vp-section-title">Marcas a comparar</div>
           {config?.marcas && config.marcas.length > 0 ? (
             <ul className="vp-marcas-list">
@@ -590,6 +700,19 @@ export default function CompararPrecios() {
                   <div>
                     <div className="vp-marca-nombre">{m.nombre}</div>
                     <div className="vp-marca-slug">/collections/{m.slug}</div>
+                    <label className="cp-dto" title="Descuento máximo sobre el PVP. Vacío = el de la regla de Boardfy">
+                      Dto. máx.
+                      <input
+                        key={`${m.slug}-${m.descuentoMax ?? "b"}`}
+                        className="cp-dto-input"
+                        inputMode="decimal"
+                        defaultValue={m.descuentoMax != null ? String(m.descuentoMax).replace(".", ",") : ""}
+                        placeholder={descuentoBoardfy(m.nombre) != null ? String(descuentoBoardfy(m.nombre)).replace(".", ",") : "—"}
+                        onBlur={e => { if (e.target.value !== (m.descuentoMax != null ? String(m.descuentoMax).replace(".", ",") : "")) guardarDescuento(m.slug, e.target.value); }}
+                        onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                      />
+                      %{m.descuentoMax == null && descuentoBoardfy(m.nombre) != null && <span className="cp-dto-fuente">Boardfy</span>}
+                    </label>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <button
@@ -649,7 +772,10 @@ export default function CompararPrecios() {
 
           {resultados.map(r => (
             <MarcaBloque
-              key={r.slug} r={r} ocultos={config?.excluidos?.[r.slug] ?? []}
+              key={r.slug} r={aplicarCupon(r, cuponActivo)} cupon={cuponActivo}
+              descuento={descuentoDe(config?.marcas.find(m => m.slug === r.slug)).pct}
+              deBoardfy={descuentoDe(config?.marcas.find(m => m.slug === r.slug)).deBoardfy}
+              ocultos={config?.excluidos?.[r.slug] ?? []}
               expandido={expandidos.has(r.slug)} onToggle={() => toggle(r.slug)}
               mostrarTodos={mostrarTodos.has(r.slug)} onToggleMostrar={() => toggleMostrar(r.slug)}
               onExcluir={(item) => excluir(r.slug, item)}

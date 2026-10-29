@@ -1163,7 +1163,11 @@ button:disabled {
 .cp-nombre { font-weight: 500; line-height: 1.35; text-decoration: none; color: inherit; }
 .cp-nombre:hover { text-decoration: underline; }
 .cp-col-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.cp-c24 { color: var(--muted); text-decoration: none; }
+.cp-c24 { color: #b5655f; font-weight: 600; text-decoration: none; }
+.cp-c24 .cp-dto-pct { color: #c98a85; }
+.cp-web { display: block; font-size: 10px; font-weight: 400; color: var(--muted); }
+.cp-cupon { margin: 0 0 14px; font-size: 12px; }
+.cp-cupon-fuente { color: #b5655f; }
 .cp-c24:hover { text-decoration: underline; }
 .cp-caro { color: #b91c1c; font-weight: 700; }
 .cp-barato { color: #15803d; font-weight: 600; }
@@ -1191,6 +1195,16 @@ button:disabled {
 .cp-fila.cp-tabla-pvp { grid-template-columns: 1fr 58px 62px 58px 62px 60px 86px; }
 .cp-pvp { color: var(--muted); }
 .cp-pvp-dif { color: #c2410c; font-weight: 700; }
+.cp-minimo-tag {
+  display: inline-block; margin-right: 6px; padding: 0 5px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #b42318; background: #fdecec; border-radius: 4px; vertical-align: middle; cursor: help;
+}
+.cp-pill-minimo { background: #fdecec; color: #b42318; }
+.cp-dto { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: var(--muted); }
+.cp-dto-input { width: 44px; padding: 2px 4px; font-size: 11px; text-align: right; margin: 0; }
+.cp-dto-pct { display: block; font-size: 10px; font-weight: 600; color: var(--muted); }
+.cp-dto-fuente { margin-left: 2px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #1270b6; }
 .cp-sin-ean { color: #b45309; font-weight: 600; }
 .cp-pill-pvp { background: #ffedd5; color: #c2410c; }
 .cp-ean-aviso {
