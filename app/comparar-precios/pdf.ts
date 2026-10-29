@@ -11,8 +11,7 @@ const CEBRA: RGB = [248, 250, 252];
 const LINEA: RGB = [229, 231, 235];
 const TEXTO: RGB = [31, 41, 51];
 const TEXTO_SUAVE: RGB = [107, 114, 128];
-const ROJO: RGB = [180, 35, 24];
-const NEGRO: RGB = [75, 85, 99];
+const ROJO: RGB = [212, 0, 0];
 const PASADO_FONDO: RGB = [223, 244, 247], PASADO: RGB = [14, 116, 144];
 const AMBAR: RGB = [180, 83, 9];
 const AMBAR_FONDO: RGB = [254, 246, 231];
@@ -119,9 +118,9 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       if (c === 4 && k.bajoMinimo.mio) { s.fillColor = PASADO_FONDO; s.textColor = PASADO; s.fontStyle = "bold"; }
       if ((c === 2 || c === 5) && k.pvpDistinto) { s.fillColor = AMBAR_FONDO; s.textColor = AMBAR; s.fontStyle = "bold"; }
       if (c === 1 && f.descatalogado) s.textColor = ROJO;
-      if (c === 8) s.textColor = f.diff > 0.01 ? NEGRO : f.diff < -0.01 ? VERDE : TEXTO;
-      if (c === 9) { s.textColor = k.masBarato === "Cosméticos24h" ? ROSA : k.masBarato === "La Tienda de Cosméticos" ? AZUL : TEXTO_SUAVE; s.fontStyle = k.masBarato === "Igual" ? "normal" : "bold"; }
-      if (c === 10) { s.textColor = k.revisarPack ? AMBAR : k.igualar.startsWith("No") ? NEGRO : VERDE; s.fontStyle = k.igualar.startsWith("No") || k.revisarPack ? "bold" : "normal"; }
+      if (c === 8) s.textColor = f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO;
+      if (c === 9) { s.textColor = k.masBarato === "Cosméticos24h" ? ROJO : k.masBarato === "La Tienda de Cosméticos" ? VERDE : TEXTO_SUAVE; s.fontStyle = k.masBarato === "Igual" ? "normal" : "bold"; }
+      if (c === 10) { s.textColor = k.revisarPack ? AMBAR : k.igualar.startsWith("No") ? ROJO : VERDE; s.fontStyle = k.igualar.startsWith("No") || k.revisarPack ? "bold" : "normal"; }
     },
     // La línea «Ver en Cosméticos24h» se dibuja aparte, en rosa y con su enlace
     willDrawCell: d => {
