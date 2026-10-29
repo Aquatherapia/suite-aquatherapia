@@ -309,9 +309,10 @@ const esperar = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 // Una ficha con varios formatos (50 ml / 30 ml) da un MiProducto por formato: mismo url, cada uno con su precio.
 // La ficha solo publica el EAN de un formato (el del precio del JSON-LD, el más barato); el de los demás sale del feed.
+// Con tonos (y feed), un MiProducto por tono, con el EAN y el precio del feed.
 type MiProducto = {
   nombre: string; url: string; precio: number; pvp: number; esPack: boolean; ean: string | null; propiedades: string[];
-  formato?: string; clave: string; descatalogado?: boolean | null; stock?: number | null;
+  formato?: string; tono?: string; clave: string; descatalogado?: boolean | null; stock?: number | null;
 };
 
 // Combinaciones de propiedades (tono, formato…) de la ficha, para preguntar a la web por su estado.
@@ -466,12 +467,23 @@ async function leerMiFicha(url: string, filasFeed?: FilaFeed[]): Promise<MiProdu
       }));
     }
   }
-  return [{ nombre, url, precio, pvp: pvpDesdeHtml(html) ?? precio, esPack, ean, propiedades: propiedadesDesdeHtml(html), clave: url }];
+  const propiedades = propiedadesDesdeHtml(html);
+  const tonos = tonosDesdeFeed(filasFeed);
+  if (tonos) {
+    // Ficha con tonos: el feed trae el EAN y el precio de cada uno, y se compara cada tono por separado
+    return tonos.map((f): MiProducto => ({ nombre: `${nombre} · ${f.variante}`, url, precio: f.precio, pvp: f.pvp, esPack, ean: f.ean, propiedades, tono: f.variante!, clave: `${url}#${f.variante}` }));
+  }
+  return [{ nombre, url, precio, pvp: pvpDesdeHtml(html) ?? precio, esPack, ean, propiedades, clave: url }];
 }
 
-// Enumera y lee los productos de una marca en la tienda propia.
-// Se lee despacio (pocas a la vez y con pausas): con 10 a la vez nuestra web cortaba y se perdían fichas.
-// Cada ficha se intenta 3 veces; las que siguen fallando se reintentan una a una al final, si queda tiempo.
+// Tonos (variantes que no son tamaños) de una ficha según el feed, si cada uno tiene su nombre y su EAN
+function tonosDesdeFeed(filas: FilaFeed[] | undefined): FilaFeed[] | null {
+  if (!filas || filas.length < 2 || filas.some(f => !f.variante || !f.ean)) return null;
+  if (filas.every(f => TAMANO.test(f.variante!))) return null;
+  if (new Set(filas.map(f => f.variante)).size !== filas.length || new Set(filas.map(f => f.ean)).size !== filas.length) return null;
+  return filas;
+}
+
 // Formatos de cada ficha activa según el feed (TSV con cabecera). Las fichas desactivadas no salen.
 // variante: lo que sigue al último « - » del título cuando la ficha tiene varias filas («30 ml»). null si no se pudo leer.
 type FilaFeed = { ean: string | null; precio: number; pvp: number; variante: string | null };
@@ -509,10 +521,15 @@ function miProductoDesdeFeed(url: string, filas: FilaFeed[]): MiProducto[] {
   if (filas.length >= 2 && filas.every(f => f.variante && TAMANO.test(f.variante))) {
     return filas.slice(0, 6).map(f => ({ nombre: `${nombre} · ${f.variante}`, url, precio: f.precio, pvp: f.pvp, esPack, ean: f.ean, propiedades: [], formato: f.variante!, clave: `${url}#${f.variante}` }));
   }
+  const tonos = tonosDesdeFeed(filas);
+  if (tonos) return tonos.map(f => ({ nombre: `${nombre} · ${f.variante}`, url, precio: f.precio, pvp: f.pvp, esPack, ean: f.ean, propiedades: [], tono: f.variante!, clave: `${url}#${f.variante}` }));
   const f = [...filas].sort((a, b) => a.precio - b.precio)[0];
   return [{ nombre, url, precio: f.precio, pvp: f.pvp, esPack, ean: f.ean, propiedades: [], clave: url }];
 }
 
+// Enumera y lee los productos de una marca en la tienda propia.
+// Se lee despacio (pocas a la vez y con pausas): con 10 a la vez nuestra web cortaba y se perdían fichas.
+// Cada ficha se intenta 3 veces; las que siguen fallando se reintentan una a una al final, si queda tiempo.
 async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: number, feed: Map<string, FilaFeed[]> | null): Promise<{ productos: MiProducto[]; fallidas: string[]; sinPrecio: string[] }> {
   const tokLower = normalizar(miToken);
   const urls = new Set<string>();
@@ -815,7 +832,7 @@ export async function POST(req: NextRequest) {
 
         const comparaciones: Comparacion[] = [];
         const soloEllos: SoloEllos[] = [];
-        const miUsados = new Set<string>(); // por clave (ficha, o ficha#formato)
+        const miUsados = new Set<string>(); // por clave (ficha, o ficha#formato / ficha#tono)
         const miDeFila = new Map<Comparacion, MiProducto>();
         const formatosDe = new Map<string, MiProducto[]>();
         for (const m of mis) if (m.formato) formatosDe.set(m.url, [...(formatosDe.get(m.url) ?? []), m]);
@@ -824,7 +841,7 @@ export async function POST(req: NextRequest) {
           const v = s.variantes[i] ?? s.variantes[0] ?? { titulo: "", precio: s.precio, tachado: s.tachado };
           // El formato va siempre en el nombre: su variante, el formato de nuestra ficha o el tamaño que lleva nuestra URL (…-50-ml-…)
           const tamanoUrl = !TAMANO.test(s.titulo) ? mp.nombre.match(TAMANO)?.[0] : undefined;
-          const tono = v.titulo && v.titulo !== "Default Title" && s.variantes.length > 1 ? ` · ${v.titulo}` : mp.formato ? ` · ${mp.formato}` : tamanoUrl ? ` · ${tamanoUrl.replace(/\s+/g, " ")}` : "";
+          const tono = v.titulo && v.titulo !== "Default Title" && s.variantes.length > 1 ? ` · ${v.titulo}` : mp.formato ?? mp.tono ? ` · ${mp.formato ?? mp.tono}` : tamanoUrl ? ` · ${tamanoUrl.replace(/\s+/g, " ")}` : "";
           miUsados.add(mp.clave);
           const c: Comparacion = {
             nombre: nombresOverride.get(s.url) ?? s.titulo + tono, miPrecio: mp.precio, suPrecio: v.precio, suPrecioTachado: v.tachado,
