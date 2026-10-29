@@ -224,13 +224,6 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
   return (
     <div className="cp-informe-scroll">
       <table className="cp-informe">
-        {/* Fondo por bloque: nosotros en azul, Cosméticos24h en rosa y la comparación en gris */}
-        <colgroup>
-          <col span={2} />
-          <col span={3} className="cp-col-nos" />
-          <col span={conCupon ? 3 : 2} className="cp-col-ellos" />
-          <col span={3} className="cp-col-fin" />
-        </colgroup>
         <thead>
           <tr className="cp-informe-grupos">
             <th colSpan={2} />
@@ -257,11 +250,11 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
-                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. autorizado ni se compara el PVP." : k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-azul"} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. autorizado ni se compara el PVP." : k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>
                   {eur(k.pvp)}{k.revisarPvp && <span className="cp-revisar-pvp">(revisar precio)</span>}
                 </Celda>
-                <td className="cp-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
-                <Celda className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. autorizado (${eur(k.limite)}).` : undefined}>
+                <td className="cp-azul-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
+                <Celda className={"cp-fuerte cp-azul" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. autorizado (${eur(k.limite)}).` : undefined}>
                   {eur(f.miPrecio)}{k.miDto > 0.0005 && <small className={"cp-dto-celda cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>−{pctW(k.miDto)}</small>}
                 </Celda>
                 <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}</Celda>
@@ -316,9 +309,9 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                     {m.ean ? "No está en Cosméticos24h" : "Sin EAN: no se puede comparar"}
                   </span>
                 </td>
-                <td>{eur(pvp)}</td>
-                <td className="cp-suave">{limite != null ? eur(limite) : "—"}</td>
-                <td className="cp-fuerte">{eur(m.precio)}{pvp > 0 && 1 - m.precio / pvp > 0.0005 && <small className="cp-dto-celda cp-dto-azul">−{pctW(1 - m.precio / pvp)}</small>}</td>
+                <td className="cp-azul">{eur(pvp)}</td>
+                <td className="cp-azul-suave">{limite != null ? eur(limite) : "—"}</td>
+                <td className="cp-fuerte cp-azul">{eur(m.precio)}{pvp > 0 && 1 - m.precio / pvp > 0.0005 && <small className="cp-dto-celda cp-dto-azul">−{pctW(1 - m.precio / pvp)}</small>}</td>
                 {vacias(conCupon ? 3 : 2)}
                 {vacias(2)}
                 <td className="cp-izq cp-pequena cp-suave">{m.ean ? "Solo lo tenemos nosotros" : ""}</td>

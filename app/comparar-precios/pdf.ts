@@ -4,9 +4,9 @@ import { calcularFila, filaSoloEllos, type CuponExcel, type FilaExcel, type Solo
 
 type RGB = [number, number, number];
 const AZUL: RGB = [18, 112, 182];
-const ROSA: RGB = [181, 101, 95];
+const ROSA: RGB = [194, 54, 126];
 const FONDO_NOSOTROS: RGB = [232, 241, 249];
-const FONDO_ELLOS: RGB = [251, 238, 236];
+const FONDO_ELLOS: RGB = [251, 233, 243];
 const CEBRA: RGB = [248, 250, 252];
 const LINEA: RGB = [229, 231, 235];
 const TEXTO: RGB = [31, 41, 51];

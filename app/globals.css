@@ -1163,11 +1163,11 @@ button:disabled {
 .cp-nombre { font-weight: 500; line-height: 1.35; text-decoration: none; color: inherit; }
 .cp-nombre:hover { text-decoration: underline; }
 .cp-col-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.cp-c24 { color: #b5655f; font-weight: 600; text-decoration: none; }
+.cp-c24 { color: #c2367e; font-weight: 600; text-decoration: none; }
 .cp-c24 .cp-dto-pct { color: #c98a85; }
 .cp-web { display: block; font-size: 10px; font-weight: 400; color: var(--muted); }
 .cp-cupon { margin: 0 0 14px; font-size: 12px; flex-wrap: wrap; }
-.cp-cupon-fuente { color: #b5655f; }
+.cp-cupon-fuente { color: #c2367e; }
 .cp-c24:hover { text-decoration: underline; }
 .cp-caro { color: #b91c1c; font-weight: 700; }
 .cp-barato { color: #15803d; font-weight: 600; }
@@ -1476,15 +1476,12 @@ button:disabled {
 .cp-informe-scroll { overflow-x: auto; margin: 4px 0 12px; -webkit-overflow-scrolling: touch; }
 .cp-informe { width: 100%; min-width: 1120px; border-collapse: collapse; font-size: 12px; color: #1f2933; }
 .cp-informe th { background: #1270b6; color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; padding: 8px 5px; text-align: center; white-space: normal; line-height: 1.25; }
-.cp-informe th.cp-h-ellos { background: #b5655f; }
+.cp-informe th.cp-h-ellos { background: #c2367e; }
 .cp-informe .cp-informe-grupos th { background: transparent; padding: 4px 6px; }
 .cp-informe .cp-informe-grupos th.cp-g-nos { background: #e8f1f9; color: #1270b6; }
-.cp-informe .cp-informe-grupos th.cp-g-ellos { background: #fbeeec; color: #b5655f; }
+.cp-informe .cp-informe-grupos th.cp-g-ellos { background: #fbe9f3; color: #c2367e; }
 .cp-informe td { padding: 7px 5px; border-bottom: 1px solid #e5e7eb; text-align: right; white-space: nowrap; }
 /* Bloques de columnas: nosotros (azul), Cosméticos24h (rosa) y comparación (gris); la cebra oscurece un poco cada fila par */
-.cp-informe col.cp-col-nos { background: #eef5fc; }
-.cp-informe col.cp-col-ellos { background: #fdf0ee; }
-.cp-informe col.cp-col-fin { background: #f6f7f9; }
 .cp-informe tbody tr:nth-child(even) td { background-image: linear-gradient(rgba(15, 23, 42, 0.035), rgba(15, 23, 42, 0.035)); }
 .cp-informe th.cp-h-fin { background: #4b5563; }
 .cp-informe .cp-informe-grupos th.cp-g-fin { background: #eceef1; color: #4b5563; }
@@ -1497,7 +1494,10 @@ button:disabled {
 .cp-informe .cp-fuerte { font-weight: 700; }
 .cp-informe .cp-pequena { font-size: 11px; }
 .cp-informe .cp-dto-azul { color: #1270b6; font-size: 11px; }
-.cp-informe .cp-rosa { color: #b5655f; }
+.cp-informe .cp-rosa { color: #c2367e; }
+/* Texto por bloque: nosotros en azul, Cosméticos24h en rosa */
+.cp-informe .cp-azul { color: #1270b6; }
+.cp-informe .cp-azul-suave { color: #6a9bd0; }
 .cp-informe .cp-rojo { color: #b42318; }
 .cp-informe .cp-verde { color: #067647; }
 .cp-informe td.cp-rojo-fondo { background: #fdecec !important; color: #b42318; }
@@ -1508,7 +1508,7 @@ button:disabled {
 .cp-informe td.cp-morado-fondo { background: #f1ebfb !important; }
 .cp-informe td.cp-morado-fondo .cp-precio-enlace { color: #6b3fb5; }
 .cp-informe td.cp-ambar { background: #fef6e7 !important; color: #b45309; font-weight: 700; }
-.cp-informe .cp-enlace-c24 { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #b5655f; text-decoration: none; }
+.cp-informe .cp-enlace-c24 { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #c2367e; text-decoration: none; }
 .cp-informe .cp-precio-enlace { color: inherit; text-decoration: none; }
 .cp-informe .cp-precio-enlace:hover { text-decoration: underline; }
 .cp-informe .cp-dto-celda { display: block; font-size: 10px; font-weight: 700; margin-top: 1px; }
@@ -1549,7 +1549,7 @@ button:disabled {
 .cp-informe.cp-informe-lista { min-width: 720px; }
 .cp-informe.cp-informe-lista td.cp-izq { width: 45%; }
 .cp-informe-lista td:first-child { text-align: left; }
-.cp-informe-lista th:last-child:empty { background: #b5655f; }
+.cp-informe-lista th:last-child:empty { background: #c2367e; }
 .cp-informe-lista .cp-ocultar { opacity: 0.5; }
 .cp-informe-lista tr:hover .cp-ocultar { opacity: 0.9; }
 .cp-informe-lista .cp-sin-ean { font-size: 11px; white-space: normal; }
@@ -1580,7 +1580,7 @@ button:disabled {
 .cp-cupon-hasta { width: auto !important; display: inline-block; margin: 0 !important; font: inherit; font-size: 11px; padding: 1px 4px; border: 1px solid #d1d5db; border-radius: 4px; background: #fff; color: #1f2933; }
 .cp-cupon-sinfecha { font-style: italic; }
 .cp-cupon-promo { display: block; flex-basis: 100%; margin-top: 6px; font-size: 11px; line-height: 1.4; color: #4b5563; text-transform: none; letter-spacing: 0; font-weight: 400; }
-.cp-cupon-promo a { color: #b5655f; }
+.cp-cupon-promo a { color: #c2367e; }
 
 /* Fila con los precios de la revisión anterior (nuestra ficha no se pudo leer) */
 .cp-deantes-tag { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px; background: #e5e7eb; color: #4b5563; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; cursor: help; }
@@ -1588,14 +1588,14 @@ button:disabled {
 .cp-cambios { margin: 8px 0 12px; padding: 10px 12px; border-radius: 8px; background: #f1f6fb; border: 1px solid #d5e4f2; font-size: 12.5px; line-height: 1.5; color: #1f2933; }
 .cp-cambios > div { margin-top: 3px; }
 .cp-cambios .cp-rojo, .cp-cambios .cp-verde, .cp-cambios .cp-rosa { font-weight: 700; }
-.cp-cambios .cp-rojo { color: #b42318; } .cp-cambios .cp-verde { color: #067647; } .cp-cambios .cp-rosa { color: #b5655f; }
+.cp-cambios .cp-rojo { color: #b42318; } .cp-cambios .cp-verde { color: #067647; } .cp-cambios .cp-rosa { color: #c2367e; }
 
 .cp-dto-fuente.cp-dto-inactiva { color: #9ca3af; cursor: help; }
 
 /* Productos que solo tiene una de las dos webs, al final de la tabla */
 .cp-informe tr.cp-fila-solo td.cp-vacia { color: #c4c9d0; text-align: center; }
 .cp-informe .cp-no-esta { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #6b7280; }
-.cp-informe .cp-no-esta-nuestra { color: #b5655f; }
+.cp-informe .cp-no-esta-nuestra { color: #c2367e; }
 .cp-informe .cp-ocultar-fila { margin-left: 8px; padding: 0; border: 0; background: none; font: inherit; font-size: 10.5px; font-weight: 500; color: #9ca3af; text-decoration: underline; cursor: pointer; }
 .cp-ean-aviso.cp-aviso-rojo { background: #fdecec; border-color: #f5c2c0; color: #b42318; }
 .cp-ean-aviso.cp-aviso-rojo ul { margin: 4px 0 0 18px; padding: 0; }
