@@ -34,6 +34,7 @@ const LINEA = "FFE5E7EB";
 const TEXTO = "FF1F2933";
 const TEXTO_SUAVE = "FF6B7280";
 const ROJO = "FFB42318";
+const NEGRO = "FF4B5563";
 const PASADO_FONDO = "FFDFF4F7", PASADO = "FF0E7490";
 const AMBAR = "FFB45309";
 const AMBAR_FONDO = "FFFEF6E7";
@@ -278,9 +279,9 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       c("dto").font = fuente({ size: 9, bold: true, color: { argb: PASADO } });
       c("precio").note = `Nuestro precio está por debajo del PVP con el dto. autorizado (${coma(limite)} €).`;
     }
-    c("diff").font = fuente({ bold: true, color: { argb: f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO } });
-    c("barato").font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "La Tienda de Cosméticos" ? VERDE : TEXTO_SUAVE } });
-    c("igualar").font = fuente({ size: 9, bold: igualar.startsWith("No") || k.revisarPack, color: { argb: k.revisarPack ? AMBAR : igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
+    c("diff").font = fuente({ bold: true, color: { argb: f.diff > 0.01 ? NEGRO : f.diff < -0.01 ? VERDE : TEXTO } });
+    c("barato").font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROSA : masBarato === "La Tienda de Cosméticos" ? AZUL : TEXTO_SUAVE } });
+    c("igualar").font = fuente({ size: 9, bold: igualar.startsWith("No") || k.revisarPack, color: { argb: k.revisarPack ? AMBAR : igualar.startsWith("No") ? NEGRO : igualar ? VERDE : TEXTO_SUAVE } });
   });
 
   const ultima = CAB + orden.length;
