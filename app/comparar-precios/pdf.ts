@@ -1,6 +1,6 @@
 // PDF por marca con el mismo diseño que la tabla de la web y el Excel:
 // mismas columnas, cálculos (calcularFila) y colores. A4 apaisado, para descargar o enviar.
-import { calcularFila, explicaDtoMax, filaSoloEllos, type CuponExcel, type FilaExcel, type SoloEllosExcel } from "./excel";
+import { calcularFila, filaSoloEllos, type CuponExcel, type FilaExcel, type SoloEllosExcel } from "./excel";
 
 type RGB = [number, number, number];
 const AZUL: RGB = [18, 112, 182];
@@ -73,7 +73,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       return [
         f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : "", f.deAntes ? "DATO ANTERIOR (no se pudo leer nuestra ficha)" : "", VER_C24].filter(Boolean).join("\n"), eur(k.pvp) + (k.revisarPvp ? "\n(revisar precio)" : k.esPack ? "\nsuma de productos" : ""), k.limite != null ? eur(k.limite) : "-", k.miDto > 0.0005 ? `${eur(f.miPrecio)}\n-${pct(k.miDto)}` : eur(f.miPrecio),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
-        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}${explicaDtoMax(f, k, descuento) ? `\n${explicaDtoMax(f, k, descuento)!.replace(/−/g, "-")}` : ""}`, k.masBarato, k.igualar.replace(/−/g, "-"),
+        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}`, k.masBarato, k.igualar.replace(/−/g, "-"),
       ].filter((_, c) => hayCupon || c !== COL_CUPON);
     });
   // Sin cupón, su precio final es el mismo que el precio web: esa columna no sale.

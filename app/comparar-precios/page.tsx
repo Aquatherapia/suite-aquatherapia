@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { calcularFila, esPackFila, explicaDtoMaxLarga, explicaPvp, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
+import { calcularFila, esPackFila, explicaPvp, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
 import { construirPdf, nombrePdf } from "./pdf";
 import { construirExcelMarca, construirPdfMarca, filasParaMarca, nombreMarcaExcel, nombreMarcaPdf } from "./informe-marca";
 import { descuentoBoardfy, reglaBoardfyInactiva } from "./boardfy";
@@ -268,7 +268,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
                 {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}</td>}
                 <td className="cp-fuerte cp-pequena cp-rosa">{pctW(k.suDto)}</td>
-                <Celda className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")} tip={explicaDtoMaxLarga(f, k, descuento) ?? undefined}>
+                <Celda className={"cp-fuerte " + (k.bajoMinimo.suyo ? "cp-morado-fondo " : "") + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "")}>
                   {f.diff > 0.005 ? "+" : ""}{eur(f.diff)}
                 </Celda>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "Nosotros" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>

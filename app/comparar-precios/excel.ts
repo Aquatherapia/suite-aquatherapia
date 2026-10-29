@@ -97,17 +97,6 @@ export type FilaCalculada = {
   revisarPack: boolean; // pack con el precio final muy distinto al suyo: revisar nuestra suma
   masBarato: "Cosméticos24h" | "Nosotros" | "Igual"; igualar: string;
 };
-// Por qué no podemos igualar cuando venden por debajo de nuestro dto. autorizado
-// Si nuestro precio ya pasa del máximo, lo que queda es la diferencia de ahora; si no, la que quedaría al bajar al máximo.
-export function explicaDtoMax(f: { miPrecio: number; suPrecio: number; diff: number }, k: { limite: number | null; bajoMinimo: { suyo: boolean } }, descuento: number | null): string | null {
-  if (!k.bajoMinimo.suyo || k.limite == null || descuento == null) return null;
-  const d = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
-  const pct = `${String(descuento).replace(".", ",")} %`;
-  if (Math.abs(f.miPrecio - k.limite) <= 0.005) return `Ya estamos en el dto. autorizado (−${pct})`;
-  if (f.miPrecio < k.limite) return `Ya pasamos del dto. autorizado (−${pct})`;
-  return `Con el dto. autorizado (−${pct}): +${d(k.limite - f.suPrecio)}`;
-}
-
 // Packs y cofres: nuestro PVP es la suma de los productos sueltos, así que el dto. autorizado sobre ese PVP
 // y la comparación de PVP no tienen sentido; solo cuenta el precio final.
 // Solo por palabras de pack de verdad: «Dúo»/«Trío» suelen ser nombres de producto (p. ej. 550 Eye Contour Dúo),
@@ -115,16 +104,6 @@ export function explicaDtoMax(f: { miPrecio: number; suPrecio: number; diff: num
 const PACK = /\b(pack|set|kit|lote|estuche|cofre|coffret|bundle|caja|box)\b/i;
 export function esPackFila(f: { nombre: string }): boolean {
   return PACK.test(f.nombre);
-}
-
-// La misma explicación, larga, para el texto que sale al pasar por encima de la celda
-export function explicaDtoMaxLarga(f: { miPrecio: number; suPrecio: number; diff: number }, k: { limite: number | null; bajoMinimo: { suyo: boolean } }, descuento: number | null): string | null {
-  if (!k.bajoMinimo.suyo || k.limite == null || descuento == null) return null;
-  const d = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
-  const pct = `${String(descuento).replace(".", ",")} %`;
-  if (Math.abs(f.miPrecio - k.limite) <= 0.005) return `Ya estamos en nuestro descuento autorizado (−${pct}) y seguimos ${d(f.diff)} más caros: no podemos igualarlos.`;
-  if (f.miPrecio < k.limite) return `Ya pasamos de nuestro descuento autorizado (−${pct}) y aún seguimos ${d(f.diff)} más caros: no podemos igualarlos.`;
-  return `Bajando a nuestro descuento autorizado (−${pct}) seguiríamos ${d(k.limite - f.suPrecio)} más caros: no podemos igualarlos.`;
 }
 
 // Explicación del PVP distinto, diciendo quién lo tiene más bajo
@@ -301,9 +280,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       c("dto").font = fuente({ size: 9, bold: true, color: { argb: ROJO } });
       c("precio").note = `Nuestro precio está por debajo del PVP con el dto. autorizado (${coma(limite)} €).`;
     }
-    const explica = explicaDtoMaxLarga(f, k, descuento);
     if (k.bajoMinimo.suyo) c("diff").fill = relleno(MORADO_FONDO);
-    if (explica) c("diff").note = explica;
     c("diff").font = fuente({ bold: true, color: { argb: f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO } });
     c("barato").font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE } });
     c("igualar").font = fuente({ size: 9, bold: igualar.startsWith("No") || k.revisarPack, color: { argb: k.revisarPack ? AMBAR : igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
