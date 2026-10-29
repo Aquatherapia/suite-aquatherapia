@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { construirExcel, nombreArchivo } from "./excel";
 
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
@@ -160,6 +161,15 @@ ${packs.length ? `<h2>Packs que tienen ellos y tú no (${packs.length})</h2>
   if (win) { win.document.write(html); win.document.close(); }
 }
 
+async function descargarExcel(r: ResultadoMarca) {
+  const buf = await construirExcel(r.marca, r.comparaciones, r.soloEllos);
+  const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = nombreArchivo(r.marca);
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function MarcaBloque({
   r, ocultos, expandido, onToggle, mostrarTodos, onToggleMostrar, onExcluir, onIncluir, onMotivo, onVerificar, onDesverificar, onRenombrar, onRestaurarNombre,
 }: {
@@ -238,6 +248,13 @@ function MarcaBloque({
             title="Descargar PDF de esta marca"
           >
             PDF
+          </button>
+          <button
+            className="regen-btn"
+            onClick={e => { e.stopPropagation(); descargarExcel(r); }}
+            title="Descargar Excel de esta marca (formato de informe de marca)"
+          >
+            Excel
           </button>
           <span className="vp-chevron">{expandido ? "▲" : "▼"}</span>
         </div>
