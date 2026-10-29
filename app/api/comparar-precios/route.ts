@@ -486,13 +486,13 @@ function tonosDesdeFeed(filas: FilaFeed[] | undefined): FilaFeed[] | null {
 
 // Formatos de cada ficha activa según el feed (TSV con cabecera). Las fichas desactivadas no salen.
 // variante: lo que sigue al último « - » del título cuando la ficha tiene varias filas («30 ml»). null si no se pudo leer.
-type FilaFeed = { ean: string | null; precio: number; pvp: number; variante: string | null };
+type FilaFeed = { ean: string | null; precio: number; pvp: number; variante: string | null; marca: string };
 async function leerFeed(): Promise<Map<string, FilaFeed[]> | null> {
   try {
     const lineas = (await fetchTexto(FEED)).split(/\r?\n/);
     const cab = lineas[0].split("\t").map(c => c.trim().toLowerCase());
     const col = (k: string) => cab.indexOf(k);
-    const [iLink, iGtin, iTitulo, iPvp, iOferta] = [col("link"), col("gtin"), col("title"), col("price"), col("sale_price")];
+    const [iLink, iGtin, iTitulo, iPvp, iOferta, iMarca] = [col("link"), col("gtin"), col("title"), col("price"), col("sale_price"), col("brand")];
     if ([iLink, iGtin, iTitulo, iPvp].some(i => i < 0)) return null;
     const filas = new Map<string, (FilaFeed & { titulo: string })[]>();
     for (const linea of lineas.slice(1)) {
@@ -502,7 +502,7 @@ async function leerFeed(): Promise<Map<string, FilaFeed[]> | null> {
       const oferta = iOferta >= 0 ? parseFloat((c[iOferta] ?? "").replace(",", ".")) : NaN;
       const precio = Number.isFinite(oferta) && oferta > 0 ? oferta : pvp;
       if (!url || !Number.isFinite(precio) || precio <= 0) continue;
-      filas.set(url, [...(filas.get(url) ?? []), { ean: normalizarEan(c[iGtin]), precio, pvp: Number.isFinite(pvp) && pvp > 0 ? pvp : precio, variante: null, titulo: c[iTitulo] ?? "" }]);
+      filas.set(url, [...(filas.get(url) ?? []), { ean: normalizarEan(c[iGtin]), precio, pvp: Number.isFinite(pvp) && pvp > 0 ? pvp : precio, variante: null, marca: iMarca >= 0 ? (c[iMarca] ?? "").trim() : "", titulo: c[iTitulo] ?? "" }]);
     }
     const feed = new Map<string, FilaFeed[]>();
     for (const [url, fs] of filas) {
@@ -530,8 +530,8 @@ function miProductoDesdeFeed(url: string, filas: FilaFeed[]): MiProducto[] {
 // Enumera y lee los productos de una marca en la tienda propia.
 // Se lee despacio (pocas a la vez y con pausas): con 10 a la vez nuestra web cortaba y se perdían fichas.
 // Cada ficha se intenta 3 veces; las que siguen fallando se reintentan una a una al final, si queda tiempo.
-async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: number, feed: Map<string, FilaFeed[]> | null): Promise<{ productos: MiProducto[]; fallidas: string[]; sinPrecio: string[] }> {
-  const tokLower = normalizar(miToken);
+async function leerMisProductos(marca: Marca, sitemapXml: string, limiteMs: number, feed: Map<string, FilaFeed[]> | null): Promise<{ productos: MiProducto[]; fallidas: string[]; sinPrecio: string[] }> {
+  const tokLower = normalizar(marca.miToken);
   const urls = new Set<string>();
   const re = /<loc>([^<]+-p\d+)<\/loc>/gi;
   let m: RegExpExecArray | null;
@@ -540,6 +540,11 @@ async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: n
     const slug = url.split("/es/")[1] ?? "";
     if (normalizar(slug).includes(tokLower)) urls.add(url);
   }
+  // Además, las fichas que el feed pone de esa marca aunque su URL no lleve el nombre
+  // (p. ej. «TR 10 CAPILAR SOLUTION» con URLs …-tr10-p4026)
+  const clave = (t: string) => normalizar(t).replace(/[^a-z0-9]/g, "");
+  const marcas = new Set([clave(marca.nombre), clave(marca.miToken), clave(marca.slug)]);
+  for (const [url, filas] of feed ?? []) if (filas[0]?.marca && marcas.has(clave(filas[0].marca))) urls.add(url);
 
   const lista = Array.from(urls).slice(0, 300); // cota de seguridad
   const leidas = new Map<string, MiProducto[] | null | "sinPrecio">(); // null = ficha desactivada o sin precio
@@ -573,7 +578,15 @@ type SuProducto = { titulo: string; url: string; precio: number; tachado?: numbe
 // Lee los productos de una marca en Cosméticos24h (API Shopify pública)
 async function leerSusProductos(slug: string): Promise<SuProducto[] | { error: string }> {
   const url = `https://cosmeticos24h.com/collections/${slug}/products.json?limit=250`;
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
+  // Si su web frena por exceso de peticiones (429), se espera y se vuelve a intentar
+  let res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
+  for (const espera of [10_000, 30_000]) {
+    if (res.status !== 429) break;
+    const pide = Number(res.headers.get("retry-after")) * 1000;
+    await esperar(Number.isFinite(pide) && pide > 0 ? Math.min(pide, 60_000) : espera);
+    res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
+  }
+  if (res.status === 429) return { error: "Cosméticos24h ha frenado la lectura por exceso de peticiones" };
   if (!res.ok) return { error: `Cosméticos24h HTTP ${res.status}` };
   const data = await res.json();
   return (data.products ?? []).map((p: {
@@ -793,6 +806,13 @@ export async function POST(req: NextRequest) {
     } catch { /* si su portada no responde, se conserva el último */ }
 
     const nuevos: ResultadoMarca[] = [];
+    // Si la revisión falla, se conservan los datos de la anterior (con su fecha) y se avisa del error
+    const conError = (marca: Marca, error: string): ResultadoMarca => {
+      const ant = config.resultados.find(r => r.slug === marca.slug);
+      return ant && ant.comparaciones.length
+        ? { ...ant, error: `No se pudo revisar ahora (${error}). Se muestran los datos de la revisión anterior.` }
+        : { marca: marca.nombre, slug: marca.slug, error, comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() };
+    };
     for (const marca of objetivo) {
       try {
         const ocultos = new Set((config.excluidos[marca.slug] ?? []).map(e => e.suUrl));
@@ -802,13 +822,13 @@ export async function POST(req: NextRequest) {
         // 1) Sus productos (cosmeticos24h) — incluidos ocultos, para el backfill
         const suProdsAll = await leerSusProductos(marca.slug);
         if ("error" in suProdsAll) {
-          nuevos.push({ marca: marca.nombre, slug: marca.slug, error: suProdsAll.error, comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() });
+          nuevos.push(conError(marca, suProdsAll.error));
           continue;
         }
         const suPorUrl = new Map(suProdsAll.map(s => [s.url, s]));
 
         // 2) Mis productos (tienda propia)
-        const { productos: mis, fallidas, sinPrecio } = await leerMisProductos(marca.miToken, sitemapXml, limiteMis, feed);
+        const { productos: mis, fallidas, sinPrecio } = await leerMisProductos(marca, sitemapXml, limiteMis, feed);
 
         // 2a) EAN de sus productos (de la caché; los nuevos se leen ahora)
         const eanPendientes = await leerSusEans(suProdsAll.map(s => s.url), config.eanVariantes, limiteEans);
@@ -940,10 +960,10 @@ export async function POST(req: NextRequest) {
           misProductos: mis.length, susProductos: suProdsAll.length,
           revisadoEn: new Date().toISOString(),
           eanPendientes, misFallidas, sinPrecio,
-          cambios: anterior && !anterior.error ? cambiosDesde(anterior, comparaciones, soloEllos) : undefined,
+          cambios: anterior && anterior.comparaciones.length ? cambiosDesde(anterior, comparaciones, soloEllos) : undefined,
         });
       } catch (e) {
-        nuevos.push({ marca: marca.nombre, slug: marca.slug, error: String(e), comparaciones: [], soloEllos: [], misSinEmparejar: [], misProductos: 0, susProductos: 0, revisadoEn: new Date().toISOString() });
+        nuevos.push(conError(marca, String(e)));
       }
     }
 
