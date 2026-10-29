@@ -1,4 +1,4 @@
-// Descuento máximo por marca sacado de las reglas de Boardfy (29/10/2026), regla «Soy Más Caro»:
+// Descuento máximo por marca sacado de las reglas de Boardfy (29/10/2026), regla «Soy Más Caro» (solo las activas):
 // «Limite 0.90 PVR» = el precio no baja del 90 % del PVP = 10 % de descuento máximo.
 // Los packs, outlet y descontinuados tienen reglas propias en Boardfy y no están aquí.
 // Es el valor por defecto: en la app se puede cambiar marca a marca.
@@ -16,6 +16,14 @@ const LIMITES: Record<string, number> = {
   "tolure": 0.95, "tr10": 0.90, "utsukusy": 0.80,
 };
 
+// Marcas cuya regla «Soy Más Caro» está desactivada en Boardfy (comprobado el 29/10/2026):
+// Boardfy no les cambia el precio, así que no hay descuento máximo que aplicar.
+const INACTIVAS = new Set([
+  "advanced nutrition", "aroms nature", "atache", "bruno vassari", "byoode", "casmara", "conceptikal",
+  "eberling", "endor", "germaine de capuccini", "gernetic", "massada", "medik8", "mesoestetic",
+  "montibello", "perricone", "sothys",
+]);
+
 function normalizar(s: string): string {
   return s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -23,8 +31,15 @@ function normalizar(s: string): string {
 // Descuento máximo (en %) de Boardfy para una marca, o null si no tiene límite
 export function descuentoBoardfy(marca: string): number | null {
   const n = normalizar(marca);
+  if (reglaBoardfyInactiva(marca)) return null;
   for (const [k, limite] of Object.entries(LIMITES)) {
     if (n === k || n.startsWith(k + " ") || k.startsWith(n + " ")) return Math.round((1 - limite) * 1000) / 10;
   }
   return null;
+}
+
+// La regla de la marca existe pero está desactivada en Boardfy
+export function reglaBoardfyInactiva(marca: string): boolean {
+  const n = normalizar(marca);
+  return [...INACTIVAS].some(k => n === k || n.startsWith(k + " ") || k.startsWith(n + " "));
 }

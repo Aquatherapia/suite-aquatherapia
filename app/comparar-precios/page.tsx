@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { calcularFila, explicaDtoMaxLarga, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
 import { construirPdf, nombrePdf } from "./pdf";
-import { descuentoBoardfy } from "./boardfy";
+import { descuentoBoardfy, reglaBoardfyInactiva } from "./boardfy";
 
 type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
@@ -388,6 +388,7 @@ function MarcaBloque({
               onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
             />
             %{deBoardfy && descuento != null && <span className="cp-dto-fuente">Boardfy</span>}
+            {deBoardfy && descuento == null && reglaBoardfyInactiva(marca.nombre) && <span className="cp-dto-fuente cp-dto-inactiva" title="La regla «Soy Más Caro» de esta marca está desactivada en Boardfy: no hay descuento máximo. Puedes poner uno a mano.">Boardfy: regla desactivada</span>}
             {descuento == null && <span className="cp-dto-fuente cp-suave-txt">sin límite</span>}
           </label>
         </span>

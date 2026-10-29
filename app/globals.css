@@ -1584,3 +1584,5 @@ button:disabled {
 .cp-cambios > div { margin-top: 3px; }
 .cp-cambios .cp-rojo, .cp-cambios .cp-verde, .cp-cambios .cp-rosa { font-weight: 700; }
 .cp-cambios .cp-rojo { color: #b42318; } .cp-cambios .cp-verde { color: #067647; } .cp-cambios .cp-rosa { color: #b5655f; }
+
+.cp-dto-fuente.cp-dto-inactiva { color: #9ca3af; cursor: help; }
