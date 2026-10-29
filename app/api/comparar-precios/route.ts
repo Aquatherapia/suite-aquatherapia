@@ -12,6 +12,8 @@ const KV_KEY = "comparar-precios-config";
 
 const MI_WEB = "https://www.latiendadecosmeticos.com";
 const SITEMAP = `${MI_WEB}/sitemap.xml`;
+// Feed de nuestra web que usa Boardfy: una fila por formato/tono de cada ficha activa, con su EAN, precio y PVP
+const FEED = `${MI_WEB}/es/feed_detalles`;
 
 // Palabras que indican pack/lote: se excluyen de la comparación de precios
 const EXCLUIR = ["pack", "set", "kit", "lote", "duo", "dúo", "trio", "trío", "estuche", "bundle", "caja", "cofre", "coffret", "box", "programa", "rutina"];
@@ -306,7 +308,7 @@ async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promis
 const esperar = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 // Una ficha con varios formatos (50 ml / 30 ml) da un MiProducto por formato: mismo url, cada uno con su precio.
-// La web solo publica el EAN del primer formato (el que sale marcado); los demás van sin EAN.
+// La ficha solo publica el EAN de un formato (el del precio del JSON-LD, el más barato); el de los demás sale del feed.
 type MiProducto = {
   nombre: string; url: string; precio: number; pvp: number; esPack: boolean; ean: string | null; propiedades: string[];
   formato?: string; clave: string; descatalogado?: boolean | null; stock?: number | null;
@@ -434,7 +436,7 @@ function cambiosDesde(antes: ResultadoMarca, comparaciones: Comparacion[], soloE
 
 // Lee una ficha de la tienda propia (un MiProducto por formato). Lanza un error si la web no responde.
 // Devuelve null si la ficha está desactivada (o no tiene precio en el HTML) y "sinPrecio" si está activa a 0 €.
-async function leerMiFicha(url: string): Promise<MiProducto[] | null | "sinPrecio"> {
+async function leerMiFicha(url: string, filasFeed?: FilaFeed[]): Promise<MiProducto[] | null | "sinPrecio"> {
   const html = await fetchTexto(url);
   // Una ficha desactivada sigue abriéndose en la web (y en el sitemap), con el aviso
   // «Ups, este producto ha sido descatalogado» y precio 0 €: no se vende, no se compara
@@ -446,16 +448,21 @@ async function leerMiFicha(url: string): Promise<MiProducto[] | null | "sinPreci
   const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
   const nombre = slug.replace(/-/g, " ");
   const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
-  const ean = eanDesdeHtml(html);
+  const ean = (filasFeed?.length === 1 ? filasFeed[0].ean : null) ?? eanDesdeHtml(html);
   const formatos = formatosDesdeHtml(html);
   if (formatos.length >= 2) {
     // El precio del JSON-LD es el más bajo de todos los formatos: se pide el de cada uno
     const estados: Awaited<ReturnType<typeof estadoVariante>>[] = [];
     for (const f of formatos) estados.push(await estadoVariante(url, f.id));
     if (estados.every(e => e !== null)) {
+      // El EAN publicado es el del formato cuyo precio sale en el JSON-LD (no siempre el primero de la lista)
+      const conEsePrecio = estados.map((e, i) => Math.abs(e!.precio - precio) < 0.01 ? i : -1).filter(i => i >= 0);
+      const iEan = conEsePrecio.length === 1 ? conEsePrecio[0] : 0;
+      // El feed sí trae el EAN de cada formato: manda sobre el de la ficha
+      const eanFeed = (f: { titulo: string }) => filasFeed?.find(r => r.variante && (r.variante === f.titulo || tamano(r.variante) === tamano(f.titulo)))?.ean;
       return formatos.map((f, i): MiProducto => ({
         nombre: `${nombre} · ${f.titulo}`, url, precio: estados[i]!.precio, pvp: estados[i]!.pvp ?? estados[i]!.precio, esPack,
-        ean: i === 0 ? ean : null, propiedades: [f.id], formato: f.titulo, clave: `${url}#${f.id}`, descatalogado: estados[i]!.descatalogado, stock: estados[i]!.stock,
+        ean: eanFeed(f) ?? (i === iEan ? ean : null), propiedades: [f.id], formato: f.titulo, clave: `${url}#${f.id}`, descatalogado: estados[i]!.descatalogado, stock: estados[i]!.stock,
       }));
     }
   }
@@ -465,7 +472,48 @@ async function leerMiFicha(url: string): Promise<MiProducto[] | null | "sinPreci
 // Enumera y lee los productos de una marca en la tienda propia.
 // Se lee despacio (pocas a la vez y con pausas): con 10 a la vez nuestra web cortaba y se perdían fichas.
 // Cada ficha se intenta 3 veces; las que siguen fallando se reintentan una a una al final, si queda tiempo.
-async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: number): Promise<{ productos: MiProducto[]; fallidas: string[]; sinPrecio: string[] }> {
+// Formatos de cada ficha activa según el feed (TSV con cabecera). Las fichas desactivadas no salen.
+// variante: lo que sigue al último « - » del título cuando la ficha tiene varias filas («30 ml»). null si no se pudo leer.
+type FilaFeed = { ean: string | null; precio: number; pvp: number; variante: string | null };
+async function leerFeed(): Promise<Map<string, FilaFeed[]> | null> {
+  try {
+    const lineas = (await fetchTexto(FEED)).split(/\r?\n/);
+    const cab = lineas[0].split("\t").map(c => c.trim().toLowerCase());
+    const col = (k: string) => cab.indexOf(k);
+    const [iLink, iGtin, iTitulo, iPvp, iOferta] = [col("link"), col("gtin"), col("title"), col("price"), col("sale_price")];
+    if ([iLink, iGtin, iTitulo, iPvp].some(i => i < 0)) return null;
+    const filas = new Map<string, (FilaFeed & { titulo: string })[]>();
+    for (const linea of lineas.slice(1)) {
+      const c = linea.split("\t");
+      const url = c[iLink]?.trim();
+      const pvp = parseFloat((c[iPvp] ?? "").replace(",", "."));
+      const oferta = iOferta >= 0 ? parseFloat((c[iOferta] ?? "").replace(",", ".")) : NaN;
+      const precio = Number.isFinite(oferta) && oferta > 0 ? oferta : pvp;
+      if (!url || !Number.isFinite(precio) || precio <= 0) continue;
+      filas.set(url, [...(filas.get(url) ?? []), { ean: normalizarEan(c[iGtin]), precio, pvp: Number.isFinite(pvp) && pvp > 0 ? pvp : precio, variante: null, titulo: c[iTitulo] ?? "" }]);
+    }
+    const feed = new Map<string, FilaFeed[]>();
+    for (const [url, fs] of filas) {
+      feed.set(url, fs.map(({ titulo, ...f }) => ({ ...f, variante: fs.length > 1 && titulo.includes(" - ") ? titulo.slice(titulo.lastIndexOf(" - ") + 3).trim() : null })));
+    }
+    return feed.size ? feed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Ficha que no se pudo leer: sus datos de hoy según el feed (un MiProducto por formato, como al leerla)
+function miProductoDesdeFeed(url: string, filas: FilaFeed[]): MiProducto[] {
+  const nombre = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "").replace(/-/g, " ");
+  const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
+  if (filas.length >= 2 && filas.every(f => f.variante && TAMANO.test(f.variante))) {
+    return filas.slice(0, 6).map(f => ({ nombre: `${nombre} · ${f.variante}`, url, precio: f.precio, pvp: f.pvp, esPack, ean: f.ean, propiedades: [], formato: f.variante!, clave: `${url}#${f.variante}` }));
+  }
+  const f = [...filas].sort((a, b) => a.precio - b.precio)[0];
+  return [{ nombre, url, precio: f.precio, pvp: f.pvp, esPack, ean: f.ean, propiedades: [], clave: url }];
+}
+
+async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: number, feed: Map<string, FilaFeed[]> | null): Promise<{ productos: MiProducto[]; fallidas: string[]; sinPrecio: string[] }> {
   const tokLower = normalizar(miToken);
   const urls = new Set<string>();
   const re = /<loc>([^<]+-p\d+)<\/loc>/gi;
@@ -481,7 +529,7 @@ async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: n
   const intentar = async (url: string, pausas: number[]) => {
     for (let n = 0; n <= pausas.length; n++) {
       if (n > 0) { if (Date.now() + pausas[n - 1] > limiteMs) return; await esperar(pausas[n - 1]); }
-      try { leidas.set(url, await leerMiFicha(url)); return; } catch { /* la web tardó o falló */ }
+      try { leidas.set(url, await leerMiFicha(url, feed?.get(url))); return; } catch { /* la web tardó o falló */ }
     }
   };
   await enLotes(lista, 5, url => Date.now() < limiteMs ? intentar(url, [1_500, 4_000]) : Promise.resolve(), 250);
@@ -489,6 +537,11 @@ async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: n
     if (leidas.has(url) || Date.now() > limiteMs) continue;
     await esperar(1_000);
     await intentar(url, [3_000]);
+  }
+  // Las que no se pudieron leer pero están en el feed: se usan sus datos de hoy
+  for (const url of lista) {
+    const filas = feed?.get(url);
+    if (!leidas.has(url) && filas) leidas.set(url, miProductoDesdeFeed(url, filas));
   }
   return {
     productos: lista.flatMap(u => { const l = leidas.get(u); return Array.isArray(l) ? l : []; }),
@@ -714,6 +767,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `No se pudo leer el sitemap: ${e}` }, { status: 502 });
     }
 
+    const feed = await leerFeed();
+
     // El cupón de carrito puede cambiar (campañas): se vuelve a mirar en su web en cada revisión
     try {
       const d = await detectarCupon();
@@ -736,7 +791,7 @@ export async function POST(req: NextRequest) {
         const suPorUrl = new Map(suProdsAll.map(s => [s.url, s]));
 
         // 2) Mis productos (tienda propia)
-        const { productos: mis, fallidas, sinPrecio } = await leerMisProductos(marca.miToken, sitemapXml, limiteMis);
+        const { productos: mis, fallidas, sinPrecio } = await leerMisProductos(marca.miToken, sitemapXml, limiteMis, feed);
 
         // 2a) EAN de sus productos (de la caché; los nuevos se leen ahora)
         const eanPendientes = await leerSusEans(suProdsAll.map(s => s.url), config.eanVariantes, limiteEans);
