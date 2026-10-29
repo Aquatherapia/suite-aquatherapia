@@ -40,6 +40,7 @@ type Comparacion = {
   nombreEditado?: boolean; // true si el nombre mostrado lo ha escrito el usuario a mano
   porEan?: boolean;    // true si se emparejó por EAN (mismo código de barras en las dos webs)
   ean?: string;        // EAN con el que se emparejó
+  descatalogado?: boolean; // tu ficha está marcada como descatalogada en tu web
 };
 
 type SoloEllos = {
@@ -47,6 +48,7 @@ type SoloEllos = {
   precio: number;
   url: string;
   esPack: boolean;
+  ean?: string;
 };
 
 // Producto MÍO que no se ha podido emparejar con ninguno suyo
@@ -57,6 +59,8 @@ type MiSinEmparejar = {
   pvp?: number;
   esPack: boolean;
   sinEan?: boolean; // true si tu ficha no tiene EAN
+  ean?: string;
+  descatalogado?: boolean;
 };
 
 type ResultadoMarca = {
@@ -241,7 +245,53 @@ async function enLotes<T, R>(items: T[], limite: number, fn: (item: T) => Promis
   return out;
 }
 
-type MiProducto = { nombre: string; url: string; precio: number; pvp: number; esPack: boolean; ean: string | null };
+type MiProducto = { nombre: string; url: string; precio: number; pvp: number; esPack: boolean; ean: string | null; propiedades: string[] };
+
+// Combinaciones de propiedades (tono, formato…) de la ficha, para preguntar a la web por su estado.
+// Con una sola lista (lo normal) se devuelve cada valor; con varias, el primero de cada una.
+function propiedadesDesdeHtml(html: string): string[] {
+  const listas: string[][] = [];
+  const vistos = new Set<string>();
+  const re = /<ul[^>]*data-title="([^"]*)"[^>]*>([\s\S]*?)<\/ul>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    if (vistos.has(m[1])) continue; // la misma lista sale también en el módulo flotante
+    vistos.add(m[1]);
+    const ids = [...m[2].matchAll(/<li[^>]*class="[^"]*(?:unidad|color)[^"]*"[^>]*>\s*<a[^>]*data-id="(\d+)"/gi)].map(x => x[1]);
+    if (ids.length) listas.push(ids);
+  }
+  if (listas.length === 0) return [];
+  if (listas.length === 1) return listas[0].slice(0, 6);
+  return [listas.map(l => l[0]).join(",")];
+}
+
+// ¿Está descatalogada la ficha? La propia web lo dice al pedir el estado de cada variante
+// (lo mismo que pinta «Producto descatalogado» en la ficha). Cuenta como descatalogada si lo están
+// todas sus variantes. null si no se pudo saber.
+async function descatalogadoEnMiWeb(url: string, combinaciones: string[]): Promise<boolean | null> {
+  if (combinaciones.length === 0) return null;
+  const estados = await Promise.all(combinaciones.map(p => varianteDescatalogada(url, p)));
+  if (estados.some(e => e === null)) return null;
+  return estados.every(e => e === true);
+}
+
+async function varianteDescatalogada(url: string, propiedades: string): Promise<boolean | null> {
+  const id = url.match(/-p(\d+)$/)?.[1];
+  if (!id) return null;
+  try {
+    const res = await fetch(`${MI_WEB}/es/productos/actualizar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", "User-Agent": "Mozilla/5.0" },
+      body: new URLSearchParams({ id_producto: id, propiedades }),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const j = await res.json() as { descatalogado?: string | number };
+    return String(j.descatalogado) === "1";
+  } catch {
+    return null;
+  }
+}
 
 // Enumera y lee los productos de una marca en la tienda propia
 async function leerMisProductos(miToken: string, sitemapXml: string): Promise<MiProducto[]> {
@@ -264,7 +314,7 @@ async function leerMisProductos(miToken: string, sitemapXml: string): Promise<Mi
       const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
       const nombre = slug.replace(/-/g, " ");
       const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
-      return { nombre, url, precio, pvp: pvpDesdeHtml(html) ?? precio, esPack, ean: eanDesdeHtml(html) };
+      return { nombre, url, precio, pvp: pvpDesdeHtml(html) ?? precio, esPack, ean: eanDesdeHtml(html), propiedades: propiedadesDesdeHtml(html) };
     } catch {
       return null;
     }
@@ -536,7 +586,7 @@ export async function POST(req: NextRequest) {
           if (ocultos.has(s.url)) continue;
           const matches = variantesConEan(susEans(s.url), miPorEan).filter(m => !miUsados.has(m.mp.url));
           if (matches.length === 0) {
-            soloEllos.push({ titulo: s.titulo, precio: s.precio, url: s.url, esPack: s.esPack });
+            soloEllos.push({ titulo: s.titulo, precio: s.precio, url: s.url, esPack: s.esPack, ean: susEans(s.url).find(e => e) ?? undefined });
             continue;
           }
           for (const { i, ean, mp } of matches) {
@@ -557,7 +607,19 @@ export async function POST(req: NextRequest) {
         // 4) Mis productos que no tienen el mismo EAN que ninguno suyo
         const misSinEmparejar: MiSinEmparejar[] = mis
           .filter(m => !miUsados.has(m.url))
-          .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, pvp: m.pvp, esPack: m.esPack, sinEan: !m.ean }));
+          .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, pvp: m.pvp, esPack: m.esPack, sinEan: !m.ean, ean: m.ean ?? undefined }));
+
+        // 5) Fichas mías descatalogadas (una consulta por ficha, si queda tiempo)
+        if (Date.now() < limiteEans + 8_000) {
+          const misPorUrl = new Map(mis.map(m => [m.url, m]));
+          const urlsMias = [...comparaciones.map(c => c.miUrl), ...misSinEmparejar.map(m => m.url)];
+          const estados = new Map<string, boolean | null>();
+          await enLotes(urlsMias, 5, async url => {
+            estados.set(url, await descatalogadoEnMiWeb(url, misPorUrl.get(url)?.propiedades ?? []));
+          });
+          for (const c of comparaciones) if (estados.get(c.miUrl)) c.descatalogado = true;
+          for (const m of misSinEmparejar) if (estados.get(m.url)) m.descatalogado = true;
+        }
 
         // Ordenar: tú más caro primero; el resto por nombre
         comparaciones.sort((a, b) => b.diff - a.diff);

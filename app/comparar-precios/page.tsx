@@ -10,11 +10,12 @@ type Comparacion = {
   nombre: string; miPrecio: number; suPrecio: number; suPrecioTachado?: number;
   miPvp?: number; suPvp?: number; // PVP sin descuento (faltan en resultados guardados antes)
   suPrecioWeb?: number; // precio de su web antes del cupón de carrito (suPrecio ya lo lleva aplicado)
+  descatalogado?: boolean; // tu ficha está descatalogada en tu web
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
   verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
 };
-type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean };
-type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean; sinEan?: boolean };
+type SoloEllos = { titulo: string; precio: number; url: string; esPack: boolean; ean?: string };
+type MiSinEmparejar = { nombre: string; url: string; precio: number; esPack: boolean; sinEan?: boolean; ean?: string; descatalogado?: boolean };
 type ResultadoMarca = {
   marca: string; slug: string; error?: string;
   comparaciones: Comparacion[]; soloEllos: SoloEllos[]; misSinEmparejar: MiSinEmparejar[];
@@ -139,7 +140,7 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
-            <th>PVP</th><th>{descuento != null ? `Mínimo (−${pct})` : "Mínimo"}</th><th>Precio</th><th>Dto.</th>
+            <th>PVP</th><th>{descuento != null ? `Con dto. máx. (−${pct})` : "Con dto. máx."}</th><th>Precio</th><th>Dto.</th>
             <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">Precio web</th><th className="cp-h-ellos">{conCupon}</th><th className="cp-h-ellos">Dto. total</th>
             <th>Diferencia</th><th>Más barato</th><th className="cp-izq">¿Podemos igualar?</th><th>Ficha Cosméticos24h</th>
           </tr>
@@ -151,6 +152,7 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
               <tr key={i}>
                 <td className="cp-suave">{f.ean ?? ""}</td>
                 <td className="cp-izq">
+                  {f.descatalogado && <span className="cp-descat-tag" title="Tu ficha está marcada como descatalogada en tu web">Descatalogado</span>}
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
@@ -261,7 +263,7 @@ function MarcaBloque({
             <span className="vp-pill vp-pill-nuevo">{masCaro.length} caro{masCaro.length !== 1 ? "s" : ""}</span>
           )}
           {conBajoMinimo.length > 0 && (
-            <span className="vp-pill cp-pill-minimo" title={`Cosméticos24h vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento máximo`}>{conBajoMinimo.length} bajo nuestro mínimo</span>
+            <span className="vp-pill cp-pill-minimo" title={`Cosméticos24h vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento máximo`}>{conBajoMinimo.length} más allá de nuestro dto. máx.</span>
           )}
           {conPvpDistinto.length > 0 && (
             <span className="vp-pill cp-pill-pvp" title="El PVP sin descuento no coincide: puede que una tarifa no esté actualizada">{conPvpDistinto.length} PVP distinto{conPvpDistinto.length !== 1 ? "s" : ""}</span>
@@ -319,7 +321,7 @@ function MarcaBloque({
               {soloEllosReal.map((s, i) => (
                 <div key={i}>
                   <div className="cp-fila cp-solo">
-                    <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
+                    <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}{s.ean && <span className="cp-ean-linea">EAN {s.ean}</span>}</a>
                     <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
                     <div className="cp-acciones">
                       <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
@@ -338,7 +340,7 @@ function MarcaBloque({
               {packs.map((s, i) => (
                 <div key={i}>
                   <div className="cp-fila cp-solo">
-                    <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}</a>
+                    <a href={s.url} target="_blank" rel="noreferrer" className="cp-nombre">{s.titulo}{s.ean && <span className="cp-ean-linea">EAN {s.ean}</span>}</a>
                     <span className="cp-col-num cp-c24">{s.precio.toFixed(2)}€</span>
                     <div className="cp-acciones">
                       <button className="cp-ocultar" title="Ocultar" onClick={() => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })}>×</button>
@@ -363,9 +365,9 @@ function MarcaBloque({
                     <div key={i} className="cp-sinemp-item">
                       <div className="cp-oculto-info">
                         <a href={m.url} target="_blank" rel="noreferrer" className="cp-oculto-nombre">
-                          {m.esPack && <span className="cp-pack-tag">pack</span>}{m.nombre}
+                          {m.esPack && <span className="cp-pack-tag">pack</span>}{m.descatalogado && <span className="cp-descat-tag">Descatalogado</span>}{m.nombre}
                         </a>
-                        <div className="cp-oculto-precios">Tu precio: <strong>{m.precio.toFixed(2)}€</strong>{m.sinEan && <> · <span className="cp-sin-ean">tu ficha no tiene EAN</span></>}</div>
+                        <div className="cp-oculto-precios">Tu precio: <strong>{m.precio.toFixed(2)}€</strong>{m.ean ? <> · EAN {m.ean}</> : m.sinEan && <> · <span className="cp-sin-ean">tu ficha no tiene EAN</span></>}</div>
                       </div>
                     </div>
                   ))}

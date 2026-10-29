@@ -56,7 +56,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     (hayCupon ? ` · su precio final lleva el cupón de carrito del ${cuponTxt}` : ""), M, 21);
   doc.setFont("helvetica", "bold"); doc.setTextColor(...TEXTO);
   doc.text(`${orden.length} productos comparados  ·  ${masCaros} en los que vamos más caros  ·  ` +
-    (descuento != null ? `${bajo} que Cosméticos24h vende por debajo de nuestro mínimo (PVP -${dto})  ·  ` : "") +
+    (descuento != null ? `${bajo} que Cosméticos24h vende más barato que nuestro dto. máx. (PVP -${dto})  ·  ` : "") +
     `${pvpDist} con PVP distinto`, M, 27);
 
   const cab = (t: string, ellos = false) => ({ content: t, styles: { fillColor: ellos ? ROSA : AZUL } });
@@ -74,7 +74,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
         { content: "", colSpan: 4, styles: { fillColor: [255, 255, 255] } },
       ],
       [
-        cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `MÍNIMO (-${dto})` : "MÍNIMO"), cab("PRECIO"), cab("DTO."),
+        cab("EAN"), cab("PRODUCTO"), cab("PVP"), cab(descuento != null ? `CON DTO. MÁX. (-${dto})` : "CON DTO. MÁX."), cab("PRECIO"), cab("DTO."),
         cab("PVP", true), cab("PRECIO WEB", true), cab(hayCupon ? `PRECIO FINAL (${cupon!.codigo ?? "cupón"} -${num(cupon!.pct)} %)` : "PRECIO FINAL (sin cupón)", true), cab("DTO. TOTAL", true),
         cab("DIFERENCIA"), cab("MÁS BARATO"), cab("¿PODEMOS IGUALAR?"), cab("FICHA C24H"),
       ],
@@ -82,7 +82,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     body: orden.map((f, i) => {
       const k = calc[i];
       return [
-        f.ean ?? "", f.nombre, eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
+        f.ean ?? "", f.descatalogado ? `${f.nombre}\nDESCATALOGADO EN NUESTRA WEB` : f.nombre, eur(k.pvp), k.limite != null ? eur(k.limite) : "-", eur(f.miPrecio), pct(k.miDto),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), eur(f.suPrecio), pct(k.suDto),
         `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}`, k.masBarato, k.igualar.replace(/−/g, "-"), "Ver ficha",
       ];
@@ -105,6 +105,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       if ((c === 4 || c === 5) && k.bajoMinimo.mio) { if (c === 4) s.fillColor = ROJO_FONDO; s.textColor = ROJO; s.fontStyle = "bold"; }
       if ((c === 8 || c === 9) && k.bajoMinimo.suyo) { if (c === 8) s.fillColor = ROJO_FONDO; s.textColor = ROJO; }
       if ((c === 2 || c === 6) && k.pvpDistinto) { s.fillColor = AMBAR_FONDO; s.textColor = AMBAR; s.fontStyle = "bold"; }
+      if (c === 1 && f.descatalogado) s.textColor = ROJO;
       if (c === 10) s.textColor = f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO;
       if (c === 11) { s.textColor = k.masBarato === "Cosméticos24h" ? ROJO : k.masBarato === "Nosotros" ? VERDE : TEXTO_SUAVE; s.fontStyle = k.masBarato === "Igual" ? "normal" : "bold"; }
       if (c === 12) { s.textColor = k.igualar.startsWith("No") ? ROJO : VERDE; s.fontStyle = k.igualar.startsWith("No") ? "bold" : "normal"; }
@@ -121,7 +122,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
   // Leyenda
   let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
   const leyenda: [RGB, RGB, string][] = [
-    [ROJO_FONDO, ROJO, descuento != null ? `Precio por debajo de nuestro mínimo (PVP -${dto}, descuento máximo de la marca)` : "Esta marca no tiene descuento máximo"],
+    [ROJO_FONDO, ROJO, descuento != null ? `Precio más barato que nuestro PVP con el descuento máximo de la marca (-${dto})` : "Esta marca no tiene descuento máximo"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?)"],
   ];
   doc.setFontSize(7.5); doc.setFont("helvetica", "normal");
@@ -132,7 +133,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
     y += 5.5;
   }
   doc.setFont("helvetica", "italic"); doc.setTextColor(...TEXTO_SUAVE);
-  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Mínimo: PVP menos el descuento máximo de la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP. Precio final: el de su web con el cupón que aplican en el carrito. Dto. total: lo que rebajan sobre su PVP contando el cupón. Diferencia: nuestro precio menos su precio final.", 277), M, y);
+  doc.text(doc.splitTextToSize("PVP: precio sin descuento. Con dto. máx.: nuestro PVP con el descuento máximo al que podemos llegar en la marca (Boardfy o el puesto en la app). Precio web: el de su web, con su descuento sobre el PVP. Precio final: el de su web con el cupón que aplican en el carrito. Dto. total: lo que rebajan sobre su PVP contando el cupón. Diferencia: nuestro precio menos su precio final.", 277), M, y);
 
   // Lo que tienen ellos y nosotros no
   if (soloEllos.length > 0) {
@@ -147,11 +148,11 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       theme: "plain",
       styles: { font: "helvetica", fontSize: 8, textColor: TEXTO, cellPadding: 1.8 },
       headStyles: { fillColor: ROSA, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7, halign: "center" },
-      head: [["PRODUCTO", "PRECIO", "TIPO"]],
-      body: soloEllos.map(s => [s.titulo, eur(s.precio), s.esPack ? "Pack" : "Producto"]),
-      columnStyles: { 0: { halign: "left" }, 1: { cellWidth: 25, halign: "right" }, 2: { cellWidth: 22, halign: "center", textColor: TEXTO_SUAVE } },
+      head: [["EAN", "PRODUCTO", "PRECIO", "TIPO"]],
+      body: soloEllos.map(s => [s.ean ?? "", s.titulo, eur(s.precio), s.esPack ? "Pack" : "Producto"]),
+      columnStyles: { 0: { cellWidth: 28, halign: "left", textColor: TEXTO_SUAVE }, 1: { halign: "left" }, 2: { cellWidth: 25, halign: "right" }, 3: { cellWidth: 22, halign: "center", textColor: TEXTO_SUAVE } },
       didParseCell: d => { if (d.section === "body" && d.row.index % 2 === 1) d.cell.styles.fillColor = CEBRA; },
-      didDrawCell: d => { if (d.section === "body" && d.column.index === 0) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: soloEllos[d.row.index].url }); },
+      didDrawCell: d => { if (d.section === "body" && d.column.index === 1) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: soloEllos[d.row.index].url }); },
     });
   }
 

@@ -1200,7 +1200,7 @@ button:disabled {
   font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   color: #b42318; background: #fdecec; border-radius: 4px; vertical-align: middle; cursor: help;
 }
-.cp-pill-minimo { background: #fdecec; color: #b42318; }
+.cp-pill-minimo { background: #f1ebfb; color: #6b3fb5; }
 .cp-dto { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: var(--muted); }
 .cp-dto-input { width: 44px; padding: 2px 4px; font-size: 11px; text-align: right; margin: 0; }
 .cp-dto-pct { display: block; font-size: 10px; font-weight: 600; color: var(--muted); }
@@ -1525,3 +1525,6 @@ button:disabled {
   .cp-layout .left-col { grid-template-columns: 1fr; }
   .cp-layout .left-col > * { grid-column: 1 !important; grid-row: auto !important; }
 }
+
+.cp-descat-tag { display: inline-block; margin: 0 6px 2px 0; padding: 1px 6px; border-radius: 4px; background: #374151; color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: middle; }
+.cp-ean-linea { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
