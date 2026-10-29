@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { calcularFila, explicaDtoMaxLarga, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
+import { calcularFila, explicaDtoMaxLarga, explicaPvp, construirExcel, nombreArchivo, type CuponExcel } from "./excel";
 import { construirPdf, nombrePdf } from "./pdf";
 import { descuentoBoardfy, reglaBoardfyInactiva } from "./boardfy";
 
@@ -286,13 +286,13 @@ function TablaInforme({ filas, descuento, cupon }: { filas: Comparacion[]; descu
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <a href={f.suUrl} target="_blank" rel="noreferrer" className="cp-enlace-c24">Ver en Cosméticos24h ↗</a>
                 </td>
-                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. máx. ni se compara el PVP." : k.pvpDistinto ? `PVP distinto: nuestro ${eur(k.pvp)}, el suyo ${eur(k.suPvp)}. ¿Tarifa sin actualizar?` : undefined}>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : ""} tip={k.esPack ? "Pack: nuestro PVP es la suma de los productos sueltos, así que no se aplica el dto. máx. ni se compara el PVP." : k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>
                   {eur(k.pvp)}{k.revisarPvp && <span className="cp-revisar-pvp">(revisar precio)</span>}
                 </Celda>
                 <td className="cp-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
                 <Celda className={"cp-fuerte" + (k.bajoMinimo.mio ? " cp-rojo-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. máx. (${eur(k.limite)}).` : undefined}>{eur(f.miPrecio)}</Celda>
                 <td className={"cp-dto-azul" + (k.bajoMinimo.mio ? " cp-rojo" : "")}>{pctW(k.miDto)}</td>
-                <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? `PVP distinto: el suyo ${eur(k.suPvp)}, el nuestro ${eur(k.pvp)}.` : undefined}>{eur(k.suPvp)}</Celda>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
                 {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}</td>}
                 <td className="cp-fuerte cp-pequena cp-rosa">{pctW(k.suDto)}</td>

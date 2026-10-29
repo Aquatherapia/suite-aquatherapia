@@ -126,6 +126,14 @@ export function explicaDtoMaxLarga(f: { miPrecio: number; suPrecio: number; diff
   return `Bajando a nuestro descuento máximo (−${pct}) seguiríamos ${d(k.limite - f.suPrecio)} más caros: no podemos igualarlos.`;
 }
 
+// Explicación del PVP distinto, diciendo quién lo tiene más bajo
+export function explicaPvp(pvp: number, suPvp: number): string {
+  const d = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+  return pvp < suPvp
+    ? `Nuestro PVP es más bajo: ${d(pvp)} frente a ${d(suPvp)} el suyo. ¿Tarifa sin actualizar?`
+    : `Su PVP es más bajo: ${d(suPvp)} frente a ${d(pvp)} el nuestro. ¿Tarifa sin actualizar?`;
+}
+
 export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalculada {
   const pvp = f.miPvp ?? f.miPrecio;
   const esPack = esPackFila(f);
@@ -135,7 +143,8 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
   // Si vamos más caros: ¿llegamos a su precio final sin pasar nuestro descuento máximo?
   // Se da también el descuento total sobre nuestro PVP con el que quedaríamos.
   const dtoIgualar = pvp > 0 ? 1 - f.suPrecio / pvp : 0;
-  const igualar = f.diff <= 0.01 ? ""
+  const igualar = f.diff < -0.01 ? "Tenemos bien el precio"
+    : f.diff <= 0.01 ? "Tenemos bien el precio (mismo precio)"
     : esPack ? `Pack: habría que bajar ${coma(f.diff)} €`
     : limite == null || f.suPrecio >= limite - 0.005 ? `Sí, bajando ${coma(f.diff)} € (dto. total ${pctTexto(dtoIgualar)})`
     : `No: haría falta un ${pctTexto(dtoIgualar)} (máx. ${pct})`;
@@ -275,7 +284,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
         if (!(key === "pvp" && k.revisarPvp)) c(key).font = fuente({ bold: true, color: { argb: AMBAR } });
       }
       c("pvp").alignment = { ...c("pvp").alignment, wrapText: true };
-      c("pvp").note = `PVP distinto: nuestro ${coma(pvp)} €, el suyo ${coma(suPvp)} €. ¿Tarifa sin actualizar?`;
+      c("pvp").note = explicaPvp(pvp, suPvp);
     }
     if (k.bajoMinimo.mio && limite != null) {
       c("precio").fill = relleno(ROJO_FONDO);
