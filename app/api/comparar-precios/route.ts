@@ -84,6 +84,7 @@ type ResultadoMarca = {
   eanPendientes?: number;
   misFallidas?: number; // fichas nuestras que no se pudieron leer en esta revisión
   cambios?: Cambios;    // qué ha cambiado respecto a la revisión anterior
+  sinPrecio?: string[]; // fichas nuestras activas con precio 0 € (URL)
 };
 
 type Excluido = {
@@ -432,10 +433,16 @@ function cambiosDesde(antes: ResultadoMarca, comparaciones: Comparacion[], soloE
 }
 
 // Lee una ficha de la tienda propia (un MiProducto por formato). Lanza un error si la web no responde.
-async function leerMiFicha(url: string): Promise<MiProducto[] | null> {
+// Devuelve null si la ficha está desactivada (o no tiene precio en el HTML) y "sinPrecio" si está activa a 0 €.
+async function leerMiFicha(url: string): Promise<MiProducto[] | null | "sinPrecio"> {
   const html = await fetchTexto(url);
+  // Una ficha desactivada sigue abriéndose en la web (y en el sitemap), con el aviso
+  // «Ups, este producto ha sido descatalogado» y precio 0 €: no se vende, no se compara
+  if (html.includes("ha sido descatalogado")) return null;
   const precio = precioDesdeHtml(html);
   if (precio === null) return null;
+  // Activa pero a 0 €: se avisa para ponerle precio
+  if (precio <= 0) return "sinPrecio";
   const slug = (url.split("/es/")[1] ?? "").replace(/-p\d+$/, "");
   const nombre = slug.replace(/-/g, " ");
   const esPack = EXCLUIR.some(w => nombre.toLowerCase().includes(w));
@@ -458,7 +465,7 @@ async function leerMiFicha(url: string): Promise<MiProducto[] | null> {
 // Enumera y lee los productos de una marca en la tienda propia.
 // Se lee despacio (pocas a la vez y con pausas): con 10 a la vez nuestra web cortaba y se perdían fichas.
 // Cada ficha se intenta 3 veces; las que siguen fallando se reintentan una a una al final, si queda tiempo.
-async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: number): Promise<{ productos: MiProducto[]; fallidas: string[] }> {
+async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: number): Promise<{ productos: MiProducto[]; fallidas: string[]; sinPrecio: string[] }> {
   const tokLower = normalizar(miToken);
   const urls = new Set<string>();
   const re = /<loc>([^<]+-p\d+)<\/loc>/gi;
@@ -470,7 +477,7 @@ async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: n
   }
 
   const lista = Array.from(urls).slice(0, 300); // cota de seguridad
-  const leidas = new Map<string, MiProducto[] | null>(); // null = la ficha no tiene precio
+  const leidas = new Map<string, MiProducto[] | null | "sinPrecio">(); // null = ficha desactivada o sin precio
   const intentar = async (url: string, pausas: number[]) => {
     for (let n = 0; n <= pausas.length; n++) {
       if (n > 0) { if (Date.now() + pausas[n - 1] > limiteMs) return; await esperar(pausas[n - 1]); }
@@ -484,8 +491,9 @@ async function leerMisProductos(miToken: string, sitemapXml: string, limiteMs: n
     await intentar(url, [3_000]);
   }
   return {
-    productos: lista.flatMap(u => leidas.get(u) ?? []),
+    productos: lista.flatMap(u => { const l = leidas.get(u); return Array.isArray(l) ? l : []; }),
     fallidas: lista.filter(u => !leidas.has(u)),
+    sinPrecio: lista.filter(u => leidas.get(u) === "sinPrecio"),
   };
 }
 
@@ -728,7 +736,7 @@ export async function POST(req: NextRequest) {
         const suPorUrl = new Map(suProdsAll.map(s => [s.url, s]));
 
         // 2) Mis productos (tienda propia)
-        const { productos: mis, fallidas } = await leerMisProductos(marca.miToken, sitemapXml, limiteMis);
+        const { productos: mis, fallidas, sinPrecio } = await leerMisProductos(marca.miToken, sitemapXml, limiteMis);
 
         // 2a) EAN de sus productos (de la caché; los nuevos se leen ahora)
         const eanPendientes = await leerSusEans(suProdsAll.map(s => s.url), config.eanVariantes, limiteEans);
@@ -859,7 +867,7 @@ export async function POST(req: NextRequest) {
           comparaciones, soloEllos, misSinEmparejar,
           misProductos: mis.length, susProductos: suProdsAll.length,
           revisadoEn: new Date().toISOString(),
-          eanPendientes, misFallidas,
+          eanPendientes, misFallidas, sinPrecio,
           cambios: anterior && !anterior.error ? cambiosDesde(anterior, comparaciones, soloEllos) : undefined,
         });
       } catch (e) {

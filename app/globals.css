@@ -1550,8 +1550,7 @@ button:disabled {
 
 /* Cabecera fija: cada tabla tiene su propio scroll (alto de la pantalla) y su cabecera se queda arriba,
    así al pasar a otra marca se ve la cabecera de esa marca */
-.cp-informe-scroll { max-height: calc(100vh - 90px); overflow: auto; overscroll-behavior: auto; }
-.cp-informe thead { position: sticky; top: 0; z-index: 3; }
+
 .cp-informe .cp-informe-grupos th:not(.cp-g-nos):not(.cp-g-ellos) { background: #fff; }
 .cp-cupon-directo { display: block; flex-basis: 100%; margin-top: 4px; font-size: 11px; font-weight: 600; color: #067647; text-transform: none; letter-spacing: 0; }
 .cp-cupon-directo.cp-cupon-codigo { color: #b45309; }
@@ -1586,3 +1585,13 @@ button:disabled {
 .cp-cambios .cp-rojo { color: #b42318; } .cp-cambios .cp-verde { color: #067647; } .cp-cambios .cp-rosa { color: #b5655f; }
 
 .cp-dto-fuente.cp-dto-inactiva { color: #9ca3af; cursor: help; }
+
+/* Productos que solo tiene una de las dos webs, al final de la tabla */
+.cp-informe tr.cp-fila-solo td.cp-vacia { color: #c4c9d0; text-align: center; }
+.cp-informe .cp-no-esta { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: #6b7280; }
+.cp-informe .cp-no-esta-nuestra { color: #b5655f; }
+.cp-informe .cp-ocultar-fila { margin-left: 8px; padding: 0; border: 0; background: none; font: inherit; font-size: 10.5px; font-weight: 500; color: #9ca3af; text-decoration: underline; cursor: pointer; }
+.cp-ean-aviso.cp-aviso-rojo { background: #fdecec; border-color: #f5c2c0; color: #b42318; }
+.cp-ean-aviso.cp-aviso-rojo ul { margin: 4px 0 0 18px; padding: 0; }
+.cp-ean-aviso.cp-aviso-rojo a { color: #b42318; }
+.cp-informe .cp-ambar-texto { color: #b45309; }
