@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
+import { normalizar, TAMANO, tamano, emparejarSinEan } from "./emparejar";
 
 // Leer las fichas de una marca despacio (para que nuestra web no corte) tarda varios minutos.
 // Con Fluid compute, Vercel Hobby permite hasta 300 s.
@@ -41,6 +42,7 @@ type Comparacion = {
   verificado?: boolean; // true si el usuario ha confirmado a mano que es el mismo producto
   nombreEditado?: boolean; // true si el nombre mostrado lo ha escrito el usuario a mano
   porEan?: boolean;    // true si se emparejó por EAN (mismo código de barras en las dos webs)
+  porParecido?: "referencia" | "nombre"; // emparejado solo, sin EAN común: por número de referencia o por nombre
   ean?: string;        // EAN con el que se emparejó
   descatalogado?: boolean; // tu ficha está marcada como descatalogada en tu web
   stock?: number;          // unidades que quedan (solo se guarda si está descatalogada)
@@ -183,9 +185,6 @@ async function guardarConfig(config: Config) {
 }
 
 // ── Normalización ──────────────────────────────────────────────────────
-function normalizar(s: string): string {
-  return s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
-}
 
 // ── Utilidades de red ──────────────────────────────────────────────────
 async function fetchTexto(url: string): Promise<string> {
@@ -351,7 +350,6 @@ function formatosDesdeHtml(html: string): { id: string; titulo: string }[] {
   return items.every(x => TAMANO.test(x.titulo)) ? items : [];
 }
 
-const TAMANO = /(\d+(?:[.,]\d+)?)\s*(ml|gr|g|uds?|unidades|l)\b/i;
 
 // Precio, PVP y estado de un formato, preguntando a la web (lo mismo que hace la ficha al elegir formato)
 async function estadoVariante(url: string, propiedades: string): Promise<{ precio: number; pvp: number | null; descatalogado: boolean; stock: number | null } | null> {
@@ -382,11 +380,6 @@ function stockDe(v: unknown): number | null {
   return v === "" || v == null || !Number.isFinite(n) ? null : Math.max(0, Math.round(n));
 }
 
-// Tamaño de un formato para comparar entre webs: «Tarro 30 ml» y «30 ml» → "30ml"
-function tamano(t: string): string {
-  const m = t.toLowerCase().replace(",", ".").match(TAMANO);
-  return m ? m[1] + m[2].replace(/^gr$/, "g").replace(/^(uds?|unidades)$/, "ud") : normalizar(t);
-}
 
 // ¿Está descatalogada la ficha? La propia web lo dice al pedir el estado de cada variante
 // (lo mismo que pinta «Producto descatalogado» en la ficha). Cuenta como descatalogada si lo están
@@ -874,7 +867,7 @@ export async function POST(req: NextRequest) {
           miDeFila.set(c, mp);
         };
 
-        // 3) Solo se compara lo que tiene el mismo EAN en las dos webs.
+        // 3) Primero se compara lo que tiene el mismo EAN en las dos webs.
         // Se usa el precio de la variante (tono/formato) que lleva ese EAN.
         // Un producto suyo con varios tonos puede casar con varias fichas mías (una fila por cada una).
         // Si la ficha mía tiene varios formatos, los que no tienen EAN se emparejan por tamaño
@@ -908,7 +901,21 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // 4) Mis productos que no tienen el mismo EAN que ninguno suyo
+        // 3b) Lo que no casó por EAN porque a una de las dos fichas le falta: por referencia o por nombre
+        {
+          const conFilaYa = new Set(comparaciones.map(c => c.suUrl));
+          const suyosLibres = suProdsAll.filter(s => !ocultos.has(s.url) && !conFilaYa.has(s.url));
+          const miosLibres = mis.filter(m => !miUsados.has(m.clave));
+          for (const p of emparejarSinEan(suyosLibres, miosLibres, susEans, marca)) {
+            if (miUsados.has(p.mp.clave)) continue;
+            anadirFila(p.s, p.i, undefined, p.mp);
+            const c = comparaciones[comparaciones.length - 1];
+            c.porParecido = p.por;
+            c.confianza = Math.round(p.confianza * 100) / 100;
+          }
+        }
+
+        // 4) Mis productos que no se han podido emparejar con ninguno suyo
         const misSinEmparejarMp = mis.filter(m => !miUsados.has(m.clave));
         const misSinEmparejar: MiSinEmparejar[] = misSinEmparejarMp
           .map(m => ({ nombre: m.nombre, url: m.url, precio: m.precio, pvp: m.pvp, esPack: m.esPack, sinEan: !m.ean, ean: m.ean ?? undefined, formato: m.formato, descatalogado: m.descatalogado ?? undefined, stock: m.descatalogado && m.stock != null ? m.stock : undefined }));
