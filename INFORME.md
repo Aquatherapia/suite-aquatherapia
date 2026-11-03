@@ -374,13 +374,22 @@ Cruza **tus precios** (latiendadecosmeticos.com) con los de **Cosméticos24h**, 
 - **Tu web**: lee tu `sitemap.xml`, filtra los productos cuyo slug contiene el nombre de la marca, y de cada ficha extrae el precio del **JSON-LD (schema.org)**. Tu web es a medida (nginx+PHP, sin Cloudflare) y expone JSON-LD en cada producto → scraping fiable.
 - **Cosméticos24h**: API pública de Shopify `/collections/{slug}/products.json` (igual que el Agente 2).
 
-### Emparejamiento solo por EAN (oct 2026)
-Solo se comparan productos con el **mismo EAN en las dos webs**. Así no hay equívocos: ya no se empareja por nombre ni hay enlaces manuales.
+### Emparejamiento por EAN (oct 2026)
+Solo se comparan productos con el **mismo EAN en las dos webs**. Así no hay equívocos. Lo que no tiene EAN en una de las dos webs se empareja después por referencia o nombre (ver abajo); no hay enlaces manuales.
 - **Tu EAN**: el `gtin13` del JSON-LD (o del microdato) de cada ficha, leído en la misma petición que el precio.
 - **Su EAN**: el listado de la colección de Shopify no trae el `barcode`, pero `/products/{handle}.json` sí, **uno por variante** (tono/formato). Se pide producto a producto (4 a la vez; se para a los 45 s o si Shopify responde 429) y se guarda en Upstash (`eanVariantes`), así cada producto solo se lee una vez.
 - Se usa el **precio de la variante que tiene ese EAN** (en maquillaje cada tono lleva su EAN y su precio) y el nombre lleva el tono (« · 02 - Natural»).
 - Los códigos de menos de 7 cifras no cuentan como EAN (en algunos packs ponen su código interno). Se comparan sin ceros a la izquierda.
-- Lo que no casa por EAN va a «Tienen ellos y tú no» (suyos) o a «Tus productos sin el mismo EAN» (tuyos; avisa si tu ficha no tiene EAN).
+- Lo que no casa por EAN pasa por el **emparejamiento automático sin EAN** (abajo). Lo que sigue sin pareja va a «Tienen ellos y tú no» (suyos) o a «Tus productos sin el mismo EAN» (tuyos).
+
+### Emparejamiento automático sin EAN (nov 2026)
+Cuando a una de las dos fichas le falta el EAN (o el suyo es un código interno), la app la empareja sola, sin enlaces manuales (`app/api/comparar-precios/emparejar.ts`):
+- **Por referencia del fabricante**: el mismo número en los dos nombres («824», «65A», «5C»…), si va al principio de los dos o tiene 3 cifras o más. Con 1-2 cifras en otra posición, el nombre también tiene que parecerse.
+- **Por nombre**: si ninguno de los dos lleva referencia y los nombres coinciden en un 75 % de las palabras (sin contar la marca, tamaños ni palabras vacías).
+- **Seguridad**: mismo formato (50 ml con 50 ml), los dos pack o ninguno, pareja única en las dos webs (si hay empate no se empareja) y, si las dos fichas tienen EAN distinto, nunca se emparejan.
+- Las filas llevan la etiqueta «por referencia» o «por nombre». Si alguna está mal, se oculta con ×.
+- Prueba con los 66 productos de Maria Galland enlazados a mano el 29/10/2026: 59 se emparejan solos y bien, más el 824 Radiance Blush (que a mano no se dejaba), y ninguno mal. Los 7 restantes tienen referencias distintas en las dos webs o nombres en otro idioma.
+- Al añadir una marca, su primera revisión arranca sola. Después se revisa cada día a las 5:00 (Vercel Cron).
 - La primera revisión de una marca tarda más. Si no da tiempo a leer todos sus EAN, sale un aviso con cuántos faltan y se completan en la siguiente revisión.
 - Los enlaces manuales de antes siguen guardados en Upstash (`mapeos`) pero ya no se usan.
 

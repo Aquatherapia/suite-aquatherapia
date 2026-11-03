@@ -14,7 +14,7 @@ type Comparacion = {
   descatalogado?: boolean; // tu ficha está descatalogada en tu web
   stock?: number;          // unidades que quedan si está descatalogada
   diff: number; confianza: number; miUrl: string; suUrl: string; esPack?: boolean; manual?: boolean;
-  verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; ean?: string;
+  verificado?: boolean; nombreEditado?: boolean; porEan?: boolean; porParecido?: "referencia" | "nombre"; ean?: string;
   deAntes?: string; // la ficha no se pudo leer: fila de la revisión de esa fecha
 };
 type SoloEllos = { titulo: string; precio: number; tachado?: number; url: string; esPack: boolean; ean?: string };
@@ -247,6 +247,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <td className="cp-suave">{f.ean ?? ""}</td>
                 <td className="cp-izq">
                   {f.descatalogado && <EtiquetaDescat stock={f.stock} />}
+                  {f.porParecido && <span className="cp-auto-tag" title={f.porParecido === "referencia" ? "Emparejado solo por el número de referencia del fabricante: a una de las dos fichas le falta el EAN" : "Emparejado solo por el nombre: a una de las dos fichas le falta el EAN"}>{f.porParecido === "referencia" ? "por referencia" : "por nombre"}</span>}
                   {f.deAntes && <span className="cp-deantes-tag" title={`Nuestra ficha no se pudo leer en esta revisión: precios de la revisión del ${fechaCorta(f.deAntes)}`}>dato anterior</span>}
                   <a href={f.miUrl} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
                   <span className="cp-enlaces">
@@ -309,8 +310,8 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                   {m.esPack && <span className="cp-pack-tag">pack</span>}
                   {m.descatalogado && <EtiquetaDescat stock={m.stock} />}
                   <a href={m.url} target="_blank" rel="noreferrer" className="cp-prod">{m.nombre}</a>
-                  <span className="cp-no-esta" title={m.ean ? "Cosméticos24h no tiene ningún producto con este EAN" : "Nuestra ficha no tiene EAN: no se puede saber si lo venden"}>
-                    {m.ean ? "No está en Cosméticos24h" : "Sin EAN: no se puede comparar"}
+                  <span className="cp-no-esta" title={m.ean ? "Cosméticos24h no tiene ningún producto con este EAN ni con la misma referencia" : "Nuestra ficha no tiene EAN y no se ha encontrado en Cosméticos24h por referencia ni por nombre"}>
+                    {m.ean ? "No está en Cosméticos24h" : "Sin EAN ni pareja por referencia o nombre"}
                   </span>
                 </td>
                 <td className="cp-azul">{eur(pvp)}</td>
@@ -589,7 +590,10 @@ export default function CompararPrecios() {
       body: JSON.stringify({ action: "addMarca", nombre: nuevaMarca.trim(), slug: nuevoSlug.trim(), miToken: nuevoSlug.trim() }),
     });
     setConfig(await res.json());
+    const slug = nuevoSlug.trim();
     setNuevaMarca(""); setNuevoSlug(""); setSlugManual(false);
+    // La primera revisión de la marca nueva arranca sola
+    await revisar(slug);
   }
 
 
@@ -732,14 +736,14 @@ export default function CompararPrecios() {
         {/* ── Columna derecha ── */}
         <div className="right-col">
           <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-            <span>La revisión es <strong>marca a marca</strong>: usa el botón "Revisar" de cada marca. Cada marca muestra <strong>su propia fecha</strong> de revisión.</span>
+            <span>Todas las marcas se <strong>revisan solas cada día a las 5:00</strong> y los productos se emparejan solos (por EAN y, si falta, por referencia o nombre). El botón "Revisar" solo hace falta si quieres los datos al momento.</span>
           </div>
 
           {error && <div className="error">{error}</div>}
 
           {(config?.marcas.length ?? 0) === 0 && !revisando && (
             <p style={{ color: "var(--muted)", fontSize: 14, marginTop: 20 }}>
-              Añade una marca y pulsa "Revisar" para comparar precios.
+              Añade una marca: se revisa sola al momento y después cada día.
             </p>
           )}
 
