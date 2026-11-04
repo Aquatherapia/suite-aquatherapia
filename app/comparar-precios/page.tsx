@@ -262,7 +262,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <Celda className={"cp-fuerte cp-azul" + (k.bajoMinimo.mio ? " cp-pasado-fondo" : "")} tip={k.bajoMinimo.mio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. autorizado (${eur(k.limite)}).` : undefined}>
                   {eur(f.miPrecio)}{k.miDto > 0.0005 && <small className={"cp-dto-celda cp-dto-azul" + (k.bajoMinimo.mio ? " cp-pasado" : "")}>−{pctW(k.miDto)}</small>}
                 </Celda>
-                <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}</Celda>
+                <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}{k.pvpDistinto && <small className="cp-dto-celda cp-sin-actualizar">PVP sin actualizar</small>}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
                 {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}{k.suDto > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDto)}</small>}</td>}
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "La Tienda de Cosméticos" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
