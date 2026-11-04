@@ -1,11 +1,11 @@
 // Informe para enviar a la marca: productos que Cosméticos24h vende por debajo del descuento autorizado.
 // Lleva nuestro PVP, el descuento autorizado, el precio mínimo que sale de ahí y todos sus precios,
-// con los enlaces a las dos fichas. No lleva nuestro precio de venta ni notas. En Excel y en PDF.
+// nuestro precio con descuento (La Tienda de Cosméticos), con los enlaces a las dos fichas. Sin notas. En Excel y en PDF.
 import { calcularFila, type CuponExcel, type FilaExcel } from "./excel";
 
 export type FilaMarca = {
   ean: string; producto: string; miUrl: string; suUrl: string;
-  pvp: number; minimo: number; suPvp: number; suWeb: number; suDtoWeb: number; suFinal: number; suDto: number;
+  pvp: number; minimo: number; miPrecio: number; miDto: number; suPvp: number; suWeb: number; suDtoWeb: number; suFinal: number; suDto: number;
   dtoSobrePvp: number; // lo que rebajan sobre nuestro PVP (el oficial de la marca)
   porDebajo: number;   // € por debajo del precio mínimo autorizado
 };
@@ -18,7 +18,7 @@ export function filasParaMarca(filas: FilaExcel[], descuento: number | null): Fi
     .filter(({ k }) => k.bajoMinimo.suyo && !k.esPack && k.limite != null)
     .map(({ f, k }) => ({
       ean: f.ean ?? "", producto: f.nombre, miUrl: f.miUrl, suUrl: f.suUrl,
-      pvp: k.pvp, minimo: k.limite!, suPvp: k.suPvp, suWeb: k.suWeb, suDtoWeb: k.suDtoWeb, suFinal: f.suPrecio, suDto: k.suDto,
+      pvp: k.pvp, minimo: k.limite!, miPrecio: f.miPrecio, miDto: k.miDto, suPvp: k.suPvp, suWeb: k.suWeb, suDtoWeb: k.suDtoWeb, suFinal: f.suPrecio, suDto: k.suDto,
       dtoSobrePvp: k.pvp > 0 ? 1 - f.suPrecio / k.pvp : 0,
       porDebajo: Math.round((k.limite! - f.suPrecio) * 100) / 100,
     }))
@@ -65,6 +65,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
     { t: "PVP", w: 11, grupo: "nos", v: f => f.pvp, fmt: EUROS },
     { t: `DTO. AUTORIZADO`, w: 12, grupo: "nos", v: () => descuento / 100, fmt: PORC },
     { t: "PRECIO MÍNIMO AUTORIZADO", w: 14, grupo: "nos", v: f => f.minimo, fmt: EUROS },
+    { t: "PRECIO CON DTO. LA TIENDA DE COSMÉTICOS", w: 16, grupo: "nos", v: f => f.miPrecio, fmt: EUROS },
     { t: "PVP", w: 11, grupo: "ellos", v: f => f.suPvp, fmt: EUROS },
     { t: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", w: 13, grupo: "ellos", v: f => f.suWeb, fmt: EUROS },
     ...(hayCupon ? [{ t: "DTO.", w: 8, grupo: "ellos" as const, v: (f: FilaMarca) => f.suDtoWeb, fmt: PORC }, { t: textoCupon(cupon), w: 18, grupo: "ellos" as const, v: (f: FilaMarca) => f.suFinal, fmt: EUROS }] : []),
@@ -84,7 +85,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
 
   // Fila 5: bloques; fila 6: cabeceras
   const grupos: Record<Col["grupo"], [string, string, string]> = {
-    base: ["", "FFFFFFFF", AZUL], nos: ["MARCA (PVP Y DTO. AUTORIZADO)", FONDO_AZUL, AZUL], ellos: ["COSMÉTICOS24H", FONDO_ROSA, ROSA], fin: ["DIFERENCIA Y ENLACES", FONDO_GRIS, GRIS],
+    base: ["", "FFFFFFFF", AZUL], nos: ["MARCA (PVP Y DTO. AUTORIZADO) Y LA TIENDA DE COSMÉTICOS", FONDO_AZUL, AZUL], ellos: ["COSMÉTICOS24H", FONDO_ROSA, ROSA], fin: ["DIFERENCIA Y ENLACES", FONDO_GRIS, GRIS],
   };
   let ini = 0;
   while (ini < cols.length) {
@@ -150,14 +151,14 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
   doc.setFont("helvetica", "bold"); doc.setTextColor(...P_TEXTO);
   doc.text(resumen(datos.length, descuento), M, 26);
 
-  // Bloques: base (2) · marca (3) · Cosméticos24h (2 o 3) · por debajo del mínimo (1)
+  // Bloques: base (2) · marca y nuestro precio (4) · Cosméticos24h (2 o 3) · por debajo del mínimo (1)
   // Su dto. va bajo cada precio; bajo el precio final, el dto. total.
   // Enlaces bajo el nombre: «Ver en La Tienda de Cosméticos» y «Ver en Cosméticos24h»
   const nEllos = hayCupon ? 3 : 2;
-  const grupoDe = (c: number): "base" | "nos" | "ellos" | "fin" => c < 2 ? "base" : c < 5 ? "nos" : c < 5 + nEllos ? "ellos" : "fin";
-  const colFin = 5 + nEllos;
+  const grupoDe = (c: number): "base" | "nos" | "ellos" | "fin" => c < 2 ? "base" : c < 6 ? "nos" : c < 6 + nEllos ? "ellos" : "fin";
+  const colFin = 6 + nEllos;
   const cuerpo = datos.map(f => [
-    f.ean, `${f.producto}\n${VER_LTC}\n${VER_C24}`, eur(f.pvp), pct(descuento / 100), eur(f.minimo),
+    f.ean, `${f.producto}\n${VER_LTC}\n${VER_C24}`, eur(f.pvp), pct(descuento / 100), eur(f.minimo), f.miDto > 0.0005 ? `${eur(f.miPrecio)}\n-${pct(f.miDto)}` : eur(f.miPrecio),
     eur(f.suPvp), f.suDtoWeb > 0.0005 ? `${eur(f.suWeb)}\n-${pct(f.suDtoWeb)}` : eur(f.suWeb), ...(hayCupon ? [`${eur(f.suFinal)}\n-${pct(f.suDto)}`] : []),
     eur(f.porDebajo),
   ]);
@@ -171,13 +172,13 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
     head: [
       [
         { content: "", colSpan: 2, styles: { fillColor: [255, 255, 255] } },
-        { content: "MARCA (PVP Y DTO. AUTORIZADO)", colSpan: 3, styles: { fillColor: P_F_AZUL, textColor: P_AZUL } },
+        { content: "MARCA (PVP Y DTO. AUTORIZADO) Y LA TIENDA DE COSMÉTICOS", colSpan: 4, styles: { fillColor: P_F_AZUL, textColor: P_AZUL } },
         { content: "COSMÉTICOS24H", colSpan: nEllos, styles: { fillColor: P_F_ROSA, textColor: P_ROSA } },
         { content: "", styles: { fillColor: [255, 255, 255] } },
       ],
       [
         cab("EAN", P_AZUL), cab("PRODUCTO", P_AZUL),
-        cab("PVP", P_AZUL), cab("DTO.\nAUTORIZADO", P_AZUL), cab("PRECIO MÍNIMO\nAUTORIZADO", P_AZUL),
+        cab("PVP", P_AZUL), cab("DTO.\nAUTORIZADO", P_AZUL), cab("PRECIO MÍNIMO\nAUTORIZADO", P_AZUL), cab("PRECIO CON DTO.\nLA TIENDA DE\nCOSMÉTICOS", P_AZUL),
         cab("PVP", P_ROSA), cab(hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", P_ROSA), ...(hayCupon ? [cab(textoCupon(cupon), P_ROSA)] : []),
         cab("POR DEBAJO\nDEL MÍNIMO", P_GRIS),
       ],
@@ -186,7 +187,7 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
     // Anchos fijos para que los importes no se partan; el producto se queda con el resto
     columnStyles: Object.fromEntries([
       [0, { cellWidth: 22, halign: "left", textColor: P_SUAVE }], [1, { halign: "left" }],
-      ...Array.from({ length: 3 + nEllos }, (_, i) => [2 + i, { cellWidth: i === 1 || i === 2 ? 19 : 16 }]),
+      ...Array.from({ length: 4 + nEllos }, (_, i) => [2 + i, { cellWidth: i === 1 || i === 2 || i === 3 ? 19 : 16 }]),
       [colFin, { cellWidth: 20 }],
     ]),
     didParseCell: d => {
