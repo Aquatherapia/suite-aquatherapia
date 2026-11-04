@@ -390,7 +390,7 @@ Cuando a una de las dos fichas le falta el EAN (o el suyo es un código interno)
 - **Seguridad**: mismo formato (50 ml con 50 ml), los dos pack o ninguno, pareja única en las dos webs (si hay empate no se empareja) y, si las dos fichas tienen EAN distinto, nunca se emparejan.
 - Las filas llevan la etiqueta «por referencia» o «por nombre». Si alguna está mal, se oculta con ×.
 - Prueba con los 66 productos de Maria Galland enlazados a mano el 29/10/2026: 59 se emparejan solos y bien, más el 824 Radiance Blush (que a mano no se dejaba), y ninguno mal. Los 7 restantes tienen referencias distintas en las dos webs o nombres en otro idioma.
-- Al añadir una marca, su primera revisión arranca sola. Después se revisa cada día a las 5:00 (Vercel Cron).
+- Al añadir una marca, su primera revisión arranca sola. Después se revisa a mano con el botón "Revisar" (nov 2026: se quitó el cron de las 5:00 de `vercel.json`; la ruta `/api/cron/comparar-precios` sigue ahí por si se vuelve a activar).
 - La primera revisión de una marca tarda más. Si no da tiempo a leer todos sus EAN, sale un aviso con cuántos faltan y se completan en la siguiente revisión.
 - Los enlaces manuales de antes siguen guardados en Upstash (`mapeos`) pero ya no se usan.
 
