@@ -7,7 +7,7 @@ export type FilaMarca = {
   ean: string; producto: string; miUrl: string; suUrl: string;
   pvp: number; minimo: number; miPrecio: number; miDto: number; suPvp: number; suWeb: number; suDtoWeb: number; suFinal: number; suDto: number;
   dtoSobrePvp: number; // lo que rebajan sobre nuestro PVP (el oficial de la marca)
-  porDebajo: number;   // € por debajo del precio mínimo autorizado
+  porDebajo: number;   // € por debajo del precio mínimo autorizado (positivo; en el informe sale en negativo: -7,92 €)
   pvpDistinto: boolean; // su PVP no es el de la marca (¿tarifa sin actualizar?)
 };
 
@@ -73,7 +73,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
     { t: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", w: 13, grupo: "ellos", v: f => f.suWeb, fmt: EUROS },
     ...(hayCupon ? [{ t: "DTO.", w: 8, grupo: "ellos" as const, v: (f: FilaMarca) => f.suDtoWeb, fmt: PORC }, { t: textoCupon(cupon), w: 18, grupo: "ellos" as const, v: (f: FilaMarca) => f.suFinal, fmt: EUROS }] : []),
     { t: "DTO. TOTAL", w: 10, grupo: "ellos", v: f => f.suDto, fmt: PORC },
-    { t: "POR DEBAJO DEL MÍNIMO", w: 14, grupo: "ellos", v: f => f.porDebajo, fmt: EUROS },
+    { t: "POR DEBAJO DEL MÍNIMO", w: 14, grupo: "ellos", v: f => -f.porDebajo, fmt: EUROS },
     { t: "FICHA EN LA TIENDA DE COSMÉTICOS", w: 21, grupo: "fin", v: f => ({ text: "Ver ficha ↗", hyperlink: f.miUrl }) },
     { t: "FICHA EN COSMÉTICOS24H", w: 18, grupo: "fin", v: f => ({ text: "Ver ficha ↗", hyperlink: f.suUrl }) },
   ];
@@ -165,7 +165,7 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
   const cuerpo = datos.map(f => [
     f.ean, `${f.producto}\n${VER_LTC}\n${VER_C24}`, eur(f.pvp), pct(descuento / 100), eur(f.minimo), f.miDto > 0.0005 ? `${eur(f.miPrecio)}\n-${pct(f.miDto)}` : eur(f.miPrecio),
     f.pvpDistinto ? `${eur(f.suPvp)}\nPVP sin actualizar` : eur(f.suPvp), f.suDtoWeb > 0.0005 ? `${eur(f.suWeb)}\n-${pct(f.suDtoWeb)}` : eur(f.suWeb), ...(hayCupon ? [`${eur(f.suFinal)}\n-${pct(f.suDto)}`] : []),
-    eur(f.porDebajo),
+    eur(-f.porDebajo),
   ]);
   const cab = (t: string, color: RGB) => ({ content: t, styles: { fillColor: color } });
   autoTable(doc, {
