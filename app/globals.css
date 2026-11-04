@@ -1516,6 +1516,7 @@ button:disabled {
 .cp-informe .cp-precio-enlace:hover { text-decoration: underline; }
 .cp-informe td.cp-bajo-aut { background: #fdecec !important; color: #b91c1c; }
 .cp-informe .cp-dto-celda { display: block; font-size: 10px; font-weight: 700; margin-top: 1px; }
+.cp-informe .cp-sin-actualizar { font-weight: 600; white-space: nowrap; }
 @media (max-width: 640px) {
   .cp-wrap .vp-accordion-header { flex-wrap: wrap; gap: 8px; }
   .cp-wrap .vp-accordion-right { flex: 1 1 100%; min-width: 0; flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
