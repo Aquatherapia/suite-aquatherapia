@@ -68,7 +68,7 @@ export async function construirExcelMarca(marca: string, filas: FilaExcel[], des
     { t: "PVP", w: 11, grupo: "nos", v: f => f.pvp, fmt: EUROS },
     { t: `DTO. AUTORIZADO`, w: 12, grupo: "nos", v: () => descuento / 100, fmt: PORC },
     { t: "PRECIO MÍNIMO AUTORIZADO", w: 14, grupo: "nos", v: f => f.minimo, fmt: EUROS },
-    { t: "PRECIO CON DTO. LA TIENDA DE COSMÉTICOS", w: 16, grupo: "tienda", v: f => f.miPrecio, fmt: EUROS },
+    { t: "PRECIO CON DTO.", w: 16, grupo: "tienda", v: f => f.miPrecio, fmt: EUROS },
     { t: "PVP", w: 11, grupo: "ellos", v: f => f.pvpDistinto ? `${f.suPvp.toFixed(2).replace(".", ",")} €\nPVP sin actualizar` : f.suPvp, fmt: EUROS },
     { t: hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", w: 13, grupo: "ellos", v: f => f.suWeb, fmt: EUROS },
     ...(hayCupon ? [{ t: "DTO.", w: 8, grupo: "ellos" as const, v: (f: FilaMarca) => f.suDtoWeb, fmt: PORC }, { t: textoCupon(cupon), w: 18, grupo: "ellos" as const, v: (f: FilaMarca) => f.suFinal, fmt: EUROS }] : []),
@@ -183,7 +183,7 @@ export async function construirPdfMarca(marca: string, filas: FilaExcel[], descu
       ],
       [
         cab("EAN", P_AZUL), cab("PRODUCTO", P_AZUL),
-        cab("PVP", P_AZUL), cab("DTO.\nAUTORIZADO", P_AZUL), cab("PRECIO MÍNIMO\nAUTORIZADO", P_AZUL), cab("PRECIO CON DTO.\nLA TIENDA DE\nCOSMÉTICOS", P_AZUL_OSCURO),
+        cab("PVP", P_AZUL), cab("DTO.\nAUTORIZADO", P_AZUL), cab("PRECIO MÍNIMO\nAUTORIZADO", P_AZUL), cab("PRECIO\nCON DTO.", P_AZUL_OSCURO),
         cab("PVP", P_ROSA), cab(hayCupon ? "PRECIO CON DTO." : "PRECIO FINAL CON DTO.", P_ROSA), ...(hayCupon ? [cab(textoCupon(cupon), P_ROSA)] : []),
         cab("POR DEBAJO\nDEL MÍNIMO", P_ROSA),
       ],
