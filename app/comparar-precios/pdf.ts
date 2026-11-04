@@ -71,7 +71,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       return [
         f.ean ?? "", [f.nombre, f.descatalogado ? `DESCATALOGADO EN NUESTRA WEB${f.stock != null ? ` (${f.stock} u)` : ""}${f.stock === 0 ? " · SIN STOCK: DESACTIVAR FICHA" : ""}` : "", f.deAntes ? "DATO ANTERIOR (no se pudo leer nuestra ficha)" : "", VER_C24].filter(Boolean).join("\n"), eur(k.pvp) + (k.revisarPvp ? "\n(revisar precio)" : k.esPack ? "\nsuma de productos" : ""), k.limite != null ? eur(k.limite) : "-", k.miDto > 0.0005 ? `${eur(f.miPrecio)}\n-${pct(k.miDto)}` : eur(f.miPrecio),
         eur(k.suPvp), k.suDtoWeb > 0.0005 ? `${eur(k.suWeb)}\n-${pct(k.suDtoWeb)}` : eur(k.suWeb), k.suDto > 0.0005 ? `${eur(f.suPrecio)}\n-${pct(k.suDto)}` : eur(f.suPrecio),
-        `${f.diff > 0.005 ? "+" : ""}${eur(f.diff)}`, k.masBarato, k.igualar.replace(/−/g, "-"),
+        `${k.diferencia > 0.005 ? "+" : ""}${eur(k.diferencia)}` + (k.bajoAutorizado != null ? `\n${eur(k.bajoAutorizado)} bajo dto. autorizado` : ""), k.masBarato, k.igualar.replace(/−/g, "-"),
       ].filter((_, c) => hayCupon || c !== COL_CUPON);
     });
   // Sin cupón, su precio final es el mismo que el precio web: esa columna no sale.
@@ -118,7 +118,7 @@ export async function construirPdf(marca: string, filas: FilaExcel[], soloEllos:
       if (c === 4 && k.bajoMinimo.mio) { s.fillColor = PASADO_FONDO; s.textColor = PASADO; s.fontStyle = "bold"; }
       if ((c === 2 || c === 5) && k.pvpDistinto) { s.fillColor = AMBAR_FONDO; s.textColor = AMBAR; s.fontStyle = "bold"; }
       if (c === 1 && f.descatalogado) s.textColor = ROJO;
-      if (c === 8) s.textColor = f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO;
+      if (c === 8) { s.textColor = f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO; if (k.bajoAutorizado != null) { s.fillColor = [253, 236, 236]; s.textColor = ROJO; } }
       if (c === 9) { s.textColor = k.masBarato === "Cosméticos24h" ? ROJO : k.masBarato === "La Tienda de Cosméticos" ? VERDE : TEXTO_SUAVE; s.fontStyle = k.masBarato === "Igual" ? "normal" : "bold"; }
       if (c === 10) { s.textColor = k.revisarPack ? AMBAR : k.igualar.startsWith("No") ? ROJO : VERDE; s.fontStyle = k.igualar.startsWith("No") || k.revisarPack ? "bold" : "normal"; }
     },
