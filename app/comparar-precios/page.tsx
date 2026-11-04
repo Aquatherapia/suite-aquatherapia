@@ -230,13 +230,13 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
             <th colSpan={2} />
             <th colSpan={3} className="cp-g-nos">La Tienda de Cosméticos</th>
             <th colSpan={conCupon ? 3 : 2} className="cp-g-ellos">Cosméticos24h</th>
-            <th colSpan={3} className="cp-g-fin">Comparación</th>
+            <th colSpan={4} className="cp-g-fin">Comparación</th>
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
             <th>PVP</th><th className="cp-tip" data-tip="Nuestro PVP con el descuento autorizado de la marca (el que sale junto al nombre de la marca)">{descuento != null ? `Con dto. autorizado (−${pct})` : "Con dto. autorizado"}</th><th>Precio final</th>
             <th className="cp-h-ellos">PVP</th><th className="cp-h-ellos">{conCupon ? "Precio con dto." : "Precio final con dto."}</th>{conCupon && <th className={"cp-h-ellos" + (cupon?.condiciones ? " cp-tip" : "")} data-tip={cupon?.condiciones}>{conCupon}</th>}
-            <th className="cp-h-fin">Diferencia</th><th className="cp-h-fin">Más barato</th><th className="cp-izq cp-h-fin">¿Podemos igualar?</th>
+            <th className="cp-h-fin">Más barato</th><th className="cp-h-fin cp-tip" data-tip="Su precio final menos el nuestro: en negativo, Cosméticos24h es más barato">Diferencia con nosotros</th><th className="cp-h-fin cp-tip" data-tip="Cuánto queda su precio por debajo de nuestro PVP con el descuento autorizado">Por debajo del dto. autorizado</th><th className="cp-izq cp-h-fin">¿Podemos igualar?</th>
           </tr>
         </thead>
         <tbody>
@@ -265,14 +265,13 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <Celda className={k.pvpDistinto ? "cp-ambar" : "cp-rosa"} tip={k.pvpDistinto ? explicaPvp(k.pvp, k.suPvp) : undefined}>{eur(k.suPvp)}</Celda>
                 <td className="cp-rosa">{eur(k.suWeb)}{k.suDtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDtoWeb)}</small>}</td>
                 {conCupon && <td className="cp-fuerte cp-rosa">{eur(f.suPrecio)}{k.suDto > 0.0005 && <small className="cp-dto-celda">−{pctW(k.suDto)}</small>}</td>}
-                <Celda className={"cp-fuerte " + (f.diff > 0.01 ? "cp-rojo" : f.diff < -0.01 ? "cp-verde" : "") + (k.bajoAutorizado != null ? " cp-bajo-aut" : "")}
-                  tip={k.bajoAutorizado != null ? `${k.notaDiferencia}: ${eur(k.bajoAutorizado)} por debajo.` : "Su precio final menos el nuestro: en negativo, Cosméticos24h es más barato."}>
-                  {k.diferencia > 0.005 ? "+" : ""}{eur(k.diferencia)}
-                  <small className={"cp-dif-nota" + (k.bajoAutorizado != null ? " cp-dif-alerta" : "")}>
-                    {k.bajoAutorizado != null ? `${eur(k.bajoAutorizado)} bajo dto. autorizado` : k.notaDiferencia}
-                  </small>
-                </Celda>
                 <td className={"cp-centro cp-pequena " + (k.masBarato === "Cosméticos24h" ? "cp-fuerte cp-rojo" : k.masBarato === "La Tienda de Cosméticos" ? "cp-fuerte cp-verde" : "cp-suave")}>{k.masBarato}</td>
+                <Celda className={"cp-fuerte " + (f.diff > 0.005 ? "cp-rojo" : f.diff < -0.005 ? "cp-verde" : "")} tip="Su precio final menos el nuestro: en negativo, Cosméticos24h es más barato.">
+                  {k.diferencia > 0.005 ? "+" : ""}{eur(k.diferencia)}
+                </Celda>
+                <Celda className={k.bajoAutorizado != null ? "cp-fuerte cp-bajo-aut" : "cp-suave"} tip={k.bajoAutorizado != null ? `${k.notaDiferencia}: ${eur(k.bajoAutorizado)} por debajo.` : undefined}>
+                  {k.bajoAutorizado != null ? eur(k.bajoAutorizado) : "—"}
+                </Celda>
                 <td className={"cp-izq cp-pequena " + (k.revisarPack ? "cp-fuerte cp-ambar-texto" : k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
               </tr>
             );
@@ -296,7 +295,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <td className="cp-rosa">{eur(pvp)}</td>
                 <td className="cp-rosa">{eur(x.precio)}{dtoWeb > 0.0005 && <small className="cp-dto-celda">−{pctW(dtoWeb)}</small>}</td>
                 {conCupon && <td className="cp-fuerte cp-rosa">{eur(final)}{pvp > 0 && 1 - final / pvp > 0.0005 && <small className="cp-dto-celda">−{pctW(1 - final / pvp)}</small>}</td>}
-                {vacias(2)}
+                {vacias(3)}
                 <td className="cp-izq cp-pequena cp-rosa cp-fuerte">{x.esPack ? "Pack que no tenemos" : "Posible novedad"}</td>
               </tr>
             );
@@ -322,7 +321,7 @@ function TablaInforme({ filas, soloEllos, soloNosotros, descuento, cupon, onOcul
                 <td className="cp-azul-suave">{limite != null ? eur(limite) : "—"}</td>
                 <td className="cp-fuerte cp-azul">{eur(m.precio)}{pvp > 0 && 1 - m.precio / pvp > 0.0005 && <small className="cp-dto-celda cp-dto-azul">−{pctW(1 - m.precio / pvp)}</small>}</td>
                 {vacias(conCupon ? 3 : 2)}
-                {vacias(2)}
+                {vacias(3)}
                 <td className="cp-izq cp-pequena cp-suave">{m.ean ? "Solo en La Tienda de Cosméticos" : ""}</td>
               </tr>
             );
@@ -377,7 +376,7 @@ function MarcaBloque({
 
 
 
-  const masCaro = r.comparaciones.filter(c => c.diff > 0.01);
+  const masCaro = r.comparaciones.filter(c => c.diff > 0.005);
   const conPvpDistinto = r.comparaciones.filter(pvpDistinto);
   const conBajoMinimo = r.comparaciones.filter(c => bajoMinimo(c, descuento));
   const paraDesactivar = [...r.comparaciones, ...(r.misSinEmparejar ?? [])].filter(x => x.descatalogado && x.stock === 0).length;
@@ -520,7 +519,7 @@ function MarcaBloque({
                             <span>
                               Tú <strong>{o.miPrecio?.toFixed(2)}€</strong> · C24h <strong>{o.suPrecio?.toFixed(2)}€</strong>
                               {o.miPrecio != null && o.suPrecio != null && (
-                                <span className={o.miPrecio - o.suPrecio > 0.01 ? "cp-caro" : o.miPrecio - o.suPrecio < -0.01 ? "cp-barato" : ""}>
+                                <span className={o.miPrecio - o.suPrecio > 0.005 ? "cp-caro" : o.miPrecio - o.suPrecio < -0.005 ? "cp-barato" : ""}>
                                   {" "}({o.miPrecio - o.suPrecio > 0 ? "+" : ""}{(o.miPrecio - o.suPrecio).toFixed(2)}€)
                                 </span>
                               )}

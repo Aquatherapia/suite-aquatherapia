@@ -129,8 +129,8 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
   // Pack con un precio final muy distinto al suyo (más de un 5 %): puede que la suma de nuestro pack esté mal
   const revisarPack = esPack && f.suPrecio > 0 && Math.abs(f.diff) / f.suPrecio > 0.05;
   const igualar = revisarPack ? `Pack: revisar precio (un ${pctTexto(Math.abs(f.diff) / f.suPrecio)} ${f.diff < 0 ? "más barato" : "más caro"} que ellos)`
-    : f.diff < -0.01 ? "Mejor precio"
-    : f.diff <= 0.01 ? "Mismo precio"
+    : f.diff < -0.005 ? "Mejor precio"
+    : f.diff <= 0.005 ? "Mismo precio"
     : esPack ? `Pack: habría que bajar ${coma(f.diff)} €`
     : limite == null || f.suPrecio >= limite - 0.005 ? `Sí, bajando ${coma(f.diff)} € (dto. total ${pctTexto(dtoIgualar)})`
     : `No: haría falta un ${pctTexto(dtoIgualar)} (autorizado ${pct})`;
@@ -144,13 +144,13 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
     pvpDistinto: !esPack && f.suPvp != null && Math.abs(f.suPvp - pvp) > 0.01,
     revisarPvp: !esPack && f.suPvp != null && pvp > 0 && Math.abs(f.suPvp - pvp) / pvp > 0.10,
     esPack, revisarPack,
-    masBarato: f.diff > 0.01 ? "Cosméticos24h" : f.diff < -0.01 ? "La Tienda de Cosméticos" : "Igual",
+    masBarato: f.diff > 0.005 ? "Cosméticos24h" : f.diff < -0.005 ? "La Tienda de Cosméticos" : "Igual",
     igualar,
     diferencia: Math.round(-f.diff * 100) / 100,
     bajoAutorizado: limite != null && f.suPrecio < limite - 0.005 ? Math.round((f.suPrecio - limite) * 100) / 100 : null,
     notaDiferencia: limite != null && f.suPrecio < limite - 0.005
       ? `Por debajo de nuestro precio con dto. autorizado (${coma(limite)} €)`
-      : f.diff > 0.01 ? "Cosméticos24h más barato" : f.diff < -0.01 ? "Cosméticos24h más caro" : "Mismo precio",
+      : f.diff > 0.005 ? "Cosméticos24h más barato" : f.diff < -0.005 ? "Cosméticos24h más caro" : "Mismo precio",
   };
 }
 
