@@ -494,8 +494,8 @@ function MarcaBloque({
                 onOcultar={s => onExcluir({ suUrl: s.url, titulo: s.titulo, tipo: "soloEllos", suPrecio: s.precio })} />
               {(r.soloEllos.length + sinEmp.length) > 0 && (
                 <div className="cp-packs-nota">
-                  Al final de la tabla: {r.soloEllos.length} que tienen ellos y nosotros no, y {sinEmp.length} nuestros sin el mismo EAN en Cosméticos24h.
-                  Solo se comparan productos con el mismo EAN en las dos webs.
+                  Al final de la tabla: {r.soloEllos.length} que tienen ellos y nosotros no, y {sinEmp.length} nuestros sin pareja en Cosméticos24h.
+                  Se emparejan por EAN y, si a una de las dos fichas le falta, por referencia del fabricante o por nombre.
                 </div>
               )}
             </>
@@ -739,14 +739,14 @@ export default function CompararPrecios() {
         {/* ── Columna derecha ── */}
         <div className="right-col">
           <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-            <span>Todas las marcas se <strong>revisan solas cada día a las 5:00</strong> y los productos se emparejan solos (por EAN y, si falta, por referencia o nombre). El botón "Revisar" solo hace falta si quieres los datos al momento.</span>
+            <span>Los precios se leen cuando pulsas <strong>"Revisar"</strong> en cada marca. Los productos se emparejan solos: por EAN y, si falta, por referencia o nombre.</span>
           </div>
 
           {error && <div className="error">{error}</div>}
 
           {(config?.marcas.length ?? 0) === 0 && !revisando && (
             <p style={{ color: "var(--muted)", fontSize: 14, marginTop: 20 }}>
-              Añade una marca: se revisa sola al momento y después cada día.
+              Añade una marca: se revisa sola al momento; después, pulsa "Revisar" cuando quieras actualizarla.
             </p>
           )}
 
