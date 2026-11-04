@@ -94,6 +94,11 @@ export type FilaCalculada = {
   esPack: boolean;
   revisarPack: boolean; // pack con el precio final muy distinto al suyo: revisar nuestra suma
   masBarato: "Cosméticos24h" | "La Tienda de Cosméticos" | "Igual"; igualar: string;
+  // Diferencia vista desde Cosméticos24h: su precio final menos el nuestro (negativo = ellos más baratos)
+  diferencia: number;
+  // Cuánto queda su precio por debajo de nuestro PVP con el dto. autorizado (negativo); null si no está por debajo
+  bajoAutorizado: number | null;
+  notaDiferencia: string; // explicación clara de la diferencia, para el texto pequeño y las notas
 };
 // Packs y cofres: nuestro PVP es la suma de los productos sueltos, así que el dto. autorizado sobre ese PVP
 // y la comparación de PVP no tienen sentido; solo cuenta el precio final.
@@ -141,6 +146,11 @@ export function calcularFila(f: FilaExcel, descuento: number | null): FilaCalcul
     esPack, revisarPack,
     masBarato: f.diff > 0.01 ? "Cosméticos24h" : f.diff < -0.01 ? "La Tienda de Cosméticos" : "Igual",
     igualar,
+    diferencia: Math.round(-f.diff * 100) / 100,
+    bajoAutorizado: limite != null && f.suPrecio < limite - 0.005 ? Math.round((f.suPrecio - limite) * 100) / 100 : null,
+    notaDiferencia: limite != null && f.suPrecio < limite - 0.005
+      ? `Por debajo de nuestro precio con dto. autorizado (${coma(limite)} €)`
+      : f.diff > 0.01 ? "Cosméticos24h más barato" : f.diff < -0.01 ? "Cosméticos24h más caro" : "Mismo precio",
   };
 }
 
@@ -225,7 +235,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       suDtoWeb: { formula: `IF(${L.suPvp}${n}>0,1-${L.suWeb}${n}/${L.suPvp}${n},0)`, result: k.suDtoWeb },
       suFinal: { formula: `ROUND(${suWeb}*${factorCupon},2)`, result: f.suPrecio },
       suDto: { formula: `IF(${L.suPvp}${n}>0,1-${L.suFin}${n}/${L.suPvp}${n},0)`, result: suDto },
-      diff: { formula: `${L.precio}${n}-${L.suFin}${n}`, result: Math.round(f.diff * 100) / 100 },
+      diff: { formula: `${L.suFin}${n}-${L.precio}${n}`, result: k.diferencia },
       barato: masBarato,
       igualar,
       ficha: { text: "Ver ficha ↗", hyperlink: f.suUrl },
@@ -279,6 +289,10 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
       c("precio").note = `Nuestro precio está por debajo del PVP con el dto. autorizado (${coma(limite)} €).`;
     }
     c("diff").font = fuente({ bold: true, color: { argb: f.diff > 0.01 ? ROJO : f.diff < -0.01 ? VERDE : TEXTO } });
+    if (k.bajoAutorizado != null) {
+      c("diff").fill = relleno("FFFDECEC");
+      c("diff").note = `${k.notaDiferencia}: ${coma(k.bajoAutorizado)} € por debajo.`;
+    }
     c("barato").font = fuente({ size: 9, bold: masBarato !== "Igual", color: { argb: masBarato === "Cosméticos24h" ? ROJO : masBarato === "La Tienda de Cosméticos" ? VERDE : TEXTO_SUAVE } });
     c("igualar").font = fuente({ size: 9, bold: igualar.startsWith("No") || k.revisarPack, color: { argb: k.revisarPack ? AMBAR : igualar.startsWith("No") ? ROJO : igualar ? VERDE : TEXTO_SUAVE } });
   });
@@ -291,6 +305,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const ley = ultima + 2;
   const leyenda: [string, string, string][] = [
     [PASADO_FONDO, PASADO, "Nuestro precio está por debajo del PVP con el descuento autorizado"],
+    ["FFFDECEC", ROJO, "Diferencia: Cosméticos24h vende por debajo de nuestro precio con el descuento autorizado"],
     [AMBAR_FONDO, AMBAR, "PVP distinto en las dos webs (¿tarifa sin actualizar?). Si la diferencia pasa del 10 %, la nota dice «revisar precio»"],
   ];
   leyenda.forEach(([fondo, color, texto], i) => {
@@ -304,7 +319,7 @@ export async function construirExcel(marca: string, filas: FilaExcel[], soloEllo
   const nota = ws.getCell(`B${ley + leyenda.length}`);
   nota.value = "PVP: precio sin descuento. Con dto. autorizado: nuestro PVP con el descuento autorizado al que podemos llegar en la marca. Precio con dto.: el de su web, con su descuento sobre el PVP. El producto enlaza a nuestra ficha y «Ver ficha», a la suya. " +
     (hayCupon ? "Precio final: el de su web con el cupón que aplican en el carrito. " : "") +
-    "Dto. total: lo que rebajan sobre su PVP. Diferencia: nuestro precio menos su precio final. Las celdas con un triángulo rojo llevan una nota con la explicación.";
+    "Dto. total: lo que rebajan sobre su PVP. Diferencia: su precio final menos el nuestro (en negativo, Cosméticos24h es más barato; con fondo rojo, vende por debajo de nuestro precio con dto. autorizado). Las celdas con un triángulo rojo llevan una nota con la explicación.";
   nota.font = fuente({ size: 9, italic: true, color: { argb: TEXTO_SUAVE } });
 
   // ── Hoja 2: lo que tienen ellos y nosotros no ──

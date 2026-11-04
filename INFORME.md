@@ -367,6 +367,7 @@ Solo usa **Gemini** (1 petición por respuesta). No usa Upstash.
 
 Cruza **tus precios** (latiendadecosmeticos.com) con los de **Cosméticos24h**, marca a marca. Dos salidas por marca:
 1. **Comparación de precios** — producto | tu precio | su precio | diferencia. En **rojo** dónde tú vas más caro; en verde dónde vas más barato.
+   - **Diferencia** (nov 2026): su precio final menos el nuestro, así que sale **en negativo cuando Cosméticos24h es más barato**. Debajo lo dice en texto («Cosméticos24h más barato»). Si vende **por debajo de nuestro PVP con el dto. autorizado**, la celda va con fondo rojo y pone cuánto («−2,10 € bajo dto. autorizado»). Igual en la web, el Excel y el PDF.
 2. **Tienen ellos y tú no** — productos de esa marca que Cosméticos24h vende y tú aún no tienes (posibles novedades / huecos de catálogo).
 3. **Packs/estuches que tienen ellos y tú no** — los packs suyos que no tienes, listados aparte (por si alguno interesa añadirlo).
 
