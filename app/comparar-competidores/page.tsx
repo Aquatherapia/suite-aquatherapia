@@ -101,7 +101,7 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
                     </Celda>,
                     <td key={`${c.id}-precio`} className={"cp-fuerte" + (kc.bajoMinimo ? " cp-bajo-aut" : masBaratoQueNos ? " cc-mas-barato" : "")} style={kc.bajoMinimo ? undefined : { color: c.color }} title={tip}>
                       <a href={p.url} target="_blank" rel="noreferrer" className="cc-precio">{eur(p.precio)}</a>
-                      {p.por !== "ean" && p.por !== "manual" && <span className="cc-por" title={`Emparejado ${COMO[p.por]}: su web no publica el EAN`}>≈</span>}
+                      {p.por === "ia" && <span className="cc-ia" title={`Emparejado ${COMO.ia}: su web no publica el EAN`}>IA<span className="cc-ia-chispas">✦</span></span>}
                       {kc.dto > 0.0005 && <small className="cp-dto-celda">−{pct(kc.dto)}</small>}
                     </td>,
                   ];
@@ -450,7 +450,7 @@ export default function CompararCompetidores() {
       <p className="subtitle">Nuestros precios frente a los de {COMPETIDORES.map(c => c.nombre).join(", ")}, marca a marca y en una sola tabla. En rojo, quien vende más barato que nosotros.</p>
 
       <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-        <span>Están todas las marcas de nuestra web. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato o, si el nombre está en otro idioma, con IA (≈).</span>
+        <span>Están todas las marcas de nuestra web. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato o, si el nombre está en otro idioma, con IA (marcados con IA✦).</span>
       </div>
       <div className="cc-barra-sup">
         <input className="cc-filtro" value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Buscar marca…" />
