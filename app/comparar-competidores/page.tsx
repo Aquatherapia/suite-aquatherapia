@@ -98,8 +98,7 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
                       tip={kc.pvpSinActualizar ? `Su PVP es más bajo: ${eur(kc.suPvp)} frente a ${eur(f.pvp)} el nuestro. Tarifa sin actualizar.` : kc.pvpMasAlto ? `Su PVP es más alto: ${eur(kc.suPvp)} frente a ${eur(f.pvp)} el nuestro. Revisa nuestro precio.` : undefined}>
                       {eur(kc.suPvp)}{kc.pvpSinActualizar && <small className="cp-dto-celda cp-sin-actualizar">Tarifa sin actualizar</small>}
                     </Celda>,
-                    <td key={`${c.id}-precio`} className={"cp-fuerte" + (kc.bajoMinimo ? " cp-bajo-aut" : "")} style={kc.bajoMinimo ? undefined : { color: c.color }} title={tip}>
-                      {masBaratoQueNos && <span className="cc-baja" title="Más barato que nosotros">▼</span>}
+                    <td key={`${c.id}-precio`} className={"cp-fuerte" + (kc.bajoMinimo ? " cp-bajo-aut" : masBaratoQueNos ? " cc-mas-barato" : "")} style={kc.bajoMinimo ? undefined : { color: c.color }} title={tip}>
                       <a href={p.url} target="_blank" rel="noreferrer" className="cc-precio">{eur(p.precio)}</a>
                       {p.por !== "ean" && <span className="cc-por" title={`Emparejado ${COMO[p.por]}: su web no publica el EAN`}>≈</span>}
                       {kc.dto > 0.0005 && <small className="cp-dto-celda">−{pct(kc.dto)}</small>}
