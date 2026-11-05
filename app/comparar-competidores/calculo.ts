@@ -6,7 +6,7 @@ import { descuentoBoardfy } from "../comparar-precios/boardfy";
 import { COMPETIDORES, type FilaComp } from "./competidores";
 
 export type CuponComp = { pct: number; codigo?: string; directo?: boolean; hasta?: string; excluidas?: string[] } | null;
-export type MarcaComp = { nombre: string; slug: string; descuentoMax?: number | null };
+export type MarcaComp = { nombre: string; slug: string; descuentoMax?: number | null; enC24?: boolean };
 
 // Descuento autorizado de la marca: el puesto a mano en el comparador de Cosméticos24h o, si no, el de Boardfy
 export function descuentoDe(m: MarcaComp): number | null {

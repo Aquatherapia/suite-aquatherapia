@@ -4,7 +4,8 @@ import { normalizar, TAMANO } from "../comparar-precios/emparejar";
 import type { Competidor } from "../../comparar-competidores/competidores";
 
 const UA = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" };
-const FEED = "https://www.latiendadecosmeticos.com/es/feed_detalles";
+const MI_WEB = "https://www.latiendadecosmeticos.com";
+const FEED = `${MI_WEB}/es/feed_detalles`;
 
 // Palabras que indican pack/lote (como en el comparador de Cosméticos24h)
 const EXCLUIR = ["pack", "set", "kit", "lote", "duo", "dúo", "trio", "trío", "estuche", "bundle", "caja", "cofre", "coffret", "box", "programa", "rutina"];
@@ -32,7 +33,8 @@ const soloLetras = (s: string) => normalizar(s).replace(/[^a-z0-9]/g, "");
 export type MiProducto = { nombre: string; url: string; ean: string | null; formato?: string; precio: number; pvp: number; esPack: boolean; clave: string };
 
 // Productos de una marca según el feed de nuestra web: una fila por formato/tono de cada ficha activa
-export async function leerMisProductos(marca: { nombre: string; slug: string; miToken?: string }): Promise<MiProducto[]> {
+// marca.feed: cómo se llama la marca en la columna «brand» del feed (si falta, su nombre)
+export async function leerMisProductos(marca: { nombre: string; slug: string; miToken?: string; feed?: string }): Promise<MiProducto[]> {
   const res = await pedir(FEED, undefined, 60_000);
   if (!res.ok) throw new Error(`No se pudo leer el feed de nuestra web (HTTP ${res.status})`);
   const lineas = (await res.text()).split(/\r?\n/);
@@ -40,7 +42,7 @@ export async function leerMisProductos(marca: { nombre: string; slug: string; mi
   const col = (k: string) => cab.indexOf(k);
   const [iLink, iGtin, iTitulo, iPvp, iOferta, iMarca] = [col("link"), col("gtin"), col("title"), col("price"), col("sale_price"), col("brand")];
   if ([iLink, iTitulo, iPvp].some(i => i < 0)) throw new Error("El feed de nuestra web no tiene el formato esperado");
-  const claveMarca = soloLetras(marca.nombre);
+  const claveMarca = soloLetras(marca.feed ?? marca.nombre);
   const token = (marca.miToken ?? marca.slug).toLowerCase();
   const porUrl = new Map<string, { titulo: string; ean: string | null; precio: number; pvp: number }[]>();
   for (const linea of lineas.slice(1)) {
@@ -55,7 +57,7 @@ export async function leerMisProductos(marca: { nombre: string; slug: string; mi
     if (!Number.isFinite(precio) || precio <= 0) continue;
     porUrl.set(url, [...(porUrl.get(url) ?? []), { titulo: (c[iTitulo] ?? "").trim(), ean: iGtin >= 0 ? normalizarEan(c[iGtin]) : null, precio, pvp: Number.isFinite(pvp) && pvp > 0 ? pvp : precio }]);
   }
-  const quitarMarca = (t: string) => t.replace(/\s*®/g, "").replace(new RegExp(`\\s+-\\s+${marca.nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i"), "").trim();
+  const quitarMarca = (t: string) => t.replace(/\s*®/g, "").replace(new RegExp(`\\s+-\\s+${(marca.feed ?? marca.nombre).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i"), "").trim();
   const out: MiProducto[] = [];
   for (const [url, filas] of porUrl) {
     filas.forEach((f, i) => {
@@ -69,6 +71,43 @@ export async function leerMisProductos(marca: { nombre: string; slug: string; mi
     });
   }
   return out;
+}
+
+// ── Todas nuestras marcas ──────────────────────────────────────────────
+export type MarcaWeb = { nombre: string; slug: string; feed: string };
+
+// Las marcas que tienen productos en el feed de nuestra web, con el nombre y la dirección de la página de marcas
+// (/es/marcas/<slug>) cuando se encuentran
+export async function leerMarcasWeb(): Promise<MarcaWeb[]> {
+  const res = await pedir(FEED, undefined, 60_000);
+  if (!res.ok) throw new Error(`No se pudo leer el feed de nuestra web (HTTP ${res.status})`);
+  const lineas = (await res.text()).split(/\r?\n/);
+  const iMarca = lineas[0].split("\t").map(c => c.trim().toLowerCase()).indexOf("brand");
+  if (iMarca < 0) throw new Error("El feed de nuestra web no tiene la columna de la marca");
+  const enFeed = new Set<string>();
+  for (const l of lineas.slice(1)) { const b = (l.split("\t")[iMarca] ?? "").trim(); if (b) enFeed.add(b); }
+  // Nombres bien escritos de la página de marcas
+  const web: { nombre: string; slug: string }[] = [];
+  try {
+    const r = await pedir(`${MI_WEB}/es/marcas`, undefined, 20_000);
+    if (r.ok) {
+      const doc = parse(await r.text());
+      for (const a of doc.querySelectorAll("a")) {
+        const m = (a.getAttribute("href") ?? "").match(/\/es\/marcas\/([a-z0-9-]+)\/?$/);
+        const nombre = decodificar((a.text.trim() || a.querySelector("img")?.getAttribute("alt") || "").replace(/\s*®/g, ""));
+        if (m && nombre && !web.some(w => w.slug === m[1])) web.push({ nombre, slug: m[1] });
+      }
+    }
+  } catch { /* sin la página de marcas, se usa el nombre del feed */ }
+  const capital = (s: string) => s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
+  const slugDe = (s: string) => normalizar(s).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return [...enFeed].map(feed => {
+    const k = soloLetras(feed);
+    // La de la página de marcas que mejor encaja: el mismo nombre o el principio («Germaine» → «GERMAINE DE CAPUCCINI»)
+    const w = web.filter(x => { const n = soloLetras(x.nombre), s = soloLetras(x.slug); return n === k || s === k || (n.length > 3 && k.startsWith(n)) || (s.length > 3 && k.startsWith(s)); })
+      .sort((a, b) => soloLetras(b.nombre).length - soloLetras(a.nombre).length)[0];
+    return { nombre: w?.nombre ?? capital(feed), slug: w?.slug ?? slugDe(feed), feed };
+  });
 }
 
 // ── Competidores ───────────────────────────────────────────────────────

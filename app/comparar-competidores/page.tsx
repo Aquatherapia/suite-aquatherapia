@@ -135,7 +135,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id
     <div className="cc-enlace">
       <span className="cc-enlace-nombre" style={{ color: c.color }}>{c.nombre}</span>
       {c.tipo === "c24" ? (
-        <span className="cc-enlace-estado">{estado?.error ?? `${deNuestros} · de su comparador`}</span>
+        <span className="cc-enlace-estado">{estado?.url === "" ? <span className="cp-suave-txt">no está en su comparador</span> : estado?.error ?? `${deNuestros} · de su comparador`}</span>
       ) : editando ? (
         <span className="cc-enlace-edit">
           <input value={valor} onChange={e => setValor(e.target.value)} placeholder={`${c.web}/… (vacío = no la vende)`}
@@ -292,7 +292,7 @@ export default function CompararCompetidores() {
       <p className="subtitle">Nuestros precios frente a los de {COMPETIDORES.map(c => c.nombre).join(", ")}, marca a marca y en una sola tabla. En rojo, quien vende más barato que nosotros.</p>
 
       <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-        <span>Las marcas son las del <Link href="/comparar-precios">comparador de Cosméticos24h</Link>. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato o, si el nombre está en otro idioma, con IA (≈).</span>
+        <span>Están todas las marcas de nuestra web; los precios de Cosméticos24h salen de su <Link href="/comparar-precios">comparador</Link>. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato o, si el nombre está en otro idioma, con IA (≈).</span>
       </div>
       <input className="cc-filtro" value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Buscar marca…" />
       {error && <div className="error">{error}</div>}

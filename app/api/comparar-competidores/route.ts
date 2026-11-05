@@ -4,7 +4,7 @@ import path from "path";
 import { emparejarPorNombre } from "./emparejar-nombre";
 import { emparejarConIa } from "./emparejar-ia";
 import { COMPETIDORES, type EstadoComp, type FilaComp, type ResultadoComp } from "../../comparar-competidores/competidores";
-import { buscarListado, leerCompetidor, leerMisProductos, normalizarEan, type MiProducto, type SuProducto } from "./leer";
+import { buscarListado, leerCompetidor, leerMarcasWeb, leerMisProductos, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
 
 // Leer varias webs a la vez cabe de sobra, pero alguna puede ir lenta: Vercel Hobby permite hasta 300 s
 export const maxDuration = 300;
@@ -22,7 +22,12 @@ type Config = {
   // Por marca (slug) y competidor: el enlace se encontró solo (no lo ha puesto nadie a mano)
   auto: Record<string, Record<string, boolean>>;
   resultados: Record<string, ResultadoComp>;
+  // Todas nuestras marcas (feed y página de marcas de nuestra web), leídas como mucho una vez al día
+  marcasWeb?: { fecha: string; lista: MarcaWeb[] };
 };
+
+// Una marca de este apartado: las del comparador de Cosméticos24h y el resto de las de nuestra web
+type Marca = MarcaC24 & { feed?: string; enC24: boolean };
 
 type MarcaC24 = { nombre: string; slug: string; miToken?: string; descuentoMax?: number | null };
 type ComparacionC24 = { miUrl: string; suUrl: string; nombre: string; suPrecio: number; suPvp?: number; ean?: string; porEan?: boolean; porParecido?: "referencia" | "nombre" };
@@ -58,14 +63,48 @@ async function leerC24(): Promise<ConfigC24> {
   return { marcas: c?.marcas ?? [], resultados: c?.resultados ?? [], cupon: c?.cupon };
 }
 
-// Lo que ve la página: la configuración, la lista de marcas (con su dto. autorizado) y el cupón de Cosméticos24h,
-// todo del comparador de Cosméticos24h
+const soloLetras = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+// Todas las marcas: las del comparador de Cosméticos24h (con su dto. autorizado y sus precios) y el resto de las
+// de nuestra web. La lista de nuestra web se vuelve a leer si tiene más de un día.
+async function todasLasMarcas(config: Config, c24: ConfigC24): Promise<Marca[]> {
+  const viejas = !config.marcasWeb || Date.now() - new Date(config.marcasWeb.fecha).getTime() > 24 * 3600_000;
+  if (viejas) {
+    try {
+      config.marcasWeb = { fecha: new Date().toISOString(), lista: await leerMarcasWeb() };
+      await guardarConfig(config);
+    } catch { /* se sigue con la lista anterior */ }
+  }
+  const web = config.marcasWeb?.lista ?? [];
+  const usadas = new Set<string>();
+  // Cada marca del comparador de Cosméticos24h, con su nombre en el feed si se encuentra
+  const out: Marca[] = c24.marcas.map(m => {
+    const claves = [m.nombre, m.slug, m.miToken ?? ""].map(soloLetras).filter(Boolean);
+    const w = web.find(x => !usadas.has(x.feed) && [x.feed, x.nombre, x.slug].map(soloLetras).some(k => claves.includes(k)))
+      ?? web.find(x => !usadas.has(x.feed) && claves.some(c => c.length > 3 && soloLetras(x.feed).startsWith(c)));
+    if (w) usadas.add(w.feed);
+    return { ...m, feed: w?.feed, enC24: true };
+  });
+  const slugs = new Set(out.map(m => m.slug));
+  for (const w of web) {
+    if (usadas.has(w.feed)) continue;
+    let slug = w.slug;
+    for (let n = 2; slugs.has(slug); n++) slug = `${w.slug}-${n}`;
+    slugs.add(slug);
+    out.push({ nombre: w.nombre, slug, feed: w.feed, enC24: false });
+  }
+  return out;
+}
+
+// Lo que ve la página: la configuración, la lista de marcas (con su dto. autorizado) y el cupón de Cosméticos24h
 async function respuesta(config: Config) {
   const c24 = await leerC24();
+  const marcas = await todasLasMarcas(config, c24);
   const cupon = c24.cupon?.pct != null && c24.cupon.pct > 0
     ? { pct: c24.cupon.pct, codigo: c24.cupon.codigo, directo: c24.cupon.directo, hasta: c24.cupon.hasta, excluidas: c24.cupon.promo?.excluidas ?? [] }
     : null;
-  return NextResponse.json({ ...config, cupon, marcas: c24.marcas.map(m => ({ nombre: m.nombre, slug: m.slug, descuentoMax: m.descuentoMax ?? null })) });
+  const { marcasWeb: _web, ...resto } = config;
+  return NextResponse.json({ ...resto, cupon, marcas: marcas.map(m => ({ nombre: m.nombre, slug: m.slug, descuentoMax: m.descuentoMax ?? null, enC24: m.enC24 })) });
 }
 
 export async function GET() {
@@ -91,8 +130,8 @@ export async function POST(req: NextRequest) {
     const inicio = Date.now();
     const limite = inicio + 200_000;
     const c24 = await leerC24();
-    const marca = c24.marcas.find(m => m.slug === body.slug);
-    if (!marca) return NextResponse.json({ error: "Esa marca no está en el comparador de Cosméticos24h" });
+    const marca = (await todasLasMarcas(config, c24)).find(m => m.slug === body.slug);
+    if (!marca) return NextResponse.json({ error: "No encuentro esa marca" });
 
     let mios: MiProducto[];
     try { mios = (await leerMisProductos(marca)).filter(m => !m.esPack); }
@@ -117,8 +156,10 @@ export async function POST(req: NextRequest) {
         n++;
       }
       estados.c24 = { url: `https://cosmeticos24h.com/collections/${marca.slug}`, leidos: r24.comparaciones.length, emparejados: n };
-    } else {
+    } else if (marca.enC24) {
       estados.c24 = { error: "Revisa antes la marca en el comparador de Cosméticos24h" };
+    } else {
+      estados.c24 = { url: "" }; // no está en el comparador de Cosméticos24h
     }
 
     // El resto: se leen todos a la vez
