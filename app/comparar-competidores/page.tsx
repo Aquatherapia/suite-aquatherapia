@@ -3,89 +3,117 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { COMPETIDORES, type FilaComp, type ResultadoComp, type EstadoComp } from "./competidores";
+import { aplicarCupon, calcularFila, columnasDe, cuponDeMarca, descuentoDe, ordenar, pctTexto, type CuponComp, type MarcaComp } from "./calculo";
+import { descargarExcel, descargarPdf, descargarParaMarca, filasParaMarca } from "./exportar";
 
-type Marca = { nombre: string; slug: string };
 type Config = {
-  marcas: Marca[];
+  marcas: MarcaComp[];
   enlaces: Record<string, Record<string, string>>;
   resultados: Record<string, ResultadoComp>;
+  cupon: CuponComp;
 };
 
 const eur = (n: number) => n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
-const pct = (x: number) => (x * 100).toLocaleString("es-ES", { maximumFractionDigits: 1 }) + " %";
+const pct = pctTexto;
 
 function fechaExacta(iso: string) {
   const d = new Date(iso);
   return `${d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" })} a las ${d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`;
 }
+const fechaCorta = (iso: string) => new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 
-// El competidor más barato de una fila (si hay alguno)
-function masBarato(f: FilaComp): { id: string; precio: number } | null {
-  let mejor: { id: string; precio: number } | null = null;
-  for (const c of COMPETIDORES) {
-    const p = f.precios[c.id];
-    if (p && (!mejor || p.precio < mejor.precio)) mejor = { id: c.id, precio: p.precio };
-  }
-  return mejor;
+// Celda con explicación al pasar el ratón
+function Celda({ className, tip, style, children }: { className?: string; tip?: string; style?: React.CSSProperties; children: React.ReactNode }) {
+  return <td className={(className ?? "") + (tip ? " cp-tip" : "")} data-tip={tip} style={style}>{children}</td>;
 }
 
-function TablaCompetencia({ filas, estados }: { filas: FilaComp[]; estados: Record<string, EstadoComp> }) {
-  // Solo las columnas de los competidores que venden la marca
-  const cols = COMPETIDORES.filter(c => estados[c.id]?.url || filas.some(f => f.precios[c.id]));
+function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaComp[]; estados: Record<string, EstadoComp>; descuento: number | null; cupon: CuponComp }) {
+  const cols = columnasDe(filas, estados);
+  const dto = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
   return (
     <div className="cp-informe-scroll">
       <table className="cp-informe cc-tabla">
         <thead>
           <tr className="cp-informe-grupos">
             <th colSpan={2}></th>
-            <th colSpan={2} className="cp-g-nos">La Tienda de Cosméticos</th>
+            <th colSpan={3} className="cp-g-nos">La Tienda de Cosméticos</th>
             {cols.map(c => <th key={c.id} colSpan={2} style={{ background: c.fondo, color: c.color }}>{c.nombre}</th>)}
-            <th colSpan={2} className="cp-g-fin">Comparación</th>
+            <th colSpan={4} className="cp-g-fin">Comparación</th>
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
-            <th>PVP</th><th>Precio final</th>
+            <th>PVP</th>
+            <th className="cp-tip" data-tip="Nuestro PVP con el descuento autorizado de la marca (el del comparador de Cosméticos24h o, si no hay, el de Boardfy)">{descuento != null ? `Con dto. autorizado (−${dto})` : "Con dto. autorizado"}</th>
+            <th>Precio final</th>
             {cols.map(c => [
               <th key={`${c.id}-pvp`} style={{ background: c.color }}>PVP</th>,
-              <th key={`${c.id}-precio`} style={{ background: c.color }}>Precio final</th>,
+              <th key={`${c.id}-precio`} style={{ background: c.color }} className={c.id === "c24" && cupon ? "cp-tip" : undefined}
+                data-tip={c.id === "c24" && cupon ? `Su precio web con el cupón de carrito ${cupon.codigo ?? ""} (−${String(cupon.pct).replace(".", ",")} %)` : undefined}>
+                {c.id === "c24" && cupon ? `Precio final (${cupon.codigo ?? "cupón"} −${String(cupon.pct).replace(".", ",")} %)` : "Precio final"}
+              </th>,
             ])}
             <th className="cp-h-fin">Más barato</th>
             <th className="cp-h-fin cp-tip" data-tip="Precio del competidor más barato menos el nuestro: en negativo, alguien vende más barato que nosotros">Diferencia</th>
+            <th className="cp-h-fin cp-tip" data-tip="Cuánto queda el precio más barato de la competencia por debajo de nuestro PVP con el dto. autorizado">Por debajo del dto. autorizado</th>
+            <th className="cp-izq cp-h-fin">¿Podemos igualar?</th>
           </tr>
         </thead>
         <tbody>
           {filas.map((f, i) => {
-            const mb = masBarato(f);
-            const diff = mb ? mb.precio - f.precio : null;
-            const ganamos = diff != null && diff >= -0.005;
+            const k = calcularFila(f, descuento);
+            const mbComp = k.mb ? COMPETIDORES.find(c => c.id === k.mb!.id) : undefined;
+            const ganamos = k.diferencia == null || k.diferencia >= -0.005;
             return (
               <tr key={i}>
                 <td className="cp-suave">{f.ean ?? ""}</td>
-                <td className="cp-izq"><a href={f.url} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a></td>
-                <td className="cp-azul">{eur(f.pvp)}</td>
-                <td className="cp-fuerte cp-azul">{eur(f.precio)}{f.pvp - f.precio > 0.005 && <small className="cp-dto-celda">−{pct(1 - f.precio / f.pvp)}</small>}</td>
+                <td className="cp-izq">
+                  <a href={f.url} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
+                  <span className="cp-enlaces">
+                    <a href={f.url} target="_blank" rel="noreferrer" className="cp-enlace-ltc">Ver en La Tienda de Cosméticos ↗</a>
+                    {cols.filter(c => f.precios[c.id]).map(c => (
+                      <a key={c.id} href={f.precios[c.id].url} target="_blank" rel="noreferrer" className="cp-enlace-c24" style={{ color: c.color }}>Ver en {c.corto} ↗</a>
+                    ))}
+                  </span>
+                </td>
+                <Celda className={k.revisarPrecio.length ? "cp-ambar" : "cp-azul"}
+                  tip={k.revisarPrecio.length ? `Nuestro PVP es más bajo que el de ${k.revisarPrecio.join(", ")}: revisa nuestro precio.` : undefined}>
+                  {eur(f.pvp)}{k.revisarPrecio.length > 0 && <span className="cp-revisar-pvp">(revisar precio)</span>}
+                </Celda>
+                <td className="cp-azul-suave">{k.limite != null ? eur(k.limite) : "—"}</td>
+                <Celda className={"cp-fuerte cp-azul" + (k.bajoMinimoMio ? " cp-pasado-fondo" : "")}
+                  tip={k.bajoMinimoMio && k.limite != null ? `Nuestro precio está por debajo del PVP con el dto. autorizado (${eur(k.limite)}).` : undefined}>
+                  {eur(f.precio)}{k.miDto > 0.0005 && <small className="cp-dto-celda cp-dto-azul">−{pct(k.miDto)}</small>}
+                </Celda>
                 {cols.map(c => {
                   const p = f.precios[c.id];
                   if (!p) return [<td key={`${c.id}-pvp`} className="cp-vacia">—</td>, <td key={`${c.id}-precio`} className="cp-vacia">—</td>];
-                  const pvp = p.pvp ?? p.precio;
+                  const kc = k.comp[c.id];
                   const masBaratoQueNos = p.precio < f.precio - 0.005;
-                  const tip = `${p.titulo}${p.por !== "ean" ? ` · emparejado por ${p.por}` : ""}`;
+                  const tip = `${p.titulo}${p.por !== "ean" ? ` · emparejado por ${p.por}` : ""}${p.precioWeb != null ? ` · en su web ${eur(p.precioWeb)}, con cupón ${eur(p.precio)}` : ""}${kc.bajoMinimo && k.limite != null ? ` · por debajo de nuestro PVP con dto. autorizado (${eur(k.limite)})` : ""}`;
                   return [
-                    <td key={`${c.id}-pvp`} style={{ color: c.color }} title={tip}>{eur(pvp)}</td>,
-                    <td key={`${c.id}-precio`} className="cp-fuerte" style={{ color: c.color }} title={tip}>
+                    <Celda key={`${c.id}-pvp`} className={kc.pvpSinActualizar || kc.pvpMasAlto ? "cp-ambar" : undefined} style={kc.pvpSinActualizar || kc.pvpMasAlto ? undefined : { color: c.color }}
+                      tip={kc.pvpSinActualizar ? `Su PVP es más bajo: ${eur(kc.suPvp)} frente a ${eur(f.pvp)} el nuestro. Tarifa sin actualizar.` : kc.pvpMasAlto ? `Su PVP es más alto: ${eur(kc.suPvp)} frente a ${eur(f.pvp)} el nuestro. Revisa nuestro precio.` : undefined}>
+                      {eur(kc.suPvp)}{kc.pvpSinActualizar && <small className="cp-dto-celda cp-sin-actualizar">Tarifa sin actualizar</small>}
+                    </Celda>,
+                    <td key={`${c.id}-precio`} className={"cp-fuerte" + (kc.bajoMinimo ? " cp-bajo-aut" : "")} style={kc.bajoMinimo ? undefined : { color: c.color }} title={tip}>
                       {masBaratoQueNos && <span className="cc-baja" title="Más barato que nosotros">▼</span>}
                       <a href={p.url} target="_blank" rel="noreferrer" className="cc-precio">{eur(p.precio)}</a>
                       {p.por !== "ean" && <span className="cc-por" title={`Emparejado por ${p.por}: a una de las dos fichas le falta el EAN`}>≈</span>}
-                      {pvp - p.precio > 0.005 && <small className="cp-dto-celda">−{pct(1 - p.precio / pvp)}</small>}
+                      {kc.dto > 0.0005 && <small className="cp-dto-celda">−{pct(kc.dto)}</small>}
                     </td>,
                   ];
                 })}
-                <td className={"cp-izq cp-fuerte " + (mb == null ? "cp-suave" : ganamos ? "cp-azul" : "")} style={mb && !ganamos ? { color: COMPETIDORES.find(c => c.id === mb.id)?.color } : undefined}>
-                  {mb == null ? "—" : ganamos ? "La Tienda de Cosméticos" : COMPETIDORES.find(c => c.id === mb.id)?.corto}
+                <td className={"cp-izq cp-fuerte " + (k.mb == null ? "cp-suave" : ganamos ? "cp-azul" : "")} style={k.mb && !ganamos ? { color: mbComp?.color } : undefined}>
+                  {k.masBarato}
                 </td>
-                <td className={"cp-fuerte " + (diff == null ? "cp-suave" : diff < -0.005 ? "cp-rojo" : "cp-verde")}>
-                  {diff == null ? "—" : `${diff > 0.005 ? "+" : ""}${eur(diff)}`}
+                <td className={"cp-fuerte " + (k.diferencia == null ? "cp-suave" : k.diferencia < -0.005 ? "cp-rojo" : "cp-verde")}>
+                  {k.diferencia == null ? "—" : `${k.diferencia > 0.005 ? "+" : ""}${eur(k.diferencia)}`}
                 </td>
+                <Celda className={k.bajoAutorizado != null ? "cp-fuerte cp-bajo-aut" : "cp-suave"}
+                  tip={k.bajoAutorizado != null && k.limite != null ? `${mbComp?.corto} vende por debajo de nuestro PVP con dto. autorizado (${eur(k.limite)}).` : undefined}>
+                  {k.bajoAutorizado != null ? eur(k.bajoAutorizado) : "—"}
+                </Celda>
+                <td className={"cp-izq cp-pequena " + (k.mb == null ? "cp-suave" : k.igualar.startsWith("No") ? "cp-fuerte cp-rojo" : "cp-verde")}>{k.igualar}</td>
               </tr>
             );
           })}
@@ -95,7 +123,8 @@ function TablaCompetencia({ filas, estados }: { filas: FilaComp[]; estados: Reco
   );
 }
 
-function EnlaceComp({ id, estado, enlace, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; onGuardar: (url: string) => void }) {
+function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; nuestros?: number; enlazados?: number; onGuardar: (url: string) => void }) {
+  const deNuestros = `${enlazados ?? estado?.emparejados ?? 0} de nuestros ${nuestros ?? "?"} enlazados`;
   const c = COMPETIDORES.find(x => x.id === id)!;
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState(enlace ?? "");
@@ -104,7 +133,7 @@ function EnlaceComp({ id, estado, enlace, onGuardar }: { id: string; estado?: Es
     <div className="cc-enlace">
       <span className="cc-enlace-nombre" style={{ color: c.color }}>{c.nombre}</span>
       {c.tipo === "c24" ? (
-        <span className="cc-enlace-estado">{estado?.error ?? `de su comparador · ${estado?.emparejados ?? 0} emparejados`}</span>
+        <span className="cc-enlace-estado">{estado?.error ?? `${deNuestros} · de su comparador`}</span>
       ) : editando ? (
         <span className="cc-enlace-edit">
           <input value={valor} onChange={e => setValor(e.target.value)} placeholder={`${c.web}/… (vacío = no la vende)`}
@@ -117,7 +146,7 @@ function EnlaceComp({ id, estado, enlace, onGuardar }: { id: string; estado?: Es
             : noVende ? <span className="cp-suave-txt">no la vende</span>
             : <a href={enlace} target="_blank" rel="noreferrer">ver listado ↗</a>}
           {estado?.error && <span className="cp-rojo"> · {estado.error}</span>}
-          {!estado?.error && estado?.leidos != null && enlace && <span className="cp-suave-txt"> · {estado.leidos} productos, {estado.emparejados ?? 0} emparejados</span>}
+          {!estado?.error && estado?.leidos != null && enlace && <span className="cp-suave-txt"> · <b>{deNuestros}</b> · {estado.leidos} suyos</span>}
           <button className="cc-cambiar" onClick={() => { setValor(enlace ?? ""); setEditando(true); }}>cambiar</button>
         </span>
       )}
@@ -125,32 +154,68 @@ function EnlaceComp({ id, estado, enlace, onGuardar }: { id: string; estado?: Es
   );
 }
 
-function MarcaBloque({ marca, r, enlaces, revisando, ocupado, expandido, onToggle, onRevisar, onEnlace }: {
-  marca: Marca; r?: ResultadoComp; enlaces: Record<string, string>; revisando: boolean; ocupado: boolean;
+// «Para la marca»: lo que la competencia vende por debajo de nuestro dto. autorizado (sin dto., por debajo del PVP), en PDF o Excel
+function ParaMarca({ marca, filas, descuento }: { marca: string; filas: FilaComp[]; descuento: number | null }) {
+  const [abierto, setAbierto] = useState(false);
+  const n = filasParaMarca(filas, descuento ?? 0).length;
+  const bajar = (formato: "pdf" | "excel") => {
+    setAbierto(false);
+    descargarParaMarca(marca, filas, descuento ?? 0, formato).catch(err => alert("No se pudo crear el informe: " + err));
+  };
+  return (
+    <span className="cp-para-marca" onClick={e => e.stopPropagation()}>
+      <button className="regen-btn" disabled={n === 0} onClick={() => setAbierto(a => !a)}
+        title={`${n === 0 ? "Ningún competidor vende nada" : `Informe para enviar a la marca: ${n} precio${n !== 1 ? "s" : ""} de la competencia`} por debajo ${descuento == null ? "del PVP (la marca no tiene descuento autorizado)" : "del descuento autorizado"}`}>
+        Para la marca{n > 0 ? ` (${n})` : ""}
+      </button>
+      {abierto && (
+        <span className="cp-para-marca-menu">
+          <button className="regen-btn" onClick={() => bajar("pdf")}>PDF</button>
+          <button className="regen-btn" onClick={() => bajar("excel")}>Excel</button>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, onToggle, onRevisar, onEnlace }: {
+  marca: MarcaComp; r?: ResultadoComp; enlaces: Record<string, string>; cupon: CuponComp; revisando: boolean; ocupado: boolean;
   expandido: boolean; onToggle: () => void; onRevisar: () => void; onEnlace: (comp: string, url: string) => void;
 }) {
   const [todos, setTodos] = useState(false);
-  const filas = r?.filas ?? [];
+  const descuento = descuentoDe(marca);
+  const cuponMarca = cuponDeMarca(cupon, marca.nombre);
+  const filas = aplicarCupon(r?.filas ?? [], cuponMarca);
   const conCompetencia = filas.filter(f => Object.keys(f.precios).length > 0);
-  const caros = conCompetencia.filter(f => { const mb = masBarato(f); return mb && mb.precio < f.precio - 0.005; });
-  // De más caros a más baratos respecto al competidor más barato
-  const orden = (todos ? filas : conCompetencia).slice().sort((a, b) => {
-    const da = masBarato(a), db = masBarato(b);
-    return (da ? a.precio - da.precio : -Infinity) - (db ? b.precio - db.precio : -Infinity);
-  }).reverse();
+  const calc = conCompetencia.map(f => calcularFila(f, descuento));
+  const caros = calc.filter(k => k.diferencia != null && k.diferencia < -0.005).length;
+  const bajoAut = calc.filter(k => k.bajoAutorizado != null).length;
+  const pvpDist = calc.filter(k => k.pvpDistintos > 0).length;
+  const orden = ordenar(todos ? filas : conCompetencia);
+  const estados = r?.competidores ?? {};
   return (
     <div className="vp-accordion">
       <div className="vp-accordion-header" onClick={onToggle} role="button" tabIndex={0}>
         <span className="vp-accordion-marca">
           {marca.nombre}
           <span className="cp-revisado">{r ? `Revisada el ${fechaExacta(r.revisadoEn)}` : "Sin revisar todavía"}</span>
+          <span className="cp-dto" title="Descuento autorizado sobre el PVP: el del comparador de Cosméticos24h (allí se cambia) o, si no hay, el de Boardfy">
+            Dto. autorizado {descuento != null ? `${String(descuento).replace(".", ",")} %` : <span className="cp-suave-txt">sin límite</span>}
+          </span>
         </span>
         <div className="vp-accordion-right">
-          {caros.length > 0 && <span className="vp-pill vp-pill-nuevo" title="Productos que algún competidor vende más barato que nosotros">{caros.length} más caros</span>}
+          {caros > 0 && <span className="vp-pill vp-pill-nuevo" title="Productos que algún competidor vende más barato que nosotros">{caros} más caros</span>}
+          {bajoAut > 0 && <span className="vp-pill cp-pill-minimo" title={`La competencia vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento autorizado`}>{bajoAut} más allá de nuestro dto. autorizado</span>}
+          {pvpDist > 0 && <span className="vp-pill cp-pill-pvp" title="El PVP sin descuento no coincide con el de algún competidor: tarifa sin actualizar o hay que revisar nuestro precio">{pvpDist} PVP distinto{pvpDist !== 1 ? "s" : ""}</span>}
           {r && <span className="vp-accordion-count">{conCompetencia.length} con competencia · {filas.length} nuestros</span>}
           <button className="regen-btn cp-revisar-btn" disabled={ocupado} onClick={e => { e.stopPropagation(); onRevisar(); }} title="Leer los precios de esta marca en todas las webs">
             {revisando ? "Revisando…" : "Revisar"}
           </button>
+          <button className="regen-btn" disabled={!conCompetencia.length} title="Descargar el informe de esta marca en PDF"
+            onClick={e => { e.stopPropagation(); descargarPdf(marca.nombre, conCompetencia, estados, descuento, cuponMarca).catch(err => alert("No se pudo crear el PDF: " + err)); }}>PDF</button>
+          <button className="regen-btn" disabled={!conCompetencia.length} title="Descargar el informe de esta marca en Excel"
+            onClick={e => { e.stopPropagation(); descargarExcel(marca.nombre, conCompetencia, estados, descuento, cuponMarca).catch(err => alert("No se pudo crear el Excel: " + err)); }}>Excel</button>
+          <ParaMarca marca={marca.nombre} filas={conCompetencia} descuento={descuento} />
           <span className="vp-chevron">{expandido ? "▲" : "▼"}</span>
         </div>
       </div>
@@ -158,15 +223,22 @@ function MarcaBloque({ marca, r, enlaces, revisando, ocupado, expandido, onToggl
         <div className="vp-accordion-content">
           <div className="cc-enlaces">
             {COMPETIDORES.map(c => (
-              <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={r?.competidores[c.id]} enlace={enlaces[c.id]} onGuardar={url => onEnlace(c.id, url)} />
+              <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} onGuardar={url => onEnlace(c.id, url)} />
             ))}
           </div>
-          {r?.c24RevisadoEn && <div className="cc-nota">Los precios de Cosméticos24h son los de su comparador, revisado el {fechaExacta(r.c24RevisadoEn)}.</div>}
+          {r?.c24RevisadoEn && <div className="cc-nota">Los precios de Cosméticos24h son los de su comparador, revisado el {fechaExacta(r.c24RevisadoEn)}{cuponMarca ? `, con su cupón de carrito ${cuponMarca.codigo ?? ""} (−${String(cuponMarca.pct).replace(".", ",")} %)` : ""}.</div>}
+          {r?.cambios && (r.cambios.nuevosCaros.length + r.cambios.yaNoCaros.length) > 0 && (
+            <div className="cp-cambios">
+              <strong>Cambios desde la revisión del {fechaCorta(r.cambios.desde)}:</strong>
+              {r.cambios.nuevosCaros.length > 0 && <div><span className="cp-rojo">Ahora vamos más caros ({r.cambios.nuevosCaros.length}):</span> {r.cambios.nuevosCaros.join(" · ")}</div>}
+              {r.cambios.yaNoCaros.length > 0 && <div><span className="cp-verde">Ya no vamos más caros ({r.cambios.yaNoCaros.length}):</span> {r.cambios.yaNoCaros.join(" · ")}</div>}
+            </div>
+          )}
           {!r && <p className="cc-nota">Pulsa «Revisar»: se buscan solos los listados de la marca en cada web y se leen sus precios.</p>}
           {r && (
             <>
               <label className="cc-todos"><input type="checkbox" checked={todos} onChange={e => setTodos(e.target.checked)} /> Ver también los productos que no tiene ningún competidor ({filas.length - conCompetencia.length})</label>
-              {orden.length > 0 ? <TablaCompetencia filas={orden} estados={r.competidores} /> : <p className="cc-nota">Ningún competidor tiene productos de esta marca emparejados con los nuestros.</p>}
+              {orden.length > 0 ? <TablaCompetencia filas={orden} estados={estados} descuento={descuento} cupon={cuponMarca} /> : <p className="cc-nota">Ningún competidor tiene productos de esta marca emparejados con los nuestros.</p>}
             </>
           )}
         </div>
@@ -224,7 +296,7 @@ export default function CompararCompetidores() {
       {error && <div className="error">{error}</div>}
       {!config && <p className="cc-nota">Cargando…</p>}
       {marcas.map(m => (
-        <MarcaBloque key={m.slug} marca={m} r={config?.resultados[m.slug]} enlaces={config?.enlaces[m.slug] ?? {}}
+        <MarcaBloque key={m.slug} marca={m} r={config?.resultados[m.slug]} enlaces={config?.enlaces[m.slug] ?? {}} cupon={config?.cupon ?? null}
           revisando={revisando === m.slug} ocupado={revisando !== null}
           expandido={expandidos.has(m.slug)} onToggle={() => toggle(m.slug)}
           onRevisar={() => revisar(m.slug)} onEnlace={(comp, url) => enviar({ action: "enlace", slug: m.slug, comp, url })} />

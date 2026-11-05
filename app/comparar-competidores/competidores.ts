@@ -17,7 +17,8 @@ export const COMPETIDORES: Competidor[] = [
 
 // Precio de un competidor para uno de nuestros productos
 export type PrecioComp = {
-  precio: number;   // precio de venta en su web
+  precio: number;   // precio de venta (en Cosméticos24h, con su cupón de carrito si lo hay)
+  precioWeb?: number; // Cosméticos24h: precio de su web antes del cupón
   pvp?: number;     // precio sin oferta (tachado), si lo publica
   url: string;
   titulo: string;   // cómo se llama en su web
@@ -44,4 +45,5 @@ export type ResultadoComp = {
   filas: FilaComp[];
   competidores: Record<string, EstadoComp>;
   c24RevisadoEn?: string; // fecha de la revisión de Cosméticos24h de la que salen sus precios
+  cambios?: { desde: string; nuevosCaros: string[]; yaNoCaros: string[] }; // respecto a la revisión anterior
 };

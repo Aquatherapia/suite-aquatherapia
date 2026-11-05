@@ -23,9 +23,10 @@ type Config = {
   resultados: Record<string, ResultadoComp>;
 };
 
-type MarcaC24 = { nombre: string; slug: string; miToken?: string };
+type MarcaC24 = { nombre: string; slug: string; miToken?: string; descuentoMax?: number | null };
 type ComparacionC24 = { miUrl: string; suUrl: string; nombre: string; suPrecio: number; suPvp?: number; ean?: string; porEan?: boolean; porParecido?: "referencia" | "nombre" };
-type ConfigC24 = { marcas: MarcaC24[]; resultados: { slug: string; revisadoEn?: string; comparaciones: ComparacionC24[] }[] };
+type CuponC24 = { pct: number | null; codigo?: string; directo?: boolean; hasta?: string; promo?: { excluidas: string[] } };
+type ConfigC24 = { marcas: MarcaC24[]; resultados: { slug: string; revisadoEn?: string; comparaciones: ComparacionC24[] }[]; cupon?: CuponC24 };
 
 const vacia = (): Config => ({ enlaces: {}, auto: {}, resultados: {} });
 
@@ -53,13 +54,17 @@ async function guardarConfig(config: Config) {
 
 async function leerC24(): Promise<ConfigC24> {
   const c = await leerJson<ConfigC24>(KV_KEY_C24, CONFIG_PATH_C24);
-  return { marcas: c?.marcas ?? [], resultados: c?.resultados ?? [] };
+  return { marcas: c?.marcas ?? [], resultados: c?.resultados ?? [], cupon: c?.cupon };
 }
 
-// Lo que ve la página: la configuración y la lista de marcas
+// Lo que ve la página: la configuración, la lista de marcas (con su dto. autorizado) y el cupón de Cosméticos24h,
+// todo del comparador de Cosméticos24h
 async function respuesta(config: Config) {
   const c24 = await leerC24();
-  return NextResponse.json({ ...config, marcas: c24.marcas.map(m => ({ nombre: m.nombre, slug: m.slug })) });
+  const cupon = c24.cupon?.pct != null && c24.cupon.pct > 0
+    ? { pct: c24.cupon.pct, codigo: c24.cupon.codigo, directo: c24.cupon.directo, hasta: c24.cupon.hasta, excluidas: c24.cupon.promo?.excluidas ?? [] }
+    : null;
+  return NextResponse.json({ ...config, cupon, marcas: c24.marcas.map(m => ({ nombre: m.nombre, slug: m.slug, descuentoMax: m.descuentoMax ?? null })) });
 }
 
 export async function GET() {
@@ -118,8 +123,8 @@ export async function POST(req: NextRequest) {
     // El resto: se leen todos a la vez
     await Promise.all(COMPETIDORES.filter(c => c.tipo !== "c24").map(async comp => {
       try {
-        // Sin enlace todavía: se busca el listado de la marca en su web
-        if (enlaces[comp.id] === undefined) {
+        // Sin enlace todavía (o no se encontró sola): se busca el listado de la marca en su web
+        if (enlaces[comp.id] === undefined || (enlaces[comp.id] === "" && auto[comp.id] !== false)) {
           const encontrado = await buscarListado(comp, marca);
           enlaces[comp.id] = encontrado ?? "";
           auto[comp.id] = true;
@@ -135,7 +140,8 @@ export async function POST(req: NextRequest) {
 
     config.enlaces[marca.slug] = enlaces;
     config.auto[marca.slug] = auto;
-    config.resultados[marca.slug] = { revisadoEn: new Date().toISOString(), filas, competidores: estados, c24RevisadoEn: r24?.revisadoEn };
+    const antes = config.resultados[marca.slug];
+    config.resultados[marca.slug] = { revisadoEn: new Date().toISOString(), filas, competidores: estados, c24RevisadoEn: r24?.revisadoEn, cambios: antes ? cambios(antes, filas) : undefined };
     await guardarConfig(config);
     return respuesta(config);
   }
@@ -163,6 +169,22 @@ function emparejar(comp: string, suyos: SuProducto[], mios: MiProducto[], filaDe
     poner(p.mp, p.s, p.i, p.por);
   }
   return usados.size;
+}
+
+// Productos en los que ahora vamos más caros que algún competidor, y en los que ya no, respecto a la revisión anterior
+function cambios(antes: ResultadoComp, filas: FilaComp[]): ResultadoComp["cambios"] {
+  const clave = (f: FilaComp) => `${f.url}#${f.ean ?? f.formato ?? ""}`;
+  const caro = (f: FilaComp) => Object.values(f.precios).some(p => p.precio < f.precio - 0.005);
+  const previas = new Map(antes.filas.map(f => [clave(f), f]));
+  const nombre = (f: FilaComp) => f.formato && !f.nombre.includes(f.formato) ? `${f.nombre} (${f.formato})` : f.nombre;
+  const nuevosCaros: string[] = [], yaNoCaros: string[] = [];
+  for (const f of filas) {
+    const p = previas.get(clave(f));
+    if (!p) continue;
+    if (caro(f) && !caro(p)) nuevosCaros.push(nombre(f));
+    if (!caro(f) && caro(p)) yaNoCaros.push(nombre(f));
+  }
+  return { desde: antes.revisadoEn, nuevosCaros, yaNoCaros };
 }
 
 // «fetch failed» no dice nada: se añade la causa (certificado, conexión rechazada…)

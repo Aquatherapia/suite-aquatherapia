@@ -154,11 +154,15 @@ type ProductoPresta = { name: string; url: string; price_amount: number; regular
 
 async function leerPresta(enlace: string): Promise<SuProducto[]> {
   const out: SuProducto[] = [];
-  const base = enlace.split("?")[0];
+  let base = enlace.split("?")[0];
   for (let pagina = 1; pagina <= 25; pagina++) {
     const res = await pedir(`${base}?page=${pagina}`, { headers: { Accept: "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest" } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    if (!mismaRuta(res.url, base)) throw new Error("El enlace lleva a otra página");
+    // PrestaShop redirige /marcas/eberlin a /eberlin: vale, salvo que acabe en la portada (la marca no existe)
+    if (pagina === 1 && res.url && !mismaRuta(res.url, base)) {
+      if (new URL(res.url).pathname.replace(/\/$/, "") === "") throw new Error("El enlace lleva a la portada");
+      base = res.url.split("?")[0];
+    }
     const data = await res.json() as { products?: ProductoPresta[]; pagination?: { pages_count?: number } };
     for (const p of data.products ?? []) {
       const pvp = p.regular_price_amount && p.regular_price_amount > p.price_amount + 0.005 ? Math.round(p.regular_price_amount * 100) / 100 : undefined;
@@ -217,10 +221,21 @@ export async function buscarListado(c: Competidor, marca: { nombre: string; slug
     }
     if (c.tipo === "presta" || c.tipo === "rosi") {
       const url = `${c.web}/${c.tipo === "presta" ? "marcas" : "nuestras-marcas"}/${marca.slug}`;
-      const productos = c.tipo === "presta" ? await leerPresta(url) : await leerRosi(c, url);
-      return productos.length ? url : null;
+      if (c.tipo === "rosi") return (await leerRosi(c, url)).length ? url : null;
+      // PrestaShop: se guarda la dirección final, por si redirige (/marcas/eberlin → /eberlin)
+      const res = await pedir(url, { headers: { Accept: "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest" } });
+      if (!res.ok) return null;
+      const final = (res.url || url).split("?")[0];
+      if (new URL(final).pathname.replace(/\/$/, "") === "") return null;
+      const data = await res.json() as { products?: unknown[] };
+      return data.products?.length ? final : null;
     }
-  } catch { /* la web no responde: se deja sin enlace */ }
+  } catch (e) {
+    // La marca no existe en su web (redirige a otra página): no la vende
+    if (e instanceof Error && /otra página|portada|HTTP 404/.test(e.message)) return null;
+    // La web no responde: no se puede saber si la vende, se vuelve a buscar en la próxima revisión
+    throw e;
+  }
   return null;
 }
 
