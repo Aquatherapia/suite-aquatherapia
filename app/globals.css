@@ -1610,3 +1610,24 @@ button:disabled {
 /* Botón «Para la marca» con su menú PDF / Excel */
 .cp-para-marca { position: relative; display: inline-flex; }
 .cp-para-marca-menu { position: absolute; top: 100%; right: 0; z-index: 5; display: flex; gap: 4px; margin-top: 4px; padding: 4px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12); }
+
+/* ── Comparar precios con la competencia ── */
+.cc-filtro { max-width: 280px; margin: 12px 0 8px; }
+.cc-enlaces { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 6px 18px; padding: 8px 4px 10px; font-size: 12px; }
+.cc-enlace { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cc-enlace-nombre { font-weight: 700; color: #c2367e; }
+.cc-enlace-estado { color: #374151; overflow-wrap: anywhere; }
+.cc-enlace-estado a { color: #1270b6; }
+.cc-enlace-edit { display: flex; gap: 6px; }
+.cc-enlace-edit input { flex: 1; min-width: 0; font-size: 12px; padding: 4px 6px; }
+.cc-cambiar { margin-left: 6px; background: none; border: none; padding: 0; color: #6b7280; text-decoration: underline; font-size: 11px; cursor: pointer; }
+.cc-nota { font-size: 12px; color: var(--muted); margin: 4px 4px 8px; }
+.cc-todos { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #374151; margin: 4px 4px 6px; }
+.cc-todos input { width: auto; margin: 0; }
+.cp-informe.cc-tabla { min-width: 900px; }
+.cc-tabla .cc-precio { color: inherit; text-decoration: none; }
+.cc-tabla .cc-precio:hover { text-decoration: underline; }
+.cc-tabla .cc-mas-caro { color: #6b7280; }
+.cc-tabla td.cc-el-mas-barato { background: #fdecea !important; }
+.cc-tabla .cc-por { margin-left: 3px; color: #9ca3af; font-weight: 400; cursor: help; }
+.cc-tabla td.cp-vacia { color: #c4c9d0; text-align: center; }
