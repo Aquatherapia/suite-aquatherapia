@@ -127,34 +127,49 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
 }
 
 function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; nuestros?: number; enlazados?: number; onGuardar: (url: string) => void }) {
-  const deNuestros = `${enlazados ?? estado?.emparejados ?? 0} de los ${nuestros ?? "?"} nuestros enlazados`;
-  const suyos = estado?.leidos != null ? `${estado.leidos} productos · ` : "";
   const c = COMPETIDORES.find(x => x.id === id)!;
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState(enlace ?? "");
-  const noVende = enlace === "";
+  const esC24 = c.tipo === "c24";
+  const noVende = esC24 ? estado?.url === "" : enlace === "";
+  const leido = !estado?.error && estado?.leidos != null && (esC24 || !!enlace);
+  const n = enlazados ?? estado?.emparejados ?? 0;
+  const pct = nuestros ? Math.round((n / nuestros) * 100) : 0;
+  const cambiar = !esC24 && <button className="cc-cambiar" onClick={() => { setValor(enlace ?? ""); setEditando(true); }}>cambiar</button>;
   return (
-    <div className="cc-enlace">
-      <span className="cc-enlace-nombre" style={{ color: c.color }}>{c.nombre}</span>
-      {c.tipo === "c24" ? (
-        <span className="cc-enlace-estado">{estado?.url === "" ? <span className="cp-suave-txt">no está en su comparador</span> : estado?.error ?? <>{suyos}<b>{deNuestros}</b> · de su comparador</>}</span>
-      ) : editando ? (
-        <span className="cc-enlace-edit">
-          <input value={valor} onChange={e => setValor(e.target.value)} placeholder={`${c.web}/… (vacío = no la vende)`}
-            onKeyDown={e => { if (e.key === "Enter") { onGuardar(valor); setEditando(false); } }} autoFocus />
-          <button className="regen-btn" onClick={() => { onGuardar(valor); setEditando(false); }}>Guardar</button>
-        </span>
+    <tr>
+      <td className="cc-t-nombre" style={{ color: c.color }}>{c.nombre}</td>
+      {editando ? (
+        <td colSpan={3}>
+          <span className="cc-enlace-edit">
+            <input value={valor} onChange={e => setValor(e.target.value)} placeholder={`${c.web}/… (vacío = no la vende)`}
+              onKeyDown={e => { if (e.key === "Enter") { onGuardar(valor); setEditando(false); } }} autoFocus />
+            <button className="regen-btn" onClick={() => { onGuardar(valor); setEditando(false); }}>Guardar</button>
+          </span>
+        </td>
+      ) : estado?.error ? (
+        <td colSpan={2} className="cp-rojo">{estado.error}</td>
+      ) : noVende ? (
+        <td colSpan={2} className="cp-suave-txt">{esC24 ? "no está en su comparador" : "no la vende"}</td>
+      ) : !leido ? (
+        <td colSpan={2} className="cp-suave-txt">{enlace === undefined && !esC24 ? "se busca al revisar" : "sin revisar"}</td>
       ) : (
-        <span className="cc-enlace-estado">
-          {enlace === undefined ? <span className="cp-suave-txt">se busca al revisar</span>
-            : noVende ? <span className="cp-suave-txt">no la vende</span>
-            : <a href={enlace} target="_blank" rel="noreferrer">ver listado ↗</a>}
-          {estado?.error && <span className="cp-rojo"> · {estado.error}</span>}
-          {!estado?.error && estado?.leidos != null && enlace && <span> · {suyos}<b>{deNuestros}</b></span>}
-          <button className="cc-cambiar" onClick={() => { setValor(enlace ?? ""); setEditando(true); }}>cambiar</button>
-        </span>
+        <>
+          <td className="cc-t-num">{estado!.leidos}</td>
+          <td>
+            <span className="cc-barra"><span style={{ width: `${pct}%`, background: c.color }} /></span>
+            <b>{n} de {nuestros ?? "?"}</b> <span className="cp-suave-txt">({pct} %)</span>
+          </td>
+        </>
       )}
-    </div>
+      {!editando && (
+        <td className="cc-t-listado">
+          {esC24 ? <span className="cp-suave-txt">su comparador</span>
+            : enlace ? <a href={enlace} target="_blank" rel="noreferrer">ver listado ↗</a> : null}
+          {cambiar}
+        </td>
+      )}
+    </tr>
   );
 }
 
@@ -237,13 +252,15 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
       {expandido && (
         <div className="vp-accordion-content">
           <div className="cc-enlaces">
-            <div className="cc-enlace">
-              <span className="cc-enlace-nombre" style={{ color: "#1270b6" }}>La Tienda de Cosméticos</span>
-              <span className="cc-enlace-estado">{r ? <b>{r.filas.length} productos</b> : <span className="cp-suave-txt">sin revisar</span>}</span>
-            </div>
-            {COMPETIDORES.map(c => (
-              <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} onGuardar={url => onEnlace(c.id, url)} />
-            ))}
+            <div className="cc-nuestros">Nosotros tenemos <b>{r ? `${r.filas.length} productos` : "—"}</b> de {marca.nombre}{r ? ". Cuántos hemos podido enlazar en cada tienda:" : " (pulsa «Revisar»)."}</div>
+            <table className="cc-tabla-tiendas">
+              <thead><tr><th>Tienda</th><th className="cc-t-num">Productos suyos</th><th>Enlazados con los nuestros</th><th>Listado</th></tr></thead>
+              <tbody>
+                {COMPETIDORES.map(c => (
+                  <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} onGuardar={url => onEnlace(c.id, url)} />
+                ))}
+              </tbody>
+            </table>
           </div>
           {r?.c24RevisadoEn && <div className="cc-nota">Los precios de Cosméticos24h son los de su comparador, revisado el {fechaExacta(r.c24RevisadoEn)}{cuponMarca ? `, con su cupón de carrito ${cuponMarca.codigo ?? ""} (−${String(cuponMarca.pct).replace(".", ",")} %)` : ""}.</div>}
           {r?.cambios && (r.cambios.nuevosCaros.length + r.cambios.yaNoCaros.length) > 0 && (
