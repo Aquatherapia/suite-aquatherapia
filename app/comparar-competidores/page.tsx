@@ -142,7 +142,9 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
   return (
     <>
     <tr>
-      <td className="cc-t-nombre" style={{ color: c.color }}>{c.nombre}</td>
+      <td className="cc-t-nombre">{(esC24 ? estado?.url : enlace)
+        ? <a href={(esC24 ? estado?.url : enlace)!} target="_blank" rel="noreferrer" style={{ color: c.color }} title={`Ver la marca en ${c.nombre}`}>{c.nombre} ↗</a>
+        : <span style={{ color: c.color }}>{c.nombre}</span>}</td>
       {editando ? (
         <td colSpan={3}>
           <span className="cc-enlace-edit">
@@ -168,8 +170,6 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
       )}
       {!editando && (
         <td className="cc-t-listado">
-          {esC24 ? null
-            : enlace ? <a href={enlace} target="_blank" rel="noreferrer">ver listado ↗</a> : null}
           {cambiar}
         </td>
       )}
