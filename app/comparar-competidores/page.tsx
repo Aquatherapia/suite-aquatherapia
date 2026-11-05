@@ -5,7 +5,7 @@ import Link from "next/link";
 import { COMPETIDORES, explicarError, type FilaComp, type ResultadoComp, type EstadoComp } from "./competidores";
 import { descuentoBoardfy } from "../comparar-precios/boardfy";
 import { aplicarCupon, calcularFila, columnasDe, cuponDeMarca, descuentoDe, ordenar, pctTexto, type CuponComp, type MarcaComp } from "./calculo";
-import { descargarExcel, descargarPdf, descargarParaMarca, filasParaMarca } from "./exportar";
+import { descargarExcel, descargarPdf, descargarParaMarca, descargarParaTodas, filasParaMarca } from "./exportar";
 
 type Config = {
   marcas: MarcaComp[];
@@ -387,7 +387,21 @@ export default function CompararCompetidores() {
       <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
         <span>Están todas las marcas de nuestra web. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato o, si el nombre está en otro idioma, con IA (≈).</span>
       </div>
-      <input className="cc-filtro" value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Buscar marca…" />
+      <div className="cc-barra-sup">
+        <input className="cc-filtro" value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Buscar marca…" />
+        <button className="regen-btn" disabled={!config || !Object.keys(config.resultados).length}
+          title="Un Excel con todas las marcas revisadas en las que alguna tienda vende por debajo del descuento autorizado (una hoja por marca)"
+          onClick={() => {
+            if (!config) return;
+            const lista = config.marcas.filter(m => config.resultados[m.slug]).map(m => ({
+              nombre: m.nombre,
+              filas: aplicarCupon(config.resultados[m.slug].filas, cuponDeMarca(config.cupon ?? null, m.nombre)),
+              descuento: descuentoDe(m) ?? 0,
+            }));
+            setError("");
+            descargarParaTodas(lista).catch(err => setError(err instanceof Error ? err.message : String(err)));
+          }}>Excel para las marcas (todas)</button>
+      </div>
       {error && <div className="error">{error}</div>}
       {!config && <p className="cc-nota">Cargando…</p>}
       {marcas.map(m => (

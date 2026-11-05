@@ -1654,3 +1654,6 @@ button:disabled {
 .cc-porque-btn { display: inline; width: auto; margin: 4px 0 0; padding: 0; background: none; border: none; color: #1270b6; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; }
 .cc-t-porque { font-size: 12px; color: #374151; max-width: 420px; }
 .cc-t-porque b { color: #111827; }
+.cc-barra-sup { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.cc-barra-sup .cc-filtro { flex: 1; min-width: 200px; }
+.cc-barra-sup .regen-btn { width: auto; }
