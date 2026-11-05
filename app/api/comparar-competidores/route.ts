@@ -24,6 +24,9 @@ type Config = {
   resultados: Record<string, ResultadoComp>;
   // Todas nuestras marcas (feed y página de marcas de nuestra web), leídas como mucho una vez al día
   marcasWeb?: { fecha: string; lista: MarcaWeb[] };
+  // Dto. autorizado puesto a mano en las marcas que no están en el comparador de Cosméticos24h
+  // (las que sí están lo guardan allí, para que los dos apartados usen el mismo)
+  descuentos?: Record<string, number>;
 };
 
 // Una marca de este apartado: las del comparador de Cosméticos24h y el resto de las de nuestra web
@@ -91,7 +94,7 @@ async function todasLasMarcas(config: Config, c24: ConfigC24): Promise<Marca[]> 
     let slug = w.slug;
     for (let n = 2; slugs.has(slug); n++) slug = `${w.slug}-${n}`;
     slugs.add(slug);
-    out.push({ nombre: w.nombre, slug, feed: w.feed, enC24: false });
+    out.push({ nombre: w.nombre, slug, feed: w.feed, enC24: false, descuentoMax: config.descuentos?.[slug] });
   }
   return out;
 }
@@ -116,6 +119,25 @@ export async function POST(req: NextRequest) {
   const config = await leerConfig();
 
   // Enlace del listado de una marca en un competidor, puesto a mano ("" = no la vende)
+  // Dto. autorizado de una marca puesto a mano (null = el de Boardfy)
+  if (body.action === "descuento") {
+    const { slug, descuentoMax } = body as { slug: string; descuentoMax: number | null };
+    if (descuentoMax != null && !(descuentoMax >= 0 && descuentoMax <= 90)) return NextResponse.json({ error: "El descuento debe estar entre 0 y 90 %." });
+    const valor = descuentoMax == null ? null : Math.round(descuentoMax * 10) / 10;
+    const c24 = await leerJson<ConfigC24 & Record<string, unknown>>(KV_KEY_C24, CONFIG_PATH_C24);
+    const enC24 = c24?.marcas?.find(m => m.slug === slug);
+    if (c24 && enC24) {
+      if (valor == null) delete enC24.descuentoMax; else enC24.descuentoMax = valor;
+      if (USE_KV) { const { kv } = await import("@vercel/kv"); await kv.set(KV_KEY_C24, c24); }
+      else await fs.writeFile(CONFIG_PATH_C24, JSON.stringify(c24, null, 2));
+    } else {
+      config.descuentos = { ...(config.descuentos ?? {}) };
+      if (valor == null) delete config.descuentos[slug]; else config.descuentos[slug] = valor;
+      await guardarConfig(config);
+    }
+    return respuesta(config);
+  }
+
   if (body.action === "enlace") {
     const { slug, comp, url } = body as { slug: string; comp: string; url: string };
     const limpio = (url ?? "").trim();

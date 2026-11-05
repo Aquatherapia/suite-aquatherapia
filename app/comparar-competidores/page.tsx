@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { COMPETIDORES, type FilaComp, type ResultadoComp, type EstadoComp } from "./competidores";
+import { descuentoBoardfy } from "../comparar-precios/boardfy";
 import { aplicarCupon, calcularFila, columnasDe, cuponDeMarca, descuentoDe, ordenar, pctTexto, type CuponComp, type MarcaComp } from "./calculo";
 import { descargarExcel, descargarPdf, descargarParaMarca, filasParaMarca } from "./exportar";
 
@@ -180,9 +181,9 @@ function ParaMarca({ marca, filas, descuento }: { marca: string; filas: FilaComp
   );
 }
 
-function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, onToggle, onRevisar, onEnlace }: {
+function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, onToggle, onRevisar, onEnlace, onDescuento }: {
   marca: MarcaComp; r?: ResultadoComp; enlaces: Record<string, string>; cupon: CuponComp; revisando: boolean; ocupado: boolean;
-  expandido: boolean; onToggle: () => void; onRevisar: () => void; onEnlace: (comp: string, url: string) => void;
+  expandido: boolean; onToggle: () => void; onRevisar: () => void; onEnlace: (comp: string, url: string) => void; onDescuento: (valor: string) => void;
 }) {
   const [todos, setTodos] = useState(false);
   const descuento = descuentoDe(marca);
@@ -201,9 +202,20 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
         <span className="vp-accordion-marca">
           {marca.nombre}
           <span className="cp-revisado">{r ? `Revisada el ${fechaExacta(r.revisadoEn)}` : "Sin revisar todavía"}</span>
-          <span className="cp-dto" title="Descuento autorizado sobre el PVP: el del comparador de Cosméticos24h (allí se cambia) o, si no hay, el de Boardfy">
-            Dto. autorizado {descuento != null ? `${String(descuento).replace(".", ",")} %` : <span className="cp-suave-txt">sin límite</span>}
-          </span>
+          <label className="cp-dto" title="Descuento autorizado sobre el PVP. Puedes cambiarlo a mano (vacío = el de Boardfy). Es el mismo que en el comparador de Cosméticos24h" onClick={e => e.stopPropagation()}>
+            Dto. autorizado
+            <input
+              key={`${marca.slug}-${marca.descuentoMax ?? "b"}`}
+              className="cp-dto-input"
+              inputMode="decimal"
+              defaultValue={marca.descuentoMax != null ? String(marca.descuentoMax).replace(".", ",") : ""}
+              placeholder={descuentoBoardfy(marca.nombre) != null ? String(descuentoBoardfy(marca.nombre)).replace(".", ",") : "—"}
+              onBlur={e => { if (e.target.value !== (marca.descuentoMax != null ? String(marca.descuentoMax).replace(".", ",") : "")) onDescuento(e.target.value); }}
+              onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+            />
+            %
+            {descuento == null && <span className="cp-suave-txt">sin límite</span>}
+          </label>
         </span>
         <div className="vp-accordion-right">
           {caros > 0 && <span className="vp-pill vp-pill-nuevo" title="Productos que algún competidor vende más barato que nosotros">{caros} más caros</span>}
@@ -301,7 +313,12 @@ export default function CompararCompetidores() {
         <MarcaBloque key={m.slug} marca={m} r={config?.resultados[m.slug]} enlaces={config?.enlaces[m.slug] ?? {}} cupon={config?.cupon ?? null}
           revisando={revisando === m.slug} ocupado={revisando !== null}
           expandido={expandidos.has(m.slug)} onToggle={() => toggle(m.slug)}
-          onRevisar={() => revisar(m.slug)} onEnlace={(comp, url) => enviar({ action: "enlace", slug: m.slug, comp, url })} />
+          onRevisar={() => revisar(m.slug)} onEnlace={(comp, url) => enviar({ action: "enlace", slug: m.slug, comp, url })}
+          onDescuento={valor => {
+            const v = valor.trim().replace(",", ".").replace("%", "");
+            if (v && !Number.isFinite(Number(v))) { setError("El descuento tiene que ser un número"); return; }
+            enviar({ action: "descuento", slug: m.slug, descuentoMax: v ? Number(v) : null });
+          }} />
       ))}
     </div>
   );
