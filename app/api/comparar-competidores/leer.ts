@@ -81,6 +81,19 @@ const precioWoo = (v: string | undefined, decimales: number) => (v ? Number(v) /
 // En WooCommerce el SKU a veces es el EAN («3700109214090-1»)
 const eanDeSku = (sku: string | undefined) => { const m = (sku ?? "").trim().match(/^(\d{8,14})(?:-\d{1,2})?$/); return m ? normalizarEan(m[1]) : null; };
 
+type CategoriaWoo = { id: number; slug: string; name: string; count: number; permalink?: string };
+async function categoriasWoo(c: Competidor): Promise<CategoriaWoo[]> {
+  const cats: CategoriaWoo[] = [];
+  for (let pagina = 1; pagina <= 5; pagina++) {
+    const res = await pedir(`${c.web}/wp-json/wc/store/v1/products/categories?per_page=100&page=${pagina}`, undefined, 15_000);
+    if (!res.ok) break;
+    const lote = await res.json() as CategoriaWoo[];
+    cats.push(...lote);
+    if (lote.length < 100) break;
+  }
+  return cats;
+}
+
 type ProductoWoo = {
   id: number; name: string; permalink: string; sku?: string; type: string;
   prices: { price: string; regular_price: string; currency_minor_unit: number };
@@ -88,10 +101,12 @@ type ProductoWoo = {
 };
 
 async function leerWoo(c: Competidor, enlace: string, limite: number): Promise<SuProducto[]> {
-  const cat = ultimoTramo(enlace);
+  // Algunas tiendas solo filtran por el número de la categoría, no por su nombre en la URL
+  const slug = ultimoTramo(enlace);
+  const cat = (await categoriasWoo(c)).find(x => x.slug === slug)?.id ?? slug;
   const productos: ProductoWoo[] = [];
   for (let pagina = 1; pagina <= 10; pagina++) {
-    const res = await pedir(`${c.web}/wp-json/wc/store/v1/products?category=${encodeURIComponent(cat)}&per_page=100&page=${pagina}`);
+    const res = await pedir(`${c.web}/wp-json/wc/store/v1/products?category=${encodeURIComponent(String(cat))}&per_page=100&page=${pagina}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const lote = await res.json() as ProductoWoo[];
     productos.push(...lote);
@@ -177,14 +192,7 @@ export async function buscarListado(c: Competidor, marca: { nombre: string; slug
   const clave = soloLetras(marca.nombre);
   try {
     if (c.tipo === "woo") {
-      const cats: { slug: string; name: string; count: number; permalink?: string }[] = [];
-      for (let pagina = 1; pagina <= 5; pagina++) {
-        const res = await pedir(`${c.web}/wp-json/wc/store/v1/products/categories?per_page=100&page=${pagina}`, undefined, 15_000);
-        if (!res.ok) break;
-        const lote = await res.json();
-        cats.push(...lote);
-        if (lote.length < 100) break;
-      }
+      const cats = await categoriasWoo(c);
       // La categoría que se llama como la marca (o «marca-online», «comprar-marca»…), la de más productos
       const candidatas = cats.filter(x => x.count > 0 && (soloLetras(x.name) === clave || soloLetras(x.slug) === clave || soloLetras(x.slug).replace(/online|comprar|tienda|cosmetica|cosmeticos/g, "") === clave))
         .sort((a, b) => b.count - a.count);
