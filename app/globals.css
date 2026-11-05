@@ -1659,4 +1659,12 @@ button:disabled {
 .cc-barra-sup .regen-btn { width: auto; }
 .cc-t-como { font-size: 12px; color: #374151; white-space: nowrap; }
 .cc-t-como b { color: #111827; }
-.cc-enlazar { display: inline-block; width: auto; max-width: 260px; margin: 0 0 0 8px; padding: 1px 4px; font-size: 11px; vertical-align: baseline; }
+.cc-enlazar-btn { display: inline; width: auto; margin: 0 0 0 8px; padding: 1px 8px; font-size: 11px; border: 1px solid #c7ccd4; border-radius: 4px; background: #fff; color: #1270b6; cursor: pointer; }
+.cc-elegir { margin: 4px 0 8px 0; max-width: 560px; border: 1px solid #c7ccd4; border-radius: 6px; background: #fff; }
+.cc-elegir-cab { display: flex; gap: 8px; align-items: center; padding: 6px; border-bottom: 1px solid #e5e7eb; }
+.cc-elegir-cab input { flex: 1; margin: 0; padding: 4px 6px; font-size: 12px; }
+.cc-elegir ul { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+.cc-elegir li { margin: 0; padding: 0; }
+.cc-elegir li button { display: block; width: 100%; margin: 0; padding: 4px 8px; text-align: left; font-size: 12px; background: none; border: none; color: inherit; cursor: pointer; }
+.cc-elegir li button:hover { background: #eef4fb; }
+.cc-elegir li.cp-suave-txt { padding: 6px 8px; font-size: 12px; }
