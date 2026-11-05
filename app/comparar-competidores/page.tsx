@@ -91,7 +91,8 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
                   const p = f.precios[c.id];
                   if (!p) return [<td key={`${c.id}-pvp`} className="cp-vacia">—</td>, <td key={`${c.id}-precio`} className="cp-vacia">—</td>];
                   const kc = k.comp[c.id];
-                  const masBaratoQueNos = p.precio < f.precio - 0.005;
+                  // Solo se marca la tienda más barata de la fila, y solo si vende por debajo de nuestro precio
+                  const masBaratoQueNos = p.precio < f.precio - 0.005 && k.mb?.id === c.id;
                   const tip = `${p.titulo}${p.por !== "ean" ? ` · emparejado ${COMO[p.por]}` : ""}${p.precioWeb != null ? ` · en su web ${eur(p.precioWeb)}, con cupón ${eur(p.precio)}` : ""}${kc.bajoMinimo && k.limite != null ? ` · por debajo de nuestro PVP con dto. autorizado (${eur(k.limite)})` : ""}`;
                   return [
                     <Celda key={`${c.id}-pvp`} className={kc.pvpSinActualizar ? "cp-ambar" : undefined} style={kc.pvpSinActualizar ? undefined : { color: c.color }}
