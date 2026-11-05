@@ -38,7 +38,7 @@ type Marca = MarcaC24 & { feed?: string; enC24: boolean };
 type MarcaC24 = { nombre: string; slug: string; miToken?: string; descuentoMax?: number | null };
 type ComparacionC24 = { miUrl: string; suUrl: string; nombre: string; suPrecio: number; suPvp?: number; ean?: string; porEan?: boolean; porParecido?: "referencia" | "nombre" };
 type CuponC24 = { pct: number | null; codigo?: string; directo?: boolean; hasta?: string; promo?: { excluidas: string[] } };
-type ConfigC24 = { marcas: MarcaC24[]; resultados: { slug: string; revisadoEn?: string; comparaciones: ComparacionC24[] }[]; cupon?: CuponC24 };
+type ConfigC24 = { marcas: MarcaC24[]; resultados: { slug: string; revisadoEn?: string; comparaciones: ComparacionC24[] }[]; cupon?: CuponC24; eanVariantes?: Record<string, (string | null)[]> };
 
 const vacia = (): Config => ({ enlaces: {}, auto: {}, resultados: {} });
 
@@ -66,7 +66,7 @@ async function guardarConfig(config: Config) {
 
 async function leerC24(): Promise<ConfigC24> {
   const c = await leerJson<ConfigC24>(KV_KEY_C24, CONFIG_PATH_C24);
-  return { marcas: c?.marcas ?? [], resultados: c?.resultados ?? [], cupon: c?.cupon };
+  return { marcas: c?.marcas ?? [], resultados: c?.resultados ?? [], cupon: c?.cupon, eanVariantes: c?.eanVariantes ?? {} };
 }
 
 const soloLetras = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -210,8 +210,8 @@ export async function POST(req: NextRequest) {
         }
         const enlace = enlaces[comp.id];
         if (!enlace) { estados[comp.id] = { url: "" , auto: auto[comp.id] }; return; }
-        const suyos = await leerCompetidor(comp, enlace, limite, marca.nombre);
-        // Cosméticos24h no publica el EAN en su web: se toma de su comparador cuando ya lo tiene emparejado
+        const suyos = await leerCompetidor(comp, enlace, limite, marca.nombre, comp.id === "c24" ? { ...c24.eanVariantes } : undefined);
+        // Si aun así falta el EAN de algún producto de Cosméticos24h, se toma de su comparador cuando ya lo tiene emparejado
         if (comp.id === "c24") {
           const r24 = c24.resultados.find(r => r.slug === marca.slug);
           const eanDe = new Map((r24?.comparaciones ?? []).map(x => [x.suUrl.split("?")[0], normalizarEan(x.ean) ?? mios.find(m => m.url === x.miUrl)?.ean ?? null]));
