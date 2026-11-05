@@ -48,3 +48,15 @@ export type ResultadoComp = {
   c24RevisadoEn?: string; // fecha de la revisión de Cosméticos24h de la que salen sus precios
   cambios?: { desde: string; nuevosCaros: string[]; yaNoCaros: string[] }; // respecto a la revisión anterior
 };
+
+// Errores técnicos de conexión explicados para que se entiendan (los ya guardados también se muestran así)
+export function explicarError(t: string): string {
+  if (/ECONNRESET|ECONNREFUSED|UND_ERR_SOCKET|socket hang up|other side closed/i.test(t)) return "Su web no deja que nuestro servidor lea sus precios (corta la conexión)";
+  if (/HTTP 40[13]|HTTP 429|forbidden|cloudflare|captcha/i.test(t)) return "Su web bloquea las consultas automáticas: no se pueden leer sus precios";
+  if (/ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT|timeout|aborted/i.test(t)) return "Su web tarda demasiado en responder; prueba a revisar más tarde";
+  if (/ENOTFOUND|EAI_AGAIN/i.test(t)) return "No se encuentra su web (¿ha cambiado de dirección?)";
+  if (/CERT|SSL|TLS/i.test(t)) return "Su web tiene un problema con su certificado de seguridad";
+  if (/HTTP 5\d\d/i.test(t)) return "Su web está dando errores ahora mismo; prueba a revisar más tarde";
+  if (/fetch failed/i.test(t)) return "No se ha podido conectar con su web";
+  return t;
+}

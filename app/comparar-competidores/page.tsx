@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { COMPETIDORES, type FilaComp, type ResultadoComp, type EstadoComp } from "./competidores";
+import { COMPETIDORES, explicarError, type FilaComp, type ResultadoComp, type EstadoComp } from "./competidores";
 import { descuentoBoardfy } from "../comparar-precios/boardfy";
 import { aplicarCupon, calcularFila, columnasDe, cuponDeMarca, descuentoDe, ordenar, pctTexto, type CuponComp, type MarcaComp } from "./calculo";
 import { descargarExcel, descargarPdf, descargarParaMarca, filasParaMarca } from "./exportar";
@@ -152,7 +152,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
           </span>
         </td>
       ) : estado?.error ? (
-        <td colSpan={2} className="cp-rojo">{estado.error}</td>
+        <td colSpan={2} className="cp-rojo">{explicarError(estado.error)}</td>
       ) : noVende ? (
         <td colSpan={2} className="cp-suave-txt">{esC24 ? "no está en su comparador" : "no la vende"}</td>
       ) : !leido ? (

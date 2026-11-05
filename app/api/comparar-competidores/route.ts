@@ -4,7 +4,7 @@ import path from "path";
 import { emparejarPorNombre } from "./emparejar-nombre";
 import { emparejarConIa } from "./emparejar-ia";
 import { motivoSinPareja } from "./motivo";
-import { COMPETIDORES, type EstadoComp, type FilaComp, type ResultadoComp } from "../../comparar-competidores/competidores";
+import { COMPETIDORES, explicarError, type EstadoComp, type FilaComp, type ResultadoComp } from "../../comparar-competidores/competidores";
 import { buscarListado, leerCompetidor, leerMarcasWeb, leerMisProductos, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
 
 // Leer varias webs a la vez cabe de sobra, pero alguna puede ir lenta: Vercel Hobby permite hasta 300 s
@@ -278,9 +278,9 @@ function cambios(antes: ResultadoComp, filas: FilaComp[]): ResultadoComp["cambio
   return { desde: antes.revisadoEn, nuevosCaros, yaNoCaros };
 }
 
-// «fetch failed» no dice nada: se añade la causa (certificado, conexión rechazada…)
+// Los errores técnicos («fetch failed (ECONNRESET)») se cambian por una explicación que se entienda
 function textoError(e: unknown): string {
-  if (!(e instanceof Error)) return String(e);
+  if (!(e instanceof Error)) return explicarError(String(e));
   const causa = (e as Error & { cause?: { code?: string; message?: string } }).cause;
-  return causa ? `${e.message} (${causa.code ?? causa.message})` : e.message;
+  return explicarError(`${e.message}${causa ? ` (${causa.code ?? causa.message})` : ""}`);
 }
