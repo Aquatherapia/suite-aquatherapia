@@ -38,6 +38,7 @@ export type EstadoComp = {
   leidos?: number;    // productos de la marca leídos en su web
   emparejados?: number;
   error?: string;
+  sinPareja?: { titulo: string; url?: string; precio?: number; motivo: string }[]; // sus productos que no se han enlazado y por qué
 };
 
 export type ResultadoComp = {

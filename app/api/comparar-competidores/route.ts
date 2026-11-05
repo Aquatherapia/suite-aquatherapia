@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import { emparejarPorNombre } from "./emparejar-nombre";
 import { emparejarConIa } from "./emparejar-ia";
+import { motivoSinPareja } from "./motivo";
 import { COMPETIDORES, type EstadoComp, type FilaComp, type ResultadoComp } from "../../comparar-competidores/competidores";
 import { buscarListado, leerCompetidor, leerMarcasWeb, leerMisProductos, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
 
@@ -170,14 +171,16 @@ export async function POST(req: NextRequest) {
     const r24 = c24.resultados.find(r => r.slug === marca.slug);
     if (r24) {
       let n = 0;
+      const sinPareja: NonNullable<EstadoComp["sinPareja"]> = [];
       for (const c of r24.comparaciones) {
         const ean = normalizarEan(c.ean);
         const m = (ean && mios.find(x => x.ean === ean)) || mios.filter(x => x.url === c.miUrl).length === 1 && mios.find(x => x.url === c.miUrl) || null;
-        if (!m || !c.suPrecio) continue;
+        if (!m) { sinPareja.push({ titulo: c.nombre, url: c.suUrl, precio: c.suPrecio ?? undefined, motivo: "Está en su comparador, pero no lo encontramos en nuestro feed (otro EAN o ficha desactivada)" }); continue; }
+        if (!c.suPrecio) { sinPareja.push({ titulo: c.nombre, url: c.suUrl, motivo: "Su comparador no tiene su precio (agotado o sin precio)" }); continue; }
         filaDe.get(m.clave)!.precios.c24 = { precio: c.suPrecio, pvp: c.suPvp && c.suPvp > c.suPrecio + 0.005 ? c.suPvp : undefined, url: c.suUrl, titulo: c.nombre, por: c.porParecido ?? "ean" };
         n++;
       }
-      estados.c24 = { url: `https://cosmeticos24h.com/collections/${marca.slug}`, leidos: r24.comparaciones.length, emparejados: n };
+      estados.c24 = { url: `https://cosmeticos24h.com/collections/${marca.slug}`, leidos: r24.comparaciones.length, emparejados: n, sinPareja };
     } else if (marca.enC24) {
       estados.c24 = { error: "Revisa antes la marca en el comparador de Cosméticos24h" };
     } else {
@@ -196,7 +199,8 @@ export async function POST(req: NextRequest) {
         const enlace = enlaces[comp.id];
         if (!enlace) { estados[comp.id] = { url: "" , auto: auto[comp.id] }; return; }
         const suyos = await leerCompetidor(comp, enlace, limite, marca.nombre);
-        estados[comp.id] = { url: enlace, auto: auto[comp.id], leidos: suyos.length, emparejados: await emparejar(comp.id, comp.nombre, suyos, mios, filaDe, marca) };
+        const { n, sinPareja } = await emparejar(comp.id, comp.nombre, suyos, mios, filaDe, marca);
+        estados[comp.id] = { url: enlace, auto: auto[comp.id], leidos: suyos.length, emparejados: n, sinPareja };
       } catch (e) {
         estados[comp.id] = { url: enlaces[comp.id], auto: auto[comp.id], error: textoError(e) };
       }
@@ -215,7 +219,7 @@ export async function POST(req: NextRequest) {
 
 // Empareja los productos de un competidor con los nuestros: primero por EAN, lo que quede por referencia o nombre
 // y, lo que siga sin pareja, con IA (nombres en otro idioma). Devuelve cuántos de los nuestros han encontrado pareja.
-async function emparejar(comp: string, tienda: string, suyos: SuProducto[], mios: MiProducto[], filaDe: Map<string, FilaComp>, marca: MarcaC24): Promise<number> {
+async function emparejar(comp: string, tienda: string, suyos: SuProducto[], mios: MiProducto[], filaDe: Map<string, FilaComp>, marca: MarcaC24): Promise<{ n: number; sinPareja: NonNullable<EstadoComp["sinPareja"]> }> {
   const usados = new Set<string>();
   const suyosUsados = new Set<string>();
   const poner = (m: MiProducto, s: SuProducto, i: number, por: "ean" | "referencia" | "nombre" | "ia") => {
@@ -246,7 +250,16 @@ async function emparejar(comp: string, tienda: string, suyos: SuProducto[], mios
     const x = porClave.get(p.su), m = miDe.get(p.mio);
     if (x && m && !usados.has(m.clave)) poner(m, x.s, x.i, "ia");
   }
-  return usados.size;
+  // Sus productos sin pareja y por qué (si un producto suyo tiene varios formatos y alguno ya está enlazado, no cuenta)
+  const mk = { nombre: marca.nombre, slug: marca.slug, miToken: marca.miToken ?? marca.slug };
+  const sinPareja = suyos
+    .filter(s => !s.variantes.some((_, i) => suyosUsados.has(`${s.url}#${i}`)))
+    .flatMap(s => s.variantes.map(v => {
+      const titulo = v.titulo ? `${s.titulo} · ${v.titulo}` : s.titulo;
+      return { titulo, url: s.url, precio: v.precio, motivo: motivoSinPareja(titulo, v.precio, s.esPack, mios, usados, mk) };
+    }))
+    .slice(0, 150);
+  return { n: usados.size, sinPareja };
 }
 
 // Productos en los que ahora vamos más caros que algún competidor, y en los que ya no, respecto a la revisión anterior
