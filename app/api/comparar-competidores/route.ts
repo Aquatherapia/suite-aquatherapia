@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
         }
         const enlace = enlaces[comp.id];
         if (!enlace) { estados[comp.id] = { url: "" , auto: auto[comp.id] }; return; }
-        const suyos = await leerCompetidor(comp, enlace, limite);
+        const suyos = await leerCompetidor(comp, enlace, limite, marca.nombre);
         estados[comp.id] = { url: enlace, auto: auto[comp.id], leidos: suyos.length, emparejados: emparejar(comp.id, suyos, mios, filaDe, marca) };
       } catch (e) {
         estados[comp.id] = { url: enlaces[comp.id], auto: auto[comp.id], error: textoError(e) };

@@ -81,7 +81,7 @@ const precioWoo = (v: string | undefined, decimales: number) => (v ? Number(v) /
 // En WooCommerce el SKU a veces es el EAN («3700109214090-1»)
 const eanDeSku = (sku: string | undefined) => { const m = (sku ?? "").trim().match(/^(\d{8,14})(?:-\d{1,2})?$/); return m ? normalizarEan(m[1]) : null; };
 
-type CategoriaWoo = { id: number; slug: string; name: string; count: number; permalink?: string };
+type CategoriaWoo = { id: number; slug: string; name: string; count: number; parent?: number; permalink?: string };
 async function categoriasWoo(c: Competidor): Promise<CategoriaWoo[]> {
   const cats: CategoriaWoo[] = [];
   for (let pagina = 1; pagina <= 5; pagina++) {
@@ -100,17 +100,33 @@ type ProductoWoo = {
   variations?: { id: number; attributes: { name: string; value: string }[] }[];
 };
 
-async function leerWoo(c: Competidor, enlace: string, limite: number): Promise<SuProducto[]> {
-  // Algunas tiendas solo filtran por el número de la categoría, no por su nombre en la URL
+async function leerWoo(c: Competidor, enlace: string, limite: number, marca: string): Promise<SuProducto[]> {
+  // La categoría y sus subcategorías (algunas tiendas ponen los productos solo en las de cada línea),
+  // por su número: algunas tiendas no filtran por el nombre que sale en la URL
   const slug = ultimoTramo(enlace);
-  const cat = (await categoriasWoo(c)).find(x => x.slug === slug)?.id ?? slug;
-  const productos: ProductoWoo[] = [];
-  for (let pagina = 1; pagina <= 10; pagina++) {
-    const res = await pedir(`${c.web}/wp-json/wc/store/v1/products?category=${encodeURIComponent(String(cat))}&per_page=100&page=${pagina}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const lote = await res.json() as ProductoWoo[];
-    productos.push(...lote);
-    if (lote.length < 100) break;
+  const cats = await categoriasWoo(c);
+  const raiz = cats.find(x => x.slug === slug);
+  const ids = new Set<number>(raiz ? [raiz.id] : []);
+  for (let cambia = true; cambia;) {
+    cambia = false;
+    for (const x of cats) if (x.parent && ids.has(x.parent) && !ids.has(x.id)) { ids.add(x.id); cambia = true; }
+  }
+  const pedirTodos = async (filtro: string) => {
+    const out: ProductoWoo[] = [];
+    for (let pagina = 1; pagina <= 10; pagina++) {
+      const res = await pedir(`${c.web}/wp-json/wc/store/v1/products?${filtro}&per_page=100&page=${pagina}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const lote = await res.json() as ProductoWoo[];
+      out.push(...lote);
+      if (lote.length < 100) break;
+    }
+    return out;
+  };
+  let productos = await pedirTodos(`category=${encodeURIComponent(ids.size ? [...ids].join(",") : slug)}`);
+  // Si por categoría no sale nada, se buscan los productos que llevan la marca en el nombre
+  if (!productos.length) {
+    const clave = soloLetras(marca);
+    productos = (await pedirTodos(`search=${encodeURIComponent(marca)}`)).filter(p => soloLetras(decodificar(p.name)).includes(clave));
   }
   return enLotes(productos, 6, async p => {
     const d = p.prices.currency_minor_unit ?? 2;
@@ -179,8 +195,8 @@ async function leerRosi(c: Competidor, enlace: string): Promise<SuProducto[]> {
   return out;
 }
 
-export async function leerCompetidor(c: Competidor, enlace: string, limite: number): Promise<SuProducto[]> {
-  if (c.tipo === "woo") return leerWoo(c, enlace, limite);
+export async function leerCompetidor(c: Competidor, enlace: string, limite: number, marca: string): Promise<SuProducto[]> {
+  if (c.tipo === "woo") return leerWoo(c, enlace, limite, marca);
   if (c.tipo === "presta") return leerPresta(enlace);
   if (c.tipo === "rosi") return leerRosi(c, enlace);
   return [];
