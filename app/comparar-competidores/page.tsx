@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { COMPETIDORES, type FilaComp, type ResultadoComp, type EstadoComp } from "./competidores";
+import { COMPETIDORES, explicarError, type FilaComp, type ResultadoComp, type EstadoComp } from "./competidores";
 import { descuentoBoardfy } from "../comparar-precios/boardfy";
 import { aplicarCupon, calcularFila, columnasDe, cuponDeMarca, descuentoDe, ordenar, pctTexto, type CuponComp, type MarcaComp } from "./calculo";
 import { descargarExcel, descargarPdf, descargarParaMarca, filasParaMarca } from "./exportar";
@@ -126,7 +126,8 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
   );
 }
 
-function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; nuestros?: number; enlazados?: number; onGuardar: (url: string) => void }) {
+function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; nuestros?: number; enlazados?: number; misSin: string[]; onGuardar: (url: string) => void }) {
+  const [porQue, setPorQue] = useState(false);
   const c = COMPETIDORES.find(x => x.id === id)!;
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState(enlace ?? "");
@@ -136,7 +137,10 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id
   const n = enlazados ?? estado?.emparejados ?? 0;
   const pct = nuestros ? Math.round((n / nuestros) * 100) : 0;
   const cambiar = !esC24 && <button className="cc-cambiar" onClick={() => { setValor(enlace ?? ""); setEditando(true); }}>cambiar</button>;
+  const susSin = estado?.sinPareja ?? [];
+  const hayPorQue = !editando && !noVende && !estado?.error && estado?.leidos != null && (misSin.length > 0 || susSin.length > 0);
   return (
+    <>
     <tr>
       <td className="cc-t-nombre" style={{ color: c.color }}>{c.nombre}</td>
       {editando ? (
@@ -148,7 +152,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id
           </span>
         </td>
       ) : estado?.error ? (
-        <td colSpan={2} className="cp-rojo">{estado.error}</td>
+        <td colSpan={2} className="cp-rojo">{explicarError(estado.error)}</td>
       ) : noVende ? (
         <td colSpan={2} className="cp-suave-txt">{esC24 ? "no está en su comparador" : "no la vende"}</td>
       ) : !leido ? (
@@ -170,6 +174,27 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id
         </td>
       )}
     </tr>
+    {porQue && hayPorQue && (
+      <tr className="cc-porque">
+        <td colSpan={4}>
+          {misSin.length > 0 && (
+            <div>
+              <strong>De los nuestros sin enlazar ({misSin.length}):</strong> {esC24 ? "no están en su comparador (no los venden o su comparador no los encuentra)" : "no los venden, o no aparecen en su listado de la marca"}.
+              <ul>{misSin.map((x, i) => <li key={i}>{x}</li>)}</ul>
+            </div>
+          )}
+          {estado?.sinPareja === undefined ? (
+            <div className="cp-suave-txt">Pulsa «Revisar» para ver por qué no se han enlazado sus productos.</div>
+          ) : susSin.length > 0 && (
+            <div>
+              <strong>De los suyos sin enlazar ({susSin.length}):</strong>
+              <ul>{susSin.map((x, i) => <li key={i}>{x.url ? <a href={x.url} target="_blank" rel="noreferrer">{x.titulo}</a> : x.titulo}{x.precio ? ` · ${x.precio.toFixed(2).replace(".", ",")} €` : ""} — <span className="cc-motivo">{x.motivo}</span></li>)}</ul>
+            </div>
+          )}
+        </td>
+      </tr>
+    )}
+    </>
   );
 }
 
@@ -257,7 +282,7 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
               <thead><tr><th>Tienda</th><th>Sus productos</th><th>Enlazados con los nuestros</th><th>Listado</th></tr></thead>
               <tbody>
                 {COMPETIDORES.map(c => (
-                  <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} onGuardar={url => onEnlace(c.id, url)} />
+                  <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} misSin={(r?.filas ?? []).filter(f => !f.precios[c.id]).map(f => f.formato && !f.nombre.includes(f.formato) ? `${f.nombre} (${f.formato})` : f.nombre)} onGuardar={url => onEnlace(c.id, url)} />
                 ))}
               </tbody>
             </table>
@@ -294,8 +319,17 @@ export default function CompararCompetidores() {
 
   async function enviar(body: object) {
     const res = await fetch("/api/comparar-competidores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json();
-    if (data.error) { setError(data.error); return false; }
+    const texto = await res.text();
+    let data;
+    try { data = JSON.parse(texto); }
+    catch {
+      // Vercel devuelve una página de error (no JSON) si la revisión tarda demasiado o el servidor falla
+      setError(res.status === 504 || /timeout|FUNCTION_INVOCATION_TIMEOUT/i.test(texto)
+        ? "La revisión ha tardado demasiado y se ha cortado (alguna web responde muy despacio). Vuelve a pulsar «Revisar»."
+        : `El servidor ha fallado (error ${res.status}). Vuelve a intentarlo en un momento.`);
+      return false;
+    }
+    if (data.error) { setError(explicarError(data.error)); return false; }
     setConfig(data);
     return true;
   }
@@ -305,7 +339,7 @@ export default function CompararCompetidores() {
     try {
       if (await enviar({ action: "revisar", slug })) setExpandidos(prev => new Set(prev).add(slug));
     } catch (e) {
-      setError(String(e));
+      setError(explicarError(e instanceof Error ? e.message : String(e)));
     } finally {
       setRevisando(null);
     }
