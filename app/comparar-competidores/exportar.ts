@@ -307,3 +307,70 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
   });
   bajar(doc.output("blob"), `${nombre}.pdf`);
 }
+
+// «Para las marcas»: un solo Excel con todas las marcas en las que la competencia vende por debajo de lo autorizado
+// (o del PVP si la marca no tiene descuento): una hoja de resumen y una hoja por marca.
+export async function descargarParaTodas(marcas: { nombre: string; filas: FilaComp[]; descuento: number }[], fecha = new Date()) {
+  const conProblemas = marcas.map(m => ({ ...m, lista: filasParaMarca(m.filas, m.descuento) })).filter(m => m.lista.length > 0)
+    .sort((a, b) => b.lista.length - a.lista.length || a.nombre.localeCompare(b.nombre));
+  if (!conProblemas.length) throw new Error("Ninguna marca revisada tiene precios de la competencia por debajo de lo autorizado");
+  const { default: Excel } = await import("exceljs");
+  const wb = new Excel.Workbook();
+  const cabecera = (ws: import("exceljs").Worksheet, fila: number, titulos: string[]) => {
+    const cab = ws.getRow(fila);
+    titulos.forEach((t, i) => { const c = cab.getCell(i + 1); c.value = t; c.font = { name: "Calibri", size: 9, bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + AZUL } }; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
+    cab.height = 28;
+  };
+  const nombresHoja = new Set<string>();
+  const hojaDe = (marca: string) => {
+    let base = marca.replace(/[\\/?*[\]:]/g, " ").slice(0, 28) || "Marca", n = base, i = 2;
+    while (nombresHoja.has(n.toLowerCase()) || n.toLowerCase() === "resumen") n = `${base} ${i++}`;
+    nombresHoja.add(n.toLowerCase());
+    return n;
+  };
+
+  // Resumen
+  const rs = wb.addWorksheet("Resumen");
+  rs.views = [{ showGridLines: false }];
+  rs.mergeCells("A1:E1"); rs.getCell("A1").value = "Marcas con precios de la competencia por debajo de lo autorizado"; rs.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
+  rs.mergeCells("A2:E2"); rs.getCell("A2").value = `Tiendas online que venden por debajo de nuestro PVP con el descuento autorizado de cada marca (o del PVP si no tiene) · ${fechaCorta(fecha)}`; rs.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF" + SUAVE } };
+  cabecera(rs, 4, ["MARCA", "DTO. AUTORIZADO", "PRECIOS POR DEBAJO", "TIENDAS", "MAYOR DTO. SOBRE PVP"]);
+  [32, 16, 18, 50, 20].forEach((w, i) => { rs.getColumn(i + 1).width = w; });
+  const hojas = conProblemas.map(m => hojaDe(m.nombre));
+  conProblemas.forEach((m, i) => {
+    const row = rs.getRow(5 + i);
+    const tiendas = [...new Set(m.lista.map(x => x.tienda))].join(", ");
+    row.values = [{ text: m.nombre, hyperlink: `#'${hojas[i]}'!A1` }, m.descuento > 0 ? m.descuento / 100 : "sin límite", m.lista.length, tiendas, Math.max(...m.lista.map(x => x.dtoSobrePvp))];
+    row.eachCell((c, n) => {
+      c.font = { name: "Calibri", size: 10, color: { argb: "FF" + (n === 1 ? AZUL : n === 3 ? BAJO : TEXTO) }, bold: n === 1 || n === 3, underline: n === 1 };
+      if (n === 2 && typeof c.value === "number") c.numFmt = PORC;
+      if (n === 5) c.numFmt = PORC;
+      c.alignment = { vertical: "middle", horizontal: n === 1 || n === 4 ? "left" : "right", wrapText: n === 4 };
+      c.border = { bottom: { style: "thin", color: { argb: "FF" + LINEA } } };
+    });
+  });
+
+  // Una hoja por marca
+  conProblemas.forEach((m, k) => {
+    const ws = wb.addWorksheet(hojas[k]);
+    ws.views = [{ showGridLines: false }];
+    const que = m.descuento > 0 ? `nuestro PVP con el descuento autorizado (-${num(m.descuento)} %)` : "el PVP";
+    ws.mergeCells("A1:H1"); ws.getCell("A1").value = `${m.nombre} · precios de la competencia por debajo de ${m.descuento > 0 ? "lo autorizado" : "PVP"}`; ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
+    ws.mergeCells("A2:H2"); ws.getCell("A2").value = `Tiendas online que venden por debajo de ${que} · ${fechaCorta(fecha)}`; ws.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF" + SUAVE } };
+    cabecera(ws, 4, ["EAN", "PRODUCTO", "TIENDA", "PVP", m.descuento > 0 ? `PVP -${num(m.descuento)} %` : "MÍNIMO", "SU PRECIO", "DTO. SOBRE PVP", "POR DEBAJO"]);
+    [15, 50, 18, 11, 12, 14, 12, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    m.lista.forEach((x, i) => {
+      const row = ws.getRow(5 + i);
+      row.values = [x.ean, x.producto, x.tienda, x.pvp, x.minimo, { text: eur(x.suPrecio), hyperlink: x.url }, x.dtoSobrePvp, x.porDebajo];
+      row.eachCell((c, n) => {
+        c.font = { name: "Calibri", size: 10, color: { argb: "FF" + (n === 3 || n === 6 ? hex(x.color) : n === 8 ? BAJO : TEXTO) }, bold: n >= 6 };
+        if (n === 4 || n === 5 || n === 8) c.numFmt = EUROS;
+        if (n === 7) c.numFmt = PORC;
+        c.alignment = { vertical: "middle", horizontal: n <= 3 ? "left" : "right", wrapText: n === 2 };
+        c.border = { bottom: { style: "thin", color: { argb: "FF" + LINEA } } };
+      });
+    });
+  });
+  bajar(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX }), `COMPETENCIA_marcas_bajo_dto_autorizado_${fechaArchivo(fecha)}.xlsx`);
+  return conProblemas.length;
+}

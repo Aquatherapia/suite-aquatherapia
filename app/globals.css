@@ -1651,3 +1651,6 @@ button:disabled {
 
 /* Precio de un competidor más barato que el nuestro: fondo rojizo suave (sin flechas) */
 .cc-mas-barato { background: #fdecec; }
+.cc-barra-sup { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.cc-barra-sup .cc-filtro { flex: 1; min-width: 200px; }
+.cc-barra-sup .regen-btn { width: auto; }
