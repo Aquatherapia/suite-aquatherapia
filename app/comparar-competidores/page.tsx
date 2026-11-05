@@ -164,7 +164,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id
       )}
       {!editando && (
         <td className="cc-t-listado">
-          {esC24 ? <span className="cp-suave-txt">su comparador</span>
+          {esC24 ? null
             : enlace ? <a href={enlace} target="_blank" rel="noreferrer">ver listado ↗</a> : null}
           {cambiar}
         </td>
