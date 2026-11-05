@@ -155,10 +155,10 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id
         <td colSpan={2} className="cp-suave-txt">{enlace === undefined && !esC24 ? "se busca al revisar" : "sin revisar"}</td>
       ) : (
         <>
-          <td className="cc-t-num">{estado!.leidos}</td>
+          <td>Tienen <b>{estado!.leidos} productos</b></td>
           <td>
             <span className="cc-barra"><span style={{ width: `${pct}%`, background: c.color }} /></span>
-            <b>{n} de {nuestros ?? "?"}</b> <span className="cp-suave-txt">({pct} %)</span>
+            enlazan <b>{n} de los {nuestros ?? "?"}</b> de La Tienda de Cosméticos <span className="cp-suave-txt">({pct} %)</span>
           </td>
         </>
       )}
@@ -254,7 +254,7 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
           <div className="cc-enlaces">
             <div className="cc-nuestros">Nosotros tenemos <b>{r ? `${r.filas.length} productos` : "—"}</b> de {marca.nombre}{r ? ". Cuántos hemos podido enlazar en cada tienda:" : " (pulsa «Revisar»)."}</div>
             <table className="cc-tabla-tiendas">
-              <thead><tr><th>Tienda</th><th className="cc-t-num">Productos suyos</th><th>Enlazados con los nuestros</th><th>Listado</th></tr></thead>
+              <thead><tr><th>Tienda</th><th>Sus productos</th><th>Enlazados con los nuestros</th><th>Listado</th></tr></thead>
               <tbody>
                 {COMPETIDORES.map(c => (
                   <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} onGuardar={url => onEnlace(c.id, url)} />
