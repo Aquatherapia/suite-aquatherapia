@@ -1651,3 +1651,4 @@ button:disabled {
 
 /* Precio de un competidor más barato que el nuestro: fondo rojizo suave (sin flechas) */
 .cc-mas-barato { background: #fdecec; }
+.cc-porque-btn { display: inline; width: auto; margin: 4px 0 0; padding: 0; background: none; border: none; color: #1270b6; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; }

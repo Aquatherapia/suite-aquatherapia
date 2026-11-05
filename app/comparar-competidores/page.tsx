@@ -163,6 +163,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
           <td>
             <span className="cc-barra"><span style={{ width: `${pct}%`, background: c.color }} /></span>
             enlazan <b>{n} de los {nuestros ?? "?"}</b> de La Tienda de Cosméticos <span className="cp-suave-txt">({pct} %)</span>
+            {hayPorQue && <div><button className="cc-porque-btn" onClick={() => setPorQue(v => !v)}>{porQue ? "▲ Ocultar" : `▼ Por qué no se enlazan los demás (${misSin.length} nuestros${susSin.length ? ` · ${susSin.length} suyos` : ""})`}</button></div>}
           </td>
         </>
       )}
