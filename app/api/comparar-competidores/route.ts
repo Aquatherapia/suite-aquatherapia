@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 import { emparejarPorNombre } from "./emparejar-nombre";
+import { emparejarConIa } from "./emparejar-ia";
 import { COMPETIDORES, type EstadoComp, type FilaComp, type ResultadoComp } from "../../comparar-competidores/competidores";
 import { buscarListado, leerCompetidor, leerMisProductos, normalizarEan, type MiProducto, type SuProducto } from "./leer";
 
@@ -132,7 +133,7 @@ export async function POST(req: NextRequest) {
         const enlace = enlaces[comp.id];
         if (!enlace) { estados[comp.id] = { url: "" , auto: auto[comp.id] }; return; }
         const suyos = await leerCompetidor(comp, enlace, limite, marca.nombre);
-        estados[comp.id] = { url: enlace, auto: auto[comp.id], leidos: suyos.length, emparejados: emparejar(comp.id, suyos, mios, filaDe, marca) };
+        estados[comp.id] = { url: enlace, auto: auto[comp.id], leidos: suyos.length, emparejados: await emparejar(comp.id, comp.nombre, suyos, mios, filaDe, marca) };
       } catch (e) {
         estados[comp.id] = { url: enlaces[comp.id], auto: auto[comp.id], error: textoError(e) };
       }
@@ -149,11 +150,12 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ error: "Acción desconocida" }, { status: 400 });
 }
 
-// Empareja los productos de un competidor con los nuestros: primero por EAN y, lo que quede, por referencia o nombre. Devuelve cuántos de los nuestros han encontrado pareja.
-function emparejar(comp: string, suyos: SuProducto[], mios: MiProducto[], filaDe: Map<string, FilaComp>, marca: MarcaC24): number {
+// Empareja los productos de un competidor con los nuestros: primero por EAN, lo que quede por referencia o nombre
+// y, lo que siga sin pareja, con IA (nombres en otro idioma). Devuelve cuántos de los nuestros han encontrado pareja.
+async function emparejar(comp: string, tienda: string, suyos: SuProducto[], mios: MiProducto[], filaDe: Map<string, FilaComp>, marca: MarcaC24): Promise<number> {
   const usados = new Set<string>();
   const suyosUsados = new Set<string>();
-  const poner = (m: MiProducto, s: SuProducto, i: number, por: "ean" | "referencia" | "nombre") => {
+  const poner = (m: MiProducto, s: SuProducto, i: number, por: "ean" | "referencia" | "nombre" | "ia") => {
     const v = s.variantes[i];
     filaDe.get(m.clave)!.precios[comp] = { precio: v.precio, pvp: v.pvp && v.pvp > v.precio + 0.005 ? v.pvp : undefined, url: s.url, titulo: v.titulo ? `${s.titulo} · ${v.titulo}` : s.titulo, por };
     usados.add(m.clave); suyosUsados.add(`${s.url}#${i}`);
@@ -167,6 +169,19 @@ function emparejar(comp: string, suyos: SuProducto[], mios: MiProducto[], filaDe
   for (const p of emparejarPorNombre(libres, mios.filter(m => !usados.has(m.clave)), { nombre: marca.nombre, slug: marca.slug, miToken: marca.miToken ?? marca.slug })) {
     if (usados.has(p.mp.clave) || suyosUsados.has(`${p.s.url}#${p.i}`)) continue;
     poner(p.mp, p.s, p.i, p.por);
+  }
+  // Lo que queda, con IA
+  const susLibres = suyos.flatMap(s => s.variantes.map((v, i) => ({ s, i, v })).filter(x => !suyosUsados.has(`${s.url}#${x.i}`)));
+  const misLibres = mios.filter(m => !usados.has(m.clave));
+  const porClave = new Map(susLibres.map(x => [`${x.s.url}#${x.i}`, x]));
+  const parejas = await emparejarConIa(
+    susLibres.map(x => ({ clave: `${x.s.url}#${x.i}`, titulo: x.v.titulo ? `${x.s.titulo} · ${x.v.titulo}` : x.s.titulo, precio: x.v.precio, esPack: x.s.esPack })),
+    misLibres.map(m => ({ clave: m.clave, nombre: m.nombre, formato: m.formato, precio: m.precio, esPack: m.esPack })),
+    marca.nombre, tienda);
+  const miDe = new Map(misLibres.map(m => [m.clave, m]));
+  for (const p of parejas) {
+    const x = porClave.get(p.su), m = miDe.get(p.mio);
+    if (x && m && !usados.has(m.clave)) poner(m, x.s, x.i, "ia");
   }
   return usados.size;
 }

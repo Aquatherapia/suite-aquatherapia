@@ -20,6 +20,8 @@ function fechaExacta(iso: string) {
   const d = new Date(iso);
   return `${d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" })} a las ${d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`;
 }
+// Cómo se ha emparejado, para la explicación al pasar el ratón
+const COMO: Record<string, string> = { referencia: "por número de referencia", nombre: "por nombre y formato", ia: "con IA (el nombre está en otro idioma o resumido; mismo formato y precio parecido)" };
 const fechaCorta = (iso: string) => new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "short" });
 
 // Celda con explicación al pasar el ratón
@@ -89,7 +91,7 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
                   if (!p) return [<td key={`${c.id}-pvp`} className="cp-vacia">—</td>, <td key={`${c.id}-precio`} className="cp-vacia">—</td>];
                   const kc = k.comp[c.id];
                   const masBaratoQueNos = p.precio < f.precio - 0.005;
-                  const tip = `${p.titulo}${p.por !== "ean" ? ` · emparejado por ${p.por}` : ""}${p.precioWeb != null ? ` · en su web ${eur(p.precioWeb)}, con cupón ${eur(p.precio)}` : ""}${kc.bajoMinimo && k.limite != null ? ` · por debajo de nuestro PVP con dto. autorizado (${eur(k.limite)})` : ""}`;
+                  const tip = `${p.titulo}${p.por !== "ean" ? ` · emparejado ${COMO[p.por]}` : ""}${p.precioWeb != null ? ` · en su web ${eur(p.precioWeb)}, con cupón ${eur(p.precio)}` : ""}${kc.bajoMinimo && k.limite != null ? ` · por debajo de nuestro PVP con dto. autorizado (${eur(k.limite)})` : ""}`;
                   return [
                     <Celda key={`${c.id}-pvp`} className={kc.pvpSinActualizar || kc.pvpMasAlto ? "cp-ambar" : undefined} style={kc.pvpSinActualizar || kc.pvpMasAlto ? undefined : { color: c.color }}
                       tip={kc.pvpSinActualizar ? `Su PVP es más bajo: ${eur(kc.suPvp)} frente a ${eur(f.pvp)} el nuestro. Tarifa sin actualizar.` : kc.pvpMasAlto ? `Su PVP es más alto: ${eur(kc.suPvp)} frente a ${eur(f.pvp)} el nuestro. Revisa nuestro precio.` : undefined}>
@@ -98,7 +100,7 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
                     <td key={`${c.id}-precio`} className={"cp-fuerte" + (kc.bajoMinimo ? " cp-bajo-aut" : "")} style={kc.bajoMinimo ? undefined : { color: c.color }} title={tip}>
                       {masBaratoQueNos && <span className="cc-baja" title="Más barato que nosotros">▼</span>}
                       <a href={p.url} target="_blank" rel="noreferrer" className="cc-precio">{eur(p.precio)}</a>
-                      {p.por !== "ean" && <span className="cc-por" title={`Emparejado por ${p.por}: a una de las dos fichas le falta el EAN`}>≈</span>}
+                      {p.por !== "ean" && <span className="cc-por" title={`Emparejado ${COMO[p.por]}: su web no publica el EAN`}>≈</span>}
                       {kc.dto > 0.0005 && <small className="cp-dto-celda">−{pct(kc.dto)}</small>}
                     </td>,
                   ];
@@ -290,7 +292,7 @@ export default function CompararCompetidores() {
       <p className="subtitle">Nuestros precios frente a los de {COMPETIDORES.map(c => c.nombre).join(", ")}, marca a marca y en una sola tabla. En rojo, quien vende más barato que nosotros.</p>
 
       <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-        <span>Las marcas son las del <Link href="/comparar-precios">comparador de Cosméticos24h</Link>. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato (≈).</span>
+        <span>Las marcas son las del <Link href="/comparar-precios">comparador de Cosméticos24h</Link>. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato o, si el nombre está en otro idioma, con IA (≈).</span>
       </div>
       <input className="cc-filtro" value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Buscar marca…" />
       {error && <div className="error">{error}</div>}

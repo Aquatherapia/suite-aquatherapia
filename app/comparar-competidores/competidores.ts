@@ -22,7 +22,7 @@ export type PrecioComp = {
   pvp?: number;     // precio sin oferta (tachado), si lo publica
   url: string;
   titulo: string;   // cómo se llama en su web
-  por: "ean" | "referencia" | "nombre"; // cómo se ha emparejado
+  por: "ean" | "referencia" | "nombre" | "ia"; // cómo se ha emparejado (ia: nombre en otro idioma, emparejado con IA)
 };
 
 // Una fila de la tabla: uno de nuestros productos (un formato) y lo que cuesta en cada competidor
