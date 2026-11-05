@@ -57,6 +57,7 @@ export function explicarError(t: string): string {
   if (/ENOTFOUND|EAI_AGAIN/i.test(t)) return "No se encuentra su web (¿ha cambiado de dirección?)";
   if (/CERT|SSL|TLS/i.test(t)) return "Su web tiene un problema con su certificado de seguridad";
   if (/HTTP 5\d\d/i.test(t)) return "Su web está dando errores ahora mismo; prueba a revisar más tarde";
-  if (/fetch failed/i.test(t)) return "No se ha podido conectar con su web";
+  if (/fetch failed|Failed to fetch|NetworkError/i.test(t)) return "No se ha podido conectar";
+  if (/not valid JSON|Unexpected token|JSON\.parse|Unexpected end of JSON/i.test(t)) return "Su web ha devuelto una página en vez de los datos de productos (puede que bloquee las consultas automáticas o que esté caída)";
   return t;
 }

@@ -319,8 +319,17 @@ export default function CompararCompetidores() {
 
   async function enviar(body: object) {
     const res = await fetch("/api/comparar-competidores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json();
-    if (data.error) { setError(data.error); return false; }
+    const texto = await res.text();
+    let data;
+    try { data = JSON.parse(texto); }
+    catch {
+      // Vercel devuelve una página de error (no JSON) si la revisión tarda demasiado o el servidor falla
+      setError(res.status === 504 || /timeout|FUNCTION_INVOCATION_TIMEOUT/i.test(texto)
+        ? "La revisión ha tardado demasiado y se ha cortado (alguna web responde muy despacio). Vuelve a pulsar «Revisar»."
+        : `El servidor ha fallado (error ${res.status}). Vuelve a intentarlo en un momento.`);
+      return false;
+    }
+    if (data.error) { setError(explicarError(data.error)); return false; }
     setConfig(data);
     return true;
   }
@@ -330,7 +339,7 @@ export default function CompararCompetidores() {
     try {
       if (await enviar({ action: "revisar", slug })) setExpandidos(prev => new Set(prev).add(slug));
     } catch (e) {
-      setError(String(e));
+      setError(explicarError(e instanceof Error ? e.message : String(e)));
     } finally {
       setRevisando(null);
     }
