@@ -231,6 +231,8 @@ export async function buscarListado(c: Competidor, marca: { nombre: string; slug
       return data.products?.length ? final : null;
     }
   } catch (e) {
+    // La marca no existe en su web (redirige a otra página): no la vende
+    if (e instanceof Error && /otra página|portada|HTTP 404/.test(e.message)) return null;
     // La web no responde: no se puede saber si la vende, se vuelve a buscar en la próxima revisión
     throw e;
   }
