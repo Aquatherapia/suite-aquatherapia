@@ -297,6 +297,9 @@ async function leerShopify(c: Competidor, enlace: string, limite: number, eans: 
   return out;
 }
 
+// Dónde publica cada tienda el EAN (comprobado el 05/11/2026): Cosméticos24h en cada ficha (/products/x.json),
+// Mar Chancosa en la referencia (SKU), Pilar Delgado en su API (ean13). Anadeana, VIP24 y Estética Rosi no lo publican:
+// con ellas se empareja por referencia, nombre y formato, IA o a mano.
 export async function leerCompetidor(c: Competidor, enlace: string, limite: number, marca: string, eansC24?: Record<string, (string | null)[]>): Promise<SuProducto[]> {
   if (c.tipo === "c24") return leerShopify(c, enlace, limite, eansC24);
   if (c.tipo === "woo") return leerWoo(c, enlace, limite, marca);
