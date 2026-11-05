@@ -1657,3 +1657,5 @@ button:disabled {
 .cc-barra-sup { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .cc-barra-sup .cc-filtro { flex: 1; min-width: 200px; }
 .cc-barra-sup .regen-btn { width: auto; }
+.cc-t-como { font-size: 12px; color: #374151; white-space: nowrap; }
+.cc-t-como b { color: #111827; }

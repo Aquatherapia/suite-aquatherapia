@@ -141,7 +141,7 @@ function resumenMotivos(sin: NonNullable<EstadoComp["sinPareja"]>): string {
   return [...n].sort((a, b) => b[1] - a[1]).map(([g, k]) => `${k} ${g}`).join(" · ");
 }
 
-function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; nuestros?: number; enlazados?: number; misSin: string[]; onGuardar: (url: string) => void }) {
+function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, metodos, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; nuestros?: number; enlazados?: number; misSin: string[]; metodos: Record<string, number>; onGuardar: (url: string) => void }) {
   const [porQue, setPorQue] = useState(false);
   const c = COMPETIDORES.find(x => x.id === id)!;
   const [editando, setEditando] = useState(false);
@@ -160,7 +160,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
         ? <a href={enlace} target="_blank" rel="noreferrer" style={{ color: c.color }} title={`Ver la marca en ${c.nombre}`}>{c.nombre} ↗</a>
         : <span style={{ color: c.color }}>{c.nombre}</span>}</td>
       {editando ? (
-        <td colSpan={4}>
+        <td colSpan={5}>
           <span className="cc-enlace-edit">
             <input value={valor} onChange={e => setValor(e.target.value)} placeholder={`${c.web}/… (vacío = no la vende)`}
               onKeyDown={e => { if (e.key === "Enter") { onGuardar(valor); setEditando(false); } }} autoFocus />
@@ -168,17 +168,25 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
           </span>
         </td>
       ) : estado?.error ? (
-        <td colSpan={3} className="cp-rojo">{explicarError(estado.error)}</td>
+        <td colSpan={4} className="cp-rojo">{explicarError(estado.error)}</td>
       ) : noVende ? (
-        <td colSpan={3} className="cp-suave-txt">no la vende</td>
+        <td colSpan={4} className="cp-suave-txt">no la vende</td>
       ) : !leido ? (
-        <td colSpan={3} className="cp-suave-txt">{enlace === undefined ? "se busca al revisar" : "sin revisar"}</td>
+        <td colSpan={4} className="cp-suave-txt">{enlace === undefined ? "se busca al revisar" : "sin revisar"}</td>
       ) : (
         <>
           <td>Tienen <b>{estado!.leidos} productos</b></td>
           <td>
             <span className="cc-barra"><span style={{ width: `${pct}%`, background: c.color }} /></span>
             enlazan <b>{n} de los {nuestros ?? "?"}</b> de La Tienda de Cosméticos <span className="cp-suave-txt">({pct} %)</span>
+          </td>
+          <td className="cc-t-como">
+            {n === 0 ? <span className="cp-suave-txt">—</span> : <>
+              {(["ean", "referencia", "nombre", "ia"] as const).filter(k => metodos[k]).map(k => (
+                <div key={k}><b>{metodos[k]}</b> {k === "ean" ? "por código EAN" : k === "referencia" ? "por referencia del fabricante" : k === "nombre" ? "por nombre y formato" : "con IA (nombre en otro idioma)"}</div>
+              ))}
+              {!metodos.ean && <div className="cp-suave-txt">Su web no publica el EAN</div>}
+            </>}
           </td>
           <td className="cc-t-porque">
             {hayPorQue ? (
@@ -201,7 +209,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
     </tr>
     {porQue && hayPorQue && (
       <tr className="cc-porque">
-        <td colSpan={5}>
+        <td colSpan={6}>
           {misSin.length > 0 && (
             <div>
               <strong>De los nuestros sin enlazar ({misSin.length}):</strong> no los venden, o no aparecen en su listado de la marca.
@@ -304,10 +312,10 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
           <div className="cc-enlaces">
             <div className="cc-nuestros">Nosotros tenemos <b>{r ? `${r.filas.length} productos` : "—"}</b> de {marca.nombre}{r ? ". Cuántos hemos podido enlazar en cada tienda:" : " (pulsa «Revisar»)."}</div>
             <table className="cc-tabla-tiendas">
-              <thead><tr><th>Tienda</th><th>Sus productos</th><th>Enlazados con los nuestros</th><th>Por qué no se enlazan los demás</th><th></th></tr></thead>
+              <thead><tr><th>Tienda</th><th>Sus productos</th><th>Enlazados con los nuestros</th><th>Cómo se enlazan</th><th>Por qué no se enlazan los demás</th><th></th></tr></thead>
               <tbody>
                 {COMPETIDORES.map(c => (
-                  <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} misSin={(r?.filas ?? []).filter(f => !f.precios[c.id]).map(f => f.formato && !f.nombre.includes(f.formato) ? `${f.nombre} (${f.formato})` : f.nombre)} onGuardar={url => onEnlace(c.id, url)} />
+                  <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} metodos={(r?.filas ?? []).reduce((acc, f) => { const p = f.precios[c.id]; if (p) acc[p.por] = (acc[p.por] ?? 0) + 1; return acc; }, {} as Record<string, number>)} misSin={(r?.filas ?? []).filter(f => !f.precios[c.id]).map(f => f.formato && !f.nombre.includes(f.formato) ? `${f.nombre} (${f.formato})` : f.nombre)} onGuardar={url => onEnlace(c.id, url)} />
                 ))}
               </tbody>
             </table>
