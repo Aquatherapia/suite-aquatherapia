@@ -50,6 +50,19 @@ export default function Home() {
           <span className="agente-arrow">→</span>
         </Link>
 
+        <Link href="/comparar-competidores" className="agente-card">
+          <span className="agente-icono">⚖</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Comparar precios con la competencia</div>
+            <div className="agente-desc">
+              Nuestros precios frente a Cosméticos24h, Anadeana, Cosmética VIP24,
+              Estética Rosi, Mar Chancosa y Pilar Delgado, marca a marca y en
+              una sola tabla.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
+
         <Link href="/google-business" className="agente-card">
           <span className="agente-icono">◈</span>
           <div className="agente-info">
