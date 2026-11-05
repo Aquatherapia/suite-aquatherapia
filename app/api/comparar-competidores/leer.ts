@@ -134,7 +134,7 @@ async function categoriasWoo(c: Competidor): Promise<CategoriaWoo[]> {
 }
 
 type ProductoWoo = {
-  id: number; name: string; permalink: string; sku?: string; type: string;
+  id: number; name: string; permalink: string; sku?: string; type: string; is_purchasable?: boolean; is_in_stock?: boolean;
   prices: { price: string; regular_price: string; currency_minor_unit: number };
   variations?: { id: number; attributes: { name: string; value: string }[] }[];
 };
@@ -167,6 +167,9 @@ async function leerWoo(c: Competidor, enlace: string, limite: number, marca: str
     const clave = soloLetras(marca);
     productos = (await pedirTodos(`search=${encodeURIComponent(marca)}`)).filter(p => soloLetras(decodificar(p.name)).includes(clave));
   }
+  // Solo lo que se puede comprar: fuera los productos que su web no deja comprar o que están agotados
+  const sePuede = (p: ProductoWoo) => p.is_purchasable !== false && p.is_in_stock !== false;
+  productos = productos.filter(sePuede);
   return enLotes(productos, 6, async p => {
     const d = p.prices.currency_minor_unit ?? 2;
     const base: Variante = { titulo: "", precio: precioWoo(p.prices.price, d), pvp: precioWoo(p.prices.regular_price, d) || undefined, ean: eanDeSku(p.sku) };
@@ -178,6 +181,7 @@ async function leerWoo(c: Competidor, enlace: string, limite: number, marca: str
           const r = await pedir(`${c.web}/wp-json/wc/store/v1/products/${v.id}`, undefined, 15_000);
           if (!r.ok) return null;
           const x = await r.json() as ProductoWoo;
+          if (!sePuede(x)) return null;
           const dd = x.prices.currency_minor_unit ?? 2;
           return { titulo: v.attributes.map(a => a.value).join(" "), precio: precioWoo(x.prices.price, dd), pvp: precioWoo(x.prices.regular_price, dd) || undefined, ean: eanDeSku(x.sku) };
         } catch { return null; }
@@ -238,7 +242,43 @@ async function leerRosi(c: Competidor, enlace: string): Promise<SuProducto[]> {
   return out;
 }
 
+// ── Cosméticos24h (Shopify): la colección de la marca, con su API pública /collections/<marca>/products.json ──
+type ProductoShopify = { title: string; handle: string; variants?: { title?: string; price?: string; compare_at_price?: string | null; sku?: string; barcode?: string; available?: boolean }[] };
+const handleShopify = (url: string) => new URL(url).pathname.match(/\/collections\/([^/]+)/)?.[1] ?? "";
+async function paginaShopify(c: Competidor, handle: string, page: number, limit = 250): Promise<ProductoShopify[]> {
+  const url = `${c.web}/collections/${handle}/products.json?limit=${limit}&page=${page}`;
+  let res = await pedir(url, { headers: { Accept: "application/json" } });
+  // Si frena por exceso de peticiones (429), se espera y se vuelve a intentar
+  for (const espera of [5_000, 15_000]) {
+    if (res.status !== 429) break;
+    await new Promise(r => setTimeout(r, espera));
+    res = await pedir(url, { headers: { Accept: "application/json" } });
+  }
+  if (res.status === 404) throw new Error("HTTP 404");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return ((await res.json()) as { products?: ProductoShopify[] }).products ?? [];
+}
+async function leerShopify(c: Competidor, enlace: string): Promise<SuProducto[]> {
+  const handle = handleShopify(enlace);
+  if (!handle) throw new Error("El enlace no es una colección de su web (/collections/…)");
+  const out: SuProducto[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const lote = await paginaShopify(c, handle, page);
+    for (const p of lote) {
+      // Solo los formatos que se pueden comprar (con existencias)
+      const variantes = (p.variants ?? []).filter(v => v.available !== false).map(v => {
+        const precio = parseFloat(v.price ?? "0"), tachado = v.compare_at_price ? parseFloat(v.compare_at_price) : 0;
+        return { titulo: !v.title || /^default title$/i.test(v.title) ? "" : v.title, precio, pvp: tachado > precio + 0.005 ? tachado : undefined, ean: eanDeSku(v.barcode) ?? eanDeSku(v.sku) };
+      }).filter(v => v.precio > 0);
+      if (variantes.length) out.push({ titulo: decodificar(p.title), url: `${c.web}/products/${p.handle}`, esPack: esPack(p.title), variantes });
+    }
+    if (lote.length < 250) break;
+  }
+  return out;
+}
+
 export async function leerCompetidor(c: Competidor, enlace: string, limite: number, marca: string): Promise<SuProducto[]> {
+  if (c.tipo === "c24") return leerShopify(c, enlace);
   if (c.tipo === "woo") return leerWoo(c, enlace, limite, marca);
   if (c.tipo === "presta") return leerPresta(enlace);
   if (c.tipo === "rosi") return leerRosi(c, enlace);
@@ -250,6 +290,15 @@ export async function leerCompetidor(c: Competidor, enlace: string, limite: numb
 export async function buscarListado(c: Competidor, marca: { nombre: string; slug: string }): Promise<string | null> {
   const clave = soloLetras(marca.nombre);
   try {
+    if (c.tipo === "c24") {
+      // La colección suele llamarse como la marca en minúsculas y con guiones («germaine-de-capuccini»)
+      const guiones = normalizar(marca.nombre).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      for (const h of [...new Set([marca.slug, guiones, clave])].filter(Boolean)) {
+        try { if ((await paginaShopify(c, h, 1, 1)).length) return `${c.web}/collections/${h}`; }
+        catch (e) { if (!(e instanceof Error && /HTTP 404/.test(e.message))) throw e; }
+      }
+      return null;
+    }
     if (c.tipo === "woo") {
       const cats = await categoriasWoo(c);
       // La categoría que se llama como la marca (o «marca-online», «comprar-marca»…), la de más productos

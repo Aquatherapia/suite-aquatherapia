@@ -1,5 +1,5 @@
 // Competidores del apartado «Comparar con la competencia». Cada uno se lee según su plataforma:
-//   c24: no se lee aquí, se toma de la última revisión del comparador de Cosméticos24h (emparejado por EAN)
+//   c24: Shopify, se lee de su web (/collections/<marca>/products.json), como las demás tiendas
 //   woo: WooCommerce (API pública de la tienda, por categoría)
 //   presta: PrestaShop (listado de la marca en JSON)
 //   rosi: Estética Rosi (web propia: listado HTML de la marca)

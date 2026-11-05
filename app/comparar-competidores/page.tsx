@@ -130,19 +130,18 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
   const c = COMPETIDORES.find(x => x.id === id)!;
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState(enlace ?? "");
-  const esC24 = c.tipo === "c24";
-  const noVende = esC24 ? estado?.url === "" : enlace === "";
-  const leido = !estado?.error && estado?.leidos != null && (esC24 || !!enlace);
+  const noVende = enlace === "";
+  const leido = !estado?.error && estado?.leidos != null && !!enlace;
   const n = enlazados ?? estado?.emparejados ?? 0;
   const pct = nuestros ? Math.round((n / nuestros) * 100) : 0;
-  const cambiar = !esC24 && <button className="cc-cambiar" onClick={() => { setValor(enlace ?? ""); setEditando(true); }}>cambiar</button>;
+  const cambiar = <button className="cc-cambiar" onClick={() => { setValor(enlace ?? ""); setEditando(true); }}>cambiar</button>;
   const susSin = estado?.sinPareja ?? [];
   const hayPorQue = !editando && !noVende && !estado?.error && estado?.leidos != null && (misSin.length > 0 || susSin.length > 0);
   return (
     <>
     <tr>
-      <td className="cc-t-nombre">{(esC24 ? estado?.url : enlace)
-        ? <a href={(esC24 ? estado?.url : enlace)!} target="_blank" rel="noreferrer" style={{ color: c.color }} title={`Ver la marca en ${c.nombre}`}>{c.nombre} ↗</a>
+      <td className="cc-t-nombre">{enlace
+        ? <a href={enlace} target="_blank" rel="noreferrer" style={{ color: c.color }} title={`Ver la marca en ${c.nombre}`}>{c.nombre} ↗</a>
         : <span style={{ color: c.color }}>{c.nombre}</span>}</td>
       {editando ? (
         <td colSpan={3}>
@@ -155,9 +154,9 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
       ) : estado?.error ? (
         <td colSpan={2} className="cp-rojo">{explicarError(estado.error)}</td>
       ) : noVende ? (
-        <td colSpan={2} className="cp-suave-txt">{esC24 ? "no está en su comparador" : "no la vende"}</td>
+        <td colSpan={2} className="cp-suave-txt">no la vende</td>
       ) : !leido ? (
-        <td colSpan={2} className="cp-suave-txt">{enlace === undefined && !esC24 ? "se busca al revisar" : "sin revisar"}</td>
+        <td colSpan={2} className="cp-suave-txt">{enlace === undefined ? "se busca al revisar" : "sin revisar"}</td>
       ) : (
         <>
           <td>Tienen <b>{estado!.leidos} productos</b></td>
@@ -178,7 +177,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
         <td colSpan={4}>
           {misSin.length > 0 && (
             <div>
-              <strong>De los nuestros sin enlazar ({misSin.length}):</strong> {esC24 ? "no están en su comparador (no los venden o su comparador no los encuentra)" : "no los venden, o no aparecen en su listado de la marca"}.
+              <strong>De los nuestros sin enlazar ({misSin.length}):</strong> no los venden, o no aparecen en su listado de la marca.
               <ul>{misSin.map((x, i) => <li key={i}>{x}</li>)}</ul>
             </div>
           )}
@@ -286,7 +285,7 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
               </tbody>
             </table>
           </div>
-          {r?.c24RevisadoEn && <div className="cc-nota">Los precios de Cosméticos24h son los de su comparador, revisado el {fechaExacta(r.c24RevisadoEn)}{cuponMarca ? `, con su cupón de carrito ${cuponMarca.codigo ?? ""} (−${String(cuponMarca.pct).replace(".", ",")} %)` : ""}.</div>}
+          {cuponMarca && <div className="cc-nota">El precio final de Cosméticos24h lleva su cupón de carrito {cuponMarca.codigo ?? ""} (−{String(cuponMarca.pct).replace(".", ",")} %).</div>}
           {r?.cambios && (r.cambios.nuevosCaros.length + r.cambios.yaNoCaros.length) > 0 && (
             <div className="cp-cambios">
               <strong>Cambios desde la revisión del {fechaCorta(r.cambios.desde)}:</strong>
@@ -359,7 +358,7 @@ export default function CompararCompetidores() {
       <p className="subtitle">Nuestros precios frente a los de {COMPETIDORES.map(c => c.nombre).join(", ")}, marca a marca y en una sola tabla. En rojo, quien vende más barato que nosotros.</p>
 
       <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
-        <span>Están todas las marcas de nuestra web; los precios de Cosméticos24h salen de su <Link href="/comparar-precios">comparador</Link>. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato o, si el nombre está en otro idioma, con IA (≈).</span>
+        <span>Están todas las marcas de nuestra web. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato o, si el nombre está en otro idioma, con IA (≈).</span>
       </div>
       <input className="cc-filtro" value={filtro} onChange={e => setFiltro(e.target.value)} placeholder="Buscar marca…" />
       {error && <div className="error">{error}</div>}

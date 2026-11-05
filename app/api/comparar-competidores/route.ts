@@ -167,28 +167,8 @@ export async function POST(req: NextRequest) {
     const auto = { ...(config.auto[marca.slug] ?? {}) };
     const estados: Record<string, EstadoComp> = {};
 
-    // Cosméticos24h: de la última revisión de su comparador (ya emparejada por EAN o por parecido)
-    const r24 = c24.resultados.find(r => r.slug === marca.slug);
-    if (r24) {
-      let n = 0;
-      const sinPareja: NonNullable<EstadoComp["sinPareja"]> = [];
-      for (const c of r24.comparaciones) {
-        const ean = normalizarEan(c.ean);
-        const m = (ean && mios.find(x => x.ean === ean)) || mios.filter(x => x.url === c.miUrl).length === 1 && mios.find(x => x.url === c.miUrl) || null;
-        if (!m) { sinPareja.push({ titulo: c.nombre, url: c.suUrl, precio: c.suPrecio ?? undefined, motivo: "Está en su comparador, pero no lo encontramos en nuestro feed (otro EAN o ficha desactivada)" }); continue; }
-        if (!c.suPrecio) { sinPareja.push({ titulo: c.nombre, url: c.suUrl, motivo: "Su comparador no tiene su precio (agotado o sin precio)" }); continue; }
-        filaDe.get(m.clave)!.precios.c24 = { precio: c.suPrecio, pvp: c.suPvp && c.suPvp > c.suPrecio + 0.005 ? c.suPvp : undefined, url: c.suUrl, titulo: c.nombre, por: c.porParecido ?? "ean" };
-        n++;
-      }
-      estados.c24 = { url: `https://cosmeticos24h.com/collections/${marca.slug}`, leidos: r24.comparaciones.length, emparejados: n, sinPareja };
-    } else if (marca.enC24) {
-      estados.c24 = { error: "Revisa antes la marca en el comparador de Cosméticos24h" };
-    } else {
-      estados.c24 = { url: "" }; // no está en el comparador de Cosméticos24h
-    }
-
-    // El resto: se leen todos a la vez
-    await Promise.all(COMPETIDORES.filter(c => c.tipo !== "c24").map(async comp => {
+    // Todas las tiendas (también Cosméticos24h, de su web): se leen todas a la vez
+    await Promise.all(COMPETIDORES.map(async comp => {
       try {
         // Sin enlace todavía (o no se encontró sola): se busca el listado de la marca en su web
         if (enlaces[comp.id] === undefined || (enlaces[comp.id] === "" && auto[comp.id] !== false)) {
@@ -199,6 +179,15 @@ export async function POST(req: NextRequest) {
         const enlace = enlaces[comp.id];
         if (!enlace) { estados[comp.id] = { url: "" , auto: auto[comp.id] }; return; }
         const suyos = await leerCompetidor(comp, enlace, limite, marca.nombre);
+        // Cosméticos24h no publica el EAN en su web: se toma de su comparador cuando ya lo tiene emparejado
+        if (comp.id === "c24") {
+          const r24 = c24.resultados.find(r => r.slug === marca.slug);
+          const eanDe = new Map((r24?.comparaciones ?? []).map(x => [x.suUrl.split("?")[0], normalizarEan(x.ean) ?? mios.find(m => m.url === x.miUrl)?.ean ?? null]));
+          for (const s of suyos) {
+            const ean = eanDe.get(s.url);
+            if (ean && s.variantes.length === 1 && !s.variantes[0].ean) s.variantes[0].ean = ean;
+          }
+        }
         const { n, sinPareja } = await emparejar(comp.id, comp.nombre, suyos, mios, filaDe, marca);
         estados[comp.id] = { url: enlace, auto: auto[comp.id], leidos: suyos.length, emparejados: n, sinPareja };
       } catch (e) {
@@ -209,7 +198,7 @@ export async function POST(req: NextRequest) {
     config.enlaces[marca.slug] = enlaces;
     config.auto[marca.slug] = auto;
     const antes = config.resultados[marca.slug];
-    config.resultados[marca.slug] = { revisadoEn: new Date().toISOString(), filas, competidores: estados, c24RevisadoEn: r24?.revisadoEn, cambios: antes ? cambios(antes, filas) : undefined };
+    config.resultados[marca.slug] = { revisadoEn: new Date().toISOString(), filas, competidores: estados, cambios: antes ? cambios(antes, filas) : undefined };
     await guardarConfig(config);
     return respuesta(config);
   }
