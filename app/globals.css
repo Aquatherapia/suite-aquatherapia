@@ -1620,7 +1620,7 @@ button:disabled {
 .cc-enlace-estado a { color: #1270b6; }
 .cc-enlace-edit { display: flex; gap: 6px; }
 .cc-enlace-edit input { flex: 1; min-width: 0; font-size: 12px; padding: 4px 6px; }
-.cc-cambiar { margin-left: 6px; background: none; border: none; padding: 0; color: #6b7280; text-decoration: underline; font-size: 11px; cursor: pointer; }
+.cc-cambiar { display: inline; width: auto; margin: 0 0 0 6px; vertical-align: baseline; margin-left: 6px; background: none; border: none; padding: 0; color: #6b7280; text-decoration: underline; font-size: 11px; cursor: pointer; }
 .cc-nota { font-size: 12px; color: var(--muted); margin: 4px 4px 8px; }
 .cc-todos { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #374151; margin: 4px 4px 6px; }
 .cc-todos input { width: auto; margin: 0; }
