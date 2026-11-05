@@ -95,7 +95,8 @@ function TablaCompetencia({ filas, estados }: { filas: FilaComp[]; estados: Reco
   );
 }
 
-function EnlaceComp({ id, estado, enlace, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; onGuardar: (url: string) => void }) {
+function EnlaceComp({ id, estado, enlace, nuestros, enlazados, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; nuestros?: number; enlazados?: number; onGuardar: (url: string) => void }) {
+  const deNuestros = `${enlazados ?? estado?.emparejados ?? 0} de nuestros ${nuestros ?? "?"} enlazados`;
   const c = COMPETIDORES.find(x => x.id === id)!;
   const [editando, setEditando] = useState(false);
   const [valor, setValor] = useState(enlace ?? "");
@@ -104,7 +105,7 @@ function EnlaceComp({ id, estado, enlace, onGuardar }: { id: string; estado?: Es
     <div className="cc-enlace">
       <span className="cc-enlace-nombre" style={{ color: c.color }}>{c.nombre}</span>
       {c.tipo === "c24" ? (
-        <span className="cc-enlace-estado">{estado?.error ?? `de su comparador · ${estado?.emparejados ?? 0} emparejados`}</span>
+        <span className="cc-enlace-estado">{estado?.error ?? `${deNuestros} · de su comparador`}</span>
       ) : editando ? (
         <span className="cc-enlace-edit">
           <input value={valor} onChange={e => setValor(e.target.value)} placeholder={`${c.web}/… (vacío = no la vende)`}
@@ -117,7 +118,7 @@ function EnlaceComp({ id, estado, enlace, onGuardar }: { id: string; estado?: Es
             : noVende ? <span className="cp-suave-txt">no la vende</span>
             : <a href={enlace} target="_blank" rel="noreferrer">ver listado ↗</a>}
           {estado?.error && <span className="cp-rojo"> · {estado.error}</span>}
-          {!estado?.error && estado?.leidos != null && enlace && <span className="cp-suave-txt"> · {estado.leidos} productos, {estado.emparejados ?? 0} emparejados</span>}
+          {!estado?.error && estado?.leidos != null && enlace && <span className="cp-suave-txt"> · <b>{deNuestros}</b> · {estado.leidos} suyos</span>}
           <button className="cc-cambiar" onClick={() => { setValor(enlace ?? ""); setEditando(true); }}>cambiar</button>
         </span>
       )}
@@ -158,7 +159,7 @@ function MarcaBloque({ marca, r, enlaces, revisando, ocupado, expandido, onToggl
         <div className="vp-accordion-content">
           <div className="cc-enlaces">
             {COMPETIDORES.map(c => (
-              <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={r?.competidores[c.id]} enlace={enlaces[c.id]} onGuardar={url => onEnlace(c.id, url)} />
+              <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={r?.competidores[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} onGuardar={url => onEnlace(c.id, url)} />
             ))}
           </div>
           {r?.c24RevisadoEn && <div className="cc-nota">Los precios de Cosméticos24h son los de su comparador, revisado el {fechaExacta(r.c24RevisadoEn)}.</div>}
