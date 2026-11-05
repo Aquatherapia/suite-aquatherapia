@@ -1616,7 +1616,7 @@ button:disabled {
 .cc-enlaces { padding: 8px 4px 10px; font-size: 13px; }
 .cc-nuestros { font-size: 14px; color: #111827; margin-bottom: 8px; }
 .cc-nuestros b { color: #1270b6; }
-.cc-tabla-tiendas { border-collapse: collapse; width: 100%; max-width: 820px; }
+.cc-tabla-tiendas { border-collapse: collapse; width: 100%; }
 .cc-tabla-tiendas th { text-align: left; font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: .03em; padding: 4px 10px; border-bottom: 1px solid #e5e7eb; }
 .cc-tabla-tiendas td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
 .cc-t-nombre { font-weight: 700; white-space: nowrap; }
@@ -1652,3 +1652,5 @@ button:disabled {
 /* Precio de un competidor más barato que el nuestro: fondo rojizo suave (sin flechas) */
 .cc-mas-barato { background: #fdecec; }
 .cc-porque-btn { display: inline; width: auto; margin: 4px 0 0; padding: 0; background: none; border: none; color: #1270b6; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; }
+.cc-t-porque { font-size: 12px; color: #374151; max-width: 420px; }
+.cc-t-porque b { color: #111827; }

@@ -126,6 +126,21 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
   );
 }
 
+// Resumen de por qué no se enlazan sus productos, agrupado por motivo («5 otro formato · 3 precio muy distinto»)
+function resumenMotivos(sin: NonNullable<EstadoComp["sinPareja"]>): string {
+  const grupo = (m: string) => /^No lo tenemos/.test(m) ? "no los tenemos"
+    : /otro formato/.test(m) ? "otro formato"
+    : /pack o estuche/.test(m) ? "pack o estuche"
+    : /precio es muy distinto/.test(m) ? "precio muy distinto"
+    : /ya está enlazado/.test(m) ? "repetidos (ya enlazado otro)"
+    : /no hay seguridad/.test(m) ? "dudosos"
+    : /feed/.test(m) ? "no están en nuestro feed"
+    : "otros";
+  const n = new Map<string, number>();
+  for (const x of sin) { const g = grupo(x.motivo); n.set(g, (n.get(g) ?? 0) + 1); }
+  return [...n].sort((a, b) => b[1] - a[1]).map(([g, k]) => `${k} ${g}`).join(" · ");
+}
+
 function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar }: { id: string; estado?: EstadoComp; enlace?: string; nuestros?: number; enlazados?: number; misSin: string[]; onGuardar: (url: string) => void }) {
   const [porQue, setPorQue] = useState(false);
   const c = COMPETIDORES.find(x => x.id === id)!;
@@ -145,7 +160,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
         ? <a href={enlace} target="_blank" rel="noreferrer" style={{ color: c.color }} title={`Ver la marca en ${c.nombre}`}>{c.nombre} ↗</a>
         : <span style={{ color: c.color }}>{c.nombre}</span>}</td>
       {editando ? (
-        <td colSpan={3}>
+        <td colSpan={4}>
           <span className="cc-enlace-edit">
             <input value={valor} onChange={e => setValor(e.target.value)} placeholder={`${c.web}/… (vacío = no la vende)`}
               onKeyDown={e => { if (e.key === "Enter") { onGuardar(valor); setEditando(false); } }} autoFocus />
@@ -153,18 +168,28 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
           </span>
         </td>
       ) : estado?.error ? (
-        <td colSpan={2} className="cp-rojo">{explicarError(estado.error)}</td>
+        <td colSpan={3} className="cp-rojo">{explicarError(estado.error)}</td>
       ) : noVende ? (
-        <td colSpan={2} className="cp-suave-txt">no la vende</td>
+        <td colSpan={3} className="cp-suave-txt">no la vende</td>
       ) : !leido ? (
-        <td colSpan={2} className="cp-suave-txt">{enlace === undefined ? "se busca al revisar" : "sin revisar"}</td>
+        <td colSpan={3} className="cp-suave-txt">{enlace === undefined ? "se busca al revisar" : "sin revisar"}</td>
       ) : (
         <>
           <td>Tienen <b>{estado!.leidos} productos</b></td>
           <td>
             <span className="cc-barra"><span style={{ width: `${pct}%`, background: c.color }} /></span>
             enlazan <b>{n} de los {nuestros ?? "?"}</b> de La Tienda de Cosméticos <span className="cp-suave-txt">({pct} %)</span>
-            {hayPorQue && <div><button className="cc-porque-btn" onClick={() => setPorQue(v => !v)}>{porQue ? "▲ Ocultar" : `▼ Por qué no se enlazan los demás (${misSin.length} nuestros${susSin.length ? ` · ${susSin.length} suyos` : ""})`}</button></div>}
+          </td>
+          <td className="cc-t-porque">
+            {hayPorQue ? (
+              <>
+                {misSin.length > 0 && <div><b>{misSin.length} nuestros</b> no están en su web (no los venden o no salen en su listado)</div>}
+                {estado?.sinPareja === undefined
+                  ? <div className="cp-suave-txt">Pulsa «Revisar» para ver por qué no se enlazan los suyos</div>
+                  : susSin.length > 0 && <div><b>{susSin.length} suyos</b> sin pareja: {resumenMotivos(susSin)}</div>}
+                <button className="cc-porque-btn" onClick={() => setPorQue(v => !v)}>{porQue ? "▲ Ocultar la lista" : "▼ Ver la lista"}</button>
+              </>
+            ) : <span className="cp-suave-txt">Todos enlazados</span>}
           </td>
         </>
       )}
@@ -176,7 +201,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, onGuardar
     </tr>
     {porQue && hayPorQue && (
       <tr className="cc-porque">
-        <td colSpan={4}>
+        <td colSpan={5}>
           {misSin.length > 0 && (
             <div>
               <strong>De los nuestros sin enlazar ({misSin.length}):</strong> no los venden, o no aparecen en su listado de la marca.
@@ -279,7 +304,7 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
           <div className="cc-enlaces">
             <div className="cc-nuestros">Nosotros tenemos <b>{r ? `${r.filas.length} productos` : "—"}</b> de {marca.nombre}{r ? ". Cuántos hemos podido enlazar en cada tienda:" : " (pulsa «Revisar»)."}</div>
             <table className="cc-tabla-tiendas">
-              <thead><tr><th>Tienda</th><th>Sus productos</th><th>Enlazados con los nuestros</th><th>Listado</th></tr></thead>
+              <thead><tr><th>Tienda</th><th>Sus productos</th><th>Enlazados con los nuestros</th><th>Por qué no se enlazan los demás</th><th></th></tr></thead>
               <tbody>
                 {COMPETIDORES.map(c => (
                   <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} misSin={(r?.filas ?? []).filter(f => !f.precios[c.id]).map(f => f.formato && !f.nombre.includes(f.formato) ? `${f.nombre} (${f.formato})` : f.nombre)} onGuardar={url => onEnlace(c.id, url)} />
