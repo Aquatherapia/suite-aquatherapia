@@ -39,13 +39,16 @@ function TablaCompetencia({ filas, estados }: { filas: FilaComp[]; estados: Reco
           <tr className="cp-informe-grupos">
             <th colSpan={2}></th>
             <th colSpan={2} className="cp-g-nos">La Tienda de Cosméticos</th>
-            <th colSpan={cols.length} className="cp-g-ellos">Competencia (precio final en su web)</th>
+            {cols.map(c => <th key={c.id} colSpan={2} style={{ background: c.fondo, color: c.color }}>{c.nombre}</th>)}
             <th colSpan={2} className="cp-g-fin">Comparación</th>
           </tr>
           <tr>
             <th>EAN</th><th className="cp-izq">Producto</th>
             <th>PVP</th><th>Precio final</th>
-            {cols.map(c => <th key={c.id} className="cp-h-ellos">{c.corto}</th>)}
+            {cols.map(c => [
+              <th key={`${c.id}-pvp`} style={{ background: c.color }}>PVP</th>,
+              <th key={`${c.id}-precio`} style={{ background: c.color }}>Precio final</th>,
+            ])}
             <th className="cp-h-fin">Más barato</th>
             <th className="cp-h-fin cp-tip" data-tip="Precio del competidor más barato menos el nuestro: en negativo, alguien vende más barato que nosotros">Diferencia</th>
           </tr>
@@ -63,18 +66,21 @@ function TablaCompetencia({ filas, estados }: { filas: FilaComp[]; estados: Reco
                 <td className="cp-fuerte cp-azul">{eur(f.precio)}{f.pvp - f.precio > 0.005 && <small className="cp-dto-celda">−{pct(1 - f.precio / f.pvp)}</small>}</td>
                 {cols.map(c => {
                   const p = f.precios[c.id];
-                  if (!p) return <td key={c.id} className="cp-vacia">—</td>;
-                  const clase = p.precio < f.precio - 0.005 ? "cp-fuerte cp-rojo" : p.precio > f.precio + 0.005 ? "cc-mas-caro" : "";
+                  if (!p) return [<td key={`${c.id}-pvp`} className="cp-vacia">—</td>, <td key={`${c.id}-precio`} className="cp-vacia">—</td>];
+                  const pvp = p.pvp ?? p.precio;
+                  const masBaratoQueNos = p.precio < f.precio - 0.005;
                   const tip = `${p.titulo}${p.por !== "ean" ? ` · emparejado por ${p.por}` : ""}`;
-                  return (
-                    <td key={c.id} className={clase + (mb?.id === c.id && !ganamos ? " cc-el-mas-barato" : "")} title={tip}>
+                  return [
+                    <td key={`${c.id}-pvp`} style={{ color: c.color }} title={tip}>{eur(pvp)}</td>,
+                    <td key={`${c.id}-precio`} className="cp-fuerte" style={{ color: c.color }} title={tip}>
+                      {masBaratoQueNos && <span className="cc-baja" title="Más barato que nosotros">▼</span>}
                       <a href={p.url} target="_blank" rel="noreferrer" className="cc-precio">{eur(p.precio)}</a>
                       {p.por !== "ean" && <span className="cc-por" title={`Emparejado por ${p.por}: a una de las dos fichas le falta el EAN`}>≈</span>}
-                      {p.pvp && <small className="cp-dto-celda">−{pct(1 - p.precio / p.pvp)}</small>}
-                    </td>
-                  );
+                      {pvp - p.precio > 0.005 && <small className="cp-dto-celda">−{pct(1 - p.precio / pvp)}</small>}
+                    </td>,
+                  ];
                 })}
-                <td className={"cp-izq cp-fuerte " + (mb == null ? "cp-suave" : ganamos ? "cp-verde" : "cp-rojo")}>
+                <td className={"cp-izq cp-fuerte " + (mb == null ? "cp-suave" : ganamos ? "cp-azul" : "")} style={mb && !ganamos ? { color: COMPETIDORES.find(c => c.id === mb.id)?.color } : undefined}>
                   {mb == null ? "—" : ganamos ? "La Tienda de Cosméticos" : COMPETIDORES.find(c => c.id === mb.id)?.corto}
                 </td>
                 <td className={"cp-fuerte " + (diff == null ? "cp-suave" : diff < -0.005 ? "cp-rojo" : "cp-verde")}>
@@ -96,7 +102,7 @@ function EnlaceComp({ id, estado, enlace, onGuardar }: { id: string; estado?: Es
   const noVende = enlace === "";
   return (
     <div className="cc-enlace">
-      <span className="cc-enlace-nombre">{c.nombre}</span>
+      <span className="cc-enlace-nombre" style={{ color: c.color }}>{c.nombre}</span>
       {c.tipo === "c24" ? (
         <span className="cc-enlace-estado">{estado?.error ?? `de su comparador · ${estado?.emparejados ?? 0} emparejados`}</span>
       ) : editando ? (
