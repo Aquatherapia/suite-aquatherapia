@@ -1620,6 +1620,8 @@ button:disabled {
 .cc-tabla-tiendas th { text-align: left; font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: .03em; padding: 4px 10px; border-bottom: 1px solid #e5e7eb; }
 .cc-tabla-tiendas td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
 .cc-t-nombre { font-weight: 700; white-space: nowrap; }
+.cc-t-nombre a { text-decoration: none; }
+.cc-t-nombre a:hover { text-decoration: underline; }
 .cc-t-num { text-align: right; }
 .cc-t-listado { white-space: nowrap; }
 .cc-t-listado a { color: #1270b6; }
@@ -1646,3 +1648,6 @@ button:disabled {
 .cc-tabla .cc-baja { color: #d40000; font-size: 10px; margin-right: 3px; }
 .cc-tabla .cc-por { margin-left: 3px; color: #9ca3af; font-weight: 400; cursor: help; }
 .cc-tabla td.cp-vacia { color: #c4c9d0; text-align: center; }
+
+/* Precio de un competidor más barato que el nuestro: fondo rojizo suave (sin flechas) */
+.cc-mas-barato { background: #fdecec; }
