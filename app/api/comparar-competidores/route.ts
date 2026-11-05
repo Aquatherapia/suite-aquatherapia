@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
         const suyos = await leerCompetidor(comp, enlace, limite);
         estados[comp.id] = { url: enlace, auto: auto[comp.id], leidos: suyos.length, emparejados: emparejar(comp.id, suyos, mios, filaDe, marca) };
       } catch (e) {
-        estados[comp.id] = { url: enlaces[comp.id], auto: auto[comp.id], error: e instanceof Error ? e.message : String(e) };
+        estados[comp.id] = { url: enlaces[comp.id], auto: auto[comp.id], error: textoError(e) };
       }
     }));
 
@@ -163,4 +163,11 @@ function emparejar(comp: string, suyos: SuProducto[], mios: MiProducto[], filaDe
     poner(p.mp, p.s, p.i, p.por);
   }
   return usados.size;
+}
+
+// «fetch failed» no dice nada: se añade la causa (certificado, conexión rechazada…)
+function textoError(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  const causa = (e as Error & { cause?: { code?: string; message?: string } }).cause;
+  return causa ? `${e.message} (${causa.code ?? causa.message})` : e.message;
 }
