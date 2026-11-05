@@ -94,7 +94,7 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
                   const masBaratoQueNos = p.precio < f.precio - 0.005;
                   const tip = `${p.titulo}${p.por !== "ean" ? ` · emparejado ${COMO[p.por]}` : ""}${p.precioWeb != null ? ` · en su web ${eur(p.precioWeb)}, con cupón ${eur(p.precio)}` : ""}${kc.bajoMinimo && k.limite != null ? ` · por debajo de nuestro PVP con dto. autorizado (${eur(k.limite)})` : ""}`;
                   return [
-                    <Celda key={`${c.id}-pvp`} className={kc.pvpSinActualizar || kc.pvpMasAlto ? "cp-ambar" : undefined} style={kc.pvpSinActualizar || kc.pvpMasAlto ? undefined : { color: c.color }}
+                    <Celda key={`${c.id}-pvp`} className={kc.pvpSinActualizar ? "cp-ambar" : undefined} style={kc.pvpSinActualizar ? undefined : { color: c.color }}
                       tip={kc.pvpSinActualizar ? `Su PVP es más bajo: ${eur(kc.suPvp)} frente a ${eur(f.pvp)} el nuestro. Tarifa sin actualizar.` : kc.pvpMasAlto ? `Su PVP es más alto: ${eur(kc.suPvp)} frente a ${eur(f.pvp)} el nuestro. Revisa nuestro precio.` : undefined}>
                       {eur(kc.suPvp)}{kc.pvpSinActualizar && <small className="cp-dto-celda cp-sin-actualizar">Tarifa sin actualizar</small>}
                     </Celda>,
