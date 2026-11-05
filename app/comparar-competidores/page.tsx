@@ -105,10 +105,10 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
                     </td>,
                   ];
                 })}
-                <td className={"cp-izq cp-fuerte " + (k.mb == null ? "cp-suave" : ganamos ? "cp-azul" : "")} style={k.mb && !ganamos ? { color: mbComp?.color } : undefined}>
+                <td className={"cp-izq " + (k.mb == null || k.masBarato === "Igual" ? "cp-suave" : ganamos ? "cp-fuerte cp-azul" : "cp-fuerte")} style={k.mb && !ganamos ? { color: mbComp?.color } : undefined}>
                   {k.masBarato}
                 </td>
-                <td className={"cp-fuerte " + (k.diferencia == null ? "cp-suave" : k.diferencia < -0.005 ? "cp-rojo" : "cp-verde")}>
+                <td className={"cp-fuerte " + (k.diferencia == null ? "cp-suave" : k.diferencia < -0.005 ? "cp-rojo" : k.diferencia > 0.005 ? "cp-verde" : "")}>
                   {k.diferencia == null ? "—" : `${k.diferencia > 0.005 ? "+" : ""}${eur(k.diferencia)}`}
                 </td>
                 <Celda className={k.bajoAutorizado != null ? "cp-fuerte cp-bajo-aut" : "cp-suave"}
