@@ -22,7 +22,7 @@ export type PrecioComp = {
   pvp?: number;     // precio sin oferta (tachado), si lo publica
   url: string;
   titulo: string;   // cómo se llama en su web
-  por: "ean" | "referencia" | "nombre" | "ia"; // cómo se ha emparejado (ia: nombre en otro idioma, emparejado con IA)
+  por: "ean" | "referencia" | "nombre" | "ia" | "manual"; // cómo se ha emparejado (ia: nombre en otro idioma, emparejado con IA; manual: a mano)
 };
 
 // Una fila de la tabla: uno de nuestros productos (un formato) y lo que cuesta en cada competidor
@@ -38,8 +38,14 @@ export type EstadoComp = {
   leidos?: number;    // productos de la marca leídos en su web
   emparejados?: number;
   error?: string;
-  sinPareja?: { titulo: string; url?: string; precio?: number; motivo: string }[]; // sus productos que no se han enlazado y por qué
+  sinPareja?: { titulo: string; url?: string; precio?: number; pvp?: number; motivo: string }[]; // sus productos que no se han enlazado y por qué
 };
+
+// Cómo se identifica una fila nuestra (un producto y formato) para los enlaces hechos a mano
+export const claveFila = (f: { url: string; ean?: string; formato?: string }) => `${f.url}#${f.ean ?? f.formato ?? ""}`;
+
+// Un producto suyo enlazado a mano con uno nuestro: se respeta en todas las revisiones
+export type Manual = { suUrl: string; suTitulo: string; mio: string };
 
 export type ResultadoComp = {
   revisadoEn: string;

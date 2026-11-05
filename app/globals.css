@@ -1659,3 +1659,4 @@ button:disabled {
 .cc-barra-sup .regen-btn { width: auto; }
 .cc-t-como { font-size: 12px; color: #374151; white-space: nowrap; }
 .cc-t-como b { color: #111827; }
+.cc-enlazar { display: inline-block; width: auto; max-width: 260px; margin: 0 0 0 8px; padding: 1px 4px; font-size: 11px; vertical-align: baseline; }

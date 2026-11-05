@@ -4,7 +4,7 @@ import path from "path";
 import { emparejarPorNombre } from "./emparejar-nombre";
 import { emparejarConIa } from "./emparejar-ia";
 import { motivoSinPareja } from "./motivo";
-import { COMPETIDORES, explicarError, type EstadoComp, type FilaComp, type ResultadoComp } from "../../comparar-competidores/competidores";
+import { COMPETIDORES, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
 import { buscarListado, leerCompetidor, leerMarcasWeb, leerMisProductos, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
 
 // Leer varias webs a la vez cabe de sobra, pero alguna puede ir lenta: Vercel Hobby permite hasta 300 s
@@ -28,6 +28,8 @@ type Config = {
   // Dto. autorizado puesto a mano en las marcas que no están en el comparador de Cosméticos24h
   // (las que sí están lo guardan allí, para que los dos apartados usen el mismo)
   descuentos?: Record<string, number>;
+  // Por marca y competidor: productos suyos enlazados a mano con los nuestros
+  manuales?: Record<string, Record<string, Manual[]>>;
 };
 
 // Una marca de este apartado: las del comparador de Cosméticos24h y el resto de las de nuestra web
@@ -149,6 +151,36 @@ export async function POST(req: NextRequest) {
     return respuesta(config);
   }
 
+  // Enlazar a mano uno de sus productos sin pareja con uno de los nuestros, o deshacerlo.
+  // Se cambia ya en la última revisión (sin tener que revisar otra vez) y se respeta en las siguientes.
+  if (body.action === "emparejar" || body.action === "desemparejar") {
+    const { slug, comp, suUrl, suTitulo, mio } = body as { slug: string; comp: string; suUrl: string; suTitulo: string; mio: string };
+    const r = config.resultados[slug];
+    const fila = r?.filas.find(f => claveFila(f) === mio);
+    const estado = r?.competidores[comp];
+    if (!r || !fila || !estado) return NextResponse.json({ error: "No encuentro ese producto: pulsa «Revisar» y vuelve a intentarlo." });
+    const lista = (config.manuales?.[slug]?.[comp] ?? []).filter(x => x.mio !== mio && !(x.suUrl === suUrl && x.suTitulo === suTitulo));
+    if (body.action === "emparejar") {
+      const sin = estado.sinPareja ?? [];
+      const k = sin.findIndex(x => x.url === suUrl && x.titulo === suTitulo);
+      if (k < 0) return NextResponse.json({ error: "Ese producto suyo ya no está sin enlazar: pulsa «Revisar»." });
+      const x = sin[k];
+      lista.push({ suUrl, suTitulo, mio });
+      fila.precios[comp] = { precio: x.precio ?? 0, pvp: x.pvp, url: suUrl, titulo: suTitulo, por: "manual" };
+      estado.sinPareja = sin.filter((_, j) => j !== k);
+    } else {
+      const p = fila.precios[comp];
+      if (p?.por === "manual") {
+        delete fila.precios[comp];
+        estado.sinPareja = [{ titulo: p.titulo, url: p.url, precio: p.precio, pvp: p.pvp, motivo: "Desenlazado a mano" }, ...(estado.sinPareja ?? [])];
+      }
+    }
+    estado.emparejados = r.filas.filter(f => f.precios[comp]).length;
+    config.manuales = { ...(config.manuales ?? {}), [slug]: { ...(config.manuales?.[slug] ?? {}), [comp]: lista } };
+    await guardarConfig(config);
+    return respuesta(config);
+  }
+
   if (body.action === "revisar") {
     const inicio = Date.now();
     const limite = inicio + 200_000;
@@ -188,7 +220,7 @@ export async function POST(req: NextRequest) {
             if (ean && s.variantes.length === 1 && !s.variantes[0].ean) s.variantes[0].ean = ean;
           }
         }
-        const { n, sinPareja } = await emparejar(comp.id, comp.nombre, suyos, mios, filaDe, marca);
+        const { n, sinPareja } = await emparejar(comp.id, comp.nombre, suyos, mios, filaDe, marca, config.manuales?.[marca.slug]?.[comp.id] ?? []);
         estados[comp.id] = { url: enlace, auto: auto[comp.id], leidos: suyos.length, emparejados: n, sinPareja };
       } catch (e) {
         estados[comp.id] = { url: enlaces[comp.id], auto: auto[comp.id], error: textoError(e) };
@@ -206,20 +238,29 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ error: "Acción desconocida" }, { status: 400 });
 }
 
-// Empareja los productos de un competidor con los nuestros: primero por EAN, lo que quede por referencia o nombre
+// Empareja los productos de un competidor con los nuestros: primero los enlazados a mano, luego por EAN, lo que quede por referencia o nombre
 // y, lo que siga sin pareja, con IA (nombres en otro idioma). Devuelve cuántos de los nuestros han encontrado pareja.
-async function emparejar(comp: string, tienda: string, suyos: SuProducto[], mios: MiProducto[], filaDe: Map<string, FilaComp>, marca: MarcaC24): Promise<{ n: number; sinPareja: NonNullable<EstadoComp["sinPareja"]> }> {
+async function emparejar(comp: string, tienda: string, suyos: SuProducto[], mios: MiProducto[], filaDe: Map<string, FilaComp>, marca: MarcaC24, manuales: Manual[]): Promise<{ n: number; sinPareja: NonNullable<EstadoComp["sinPareja"]> }> {
   const usados = new Set<string>();
   const suyosUsados = new Set<string>();
-  const poner = (m: MiProducto, s: SuProducto, i: number, por: "ean" | "referencia" | "nombre" | "ia") => {
+  const poner = (m: MiProducto, s: SuProducto, i: number, por: PrecioComp["por"]) => {
     const v = s.variantes[i];
     filaDe.get(m.clave)!.precios[comp] = { precio: v.precio, pvp: v.pvp && v.pvp > v.precio + 0.005 ? v.pvp : undefined, url: s.url, titulo: v.titulo ? `${s.titulo} · ${v.titulo}` : s.titulo, por };
     usados.add(m.clave); suyosUsados.add(`${s.url}#${i}`);
   };
+  // Los enlazados a mano
+  const tituloDe = (s: SuProducto, i: number) => s.variantes[i]?.titulo ? `${s.titulo} · ${s.variantes[i].titulo}` : s.titulo;
+  const miDeFila = new Map(mios.map(m => [claveFila(filaDe.get(m.clave)!), m]));
+  for (const x of manuales) {
+    const m = miDeFila.get(x.mio);
+    const s = suyos.find(s => s.url === x.suUrl);
+    const i = s ? s.variantes.findIndex((_, k) => tituloDe(s, k) === x.suTitulo) : -1;
+    if (m && s && i >= 0 && !usados.has(m.clave) && !suyosUsados.has(`${s.url}#${i}`)) poner(m, s, i, "manual");
+  }
   const porEan = new Map(mios.filter(m => m.ean).map(m => [m.ean!, m]));
   for (const s of suyos) s.variantes.forEach((v, i) => {
     const m = v.ean ? porEan.get(v.ean) : undefined;
-    if (m && !usados.has(m.clave)) poner(m, s, i, "ean");
+    if (m && !usados.has(m.clave) && !suyosUsados.has(`${s.url}#${i}`)) poner(m, s, i, "ean");
   });
   const libres = suyos.filter(s => s.variantes.some((_, i) => !suyosUsados.has(`${s.url}#${i}`)));
   for (const p of emparejarPorNombre(libres, mios.filter(m => !usados.has(m.clave)), { nombre: marca.nombre, slug: marca.slug, miToken: marca.miToken ?? marca.slug })) {
@@ -245,7 +286,7 @@ async function emparejar(comp: string, tienda: string, suyos: SuProducto[], mios
     .filter(s => !s.variantes.some((_, i) => suyosUsados.has(`${s.url}#${i}`)))
     .flatMap(s => s.variantes.map(v => {
       const titulo = v.titulo ? `${s.titulo} · ${v.titulo}` : s.titulo;
-      return { titulo, url: s.url, precio: v.precio, motivo: motivoSinPareja(titulo, v.precio, s.esPack, mios, usados, mk) };
+      return { titulo, url: s.url, precio: v.precio, pvp: v.pvp && v.pvp > v.precio + 0.005 ? v.pvp : undefined, motivo: motivoSinPareja(titulo, v.precio, s.esPack, mios, usados, mk) };
     }))
     .slice(0, 150);
   return { n: usados.size, sinPareja };

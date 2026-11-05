@@ -116,7 +116,7 @@ export async function descargarExcel(marca: string, filasIn: FilaComp[], _estado
       if (!p || !kc) { celda(6 + j * 2, "-", undefined, { color: { argb: "FFC4C9D0" } }); celda(7 + j * 2, "-", undefined, { color: { argb: "FFC4C9D0" } }); return; }
       const avisoPvp = kc.pvpSinActualizar || kc.pvpMasAlto;
       celda(6 + j * 2, kc.suPvp, EUROS, { color: { argb: "FF" + (avisoPvp ? AMBAR : hex(c.color)) }, bold: avisoPvp }, avisoPvp ? AMBAR_FONDO : undefined);
-      const pc = celda(7 + j * 2, { text: `${eur(p.precio)}${p.por !== "ean" ? " ≈" : ""}`, hyperlink: p.url }, undefined,
+      const pc = celda(7 + j * 2, { text: `${eur(p.precio)}${p.por !== "ean" && p.por !== "manual" ? " ≈" : ""}`, hyperlink: p.url }, undefined,
         { bold: true, color: { argb: "FF" + (kc.bajoMinimo ? BAJO : hex(c.color)) } }, kc.bajoMinimo ? BAJO_FONDO : undefined);
       pc.alignment = { vertical: "middle", horizontal: "right" };
     });
@@ -161,7 +161,7 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
       ...cols.flatMap(c => {
         const p = f.precios[c.id], kc = k.comp[c.id];
         if (!p || !kc) return ["-", "-"];
-        return [eur(kc.suPvp) + (kc.pvpSinActualizar ? "\nsin actualizar" : ""), `${eur(p.precio)}${p.por !== "ean" ? " ~" : ""}` + (kc.dto > 0.0005 ? `\n-${pctTexto(kc.dto)}` : "")];
+        return [eur(kc.suPvp) + (kc.pvpSinActualizar ? "\nsin actualizar" : ""), `${eur(p.precio)}${p.por !== "ean" && p.por !== "manual" ? " ~" : ""}` + (kc.dto > 0.0005 ? `\n-${pctTexto(kc.dto)}` : "")];
       }),
       k.masBarato,
       k.diferencia == null ? "-" : `${k.diferencia > 0.005 ? "+" : ""}${eur(k.diferencia)}`,
