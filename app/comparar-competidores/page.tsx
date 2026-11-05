@@ -61,7 +61,15 @@ function TablaCompetencia({ filas, estados }: { filas: FilaComp[]; estados: Reco
             return (
               <tr key={i}>
                 <td className="cp-suave">{f.ean ?? ""}</td>
-                <td className="cp-izq"><a href={f.url} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a></td>
+                <td className="cp-izq">
+                  <a href={f.url} target="_blank" rel="noreferrer" className="cp-prod">{f.nombre}</a>
+                  <span className="cp-enlaces">
+                    <a href={f.url} target="_blank" rel="noreferrer" className="cp-enlace-ltc">Ver en La Tienda de Cosméticos ↗</a>
+                    {cols.filter(c => f.precios[c.id]).map(c => (
+                      <a key={c.id} href={f.precios[c.id].url} target="_blank" rel="noreferrer" className="cp-enlace-c24" style={{ color: c.color }}>Ver en {c.corto} ↗</a>
+                    ))}
+                  </span>
+                </td>
                 <td className="cp-azul">{eur(f.pvp)}</td>
                 <td className="cp-fuerte cp-azul">{eur(f.precio)}{f.pvp - f.precio > 0.005 && <small className="cp-dto-celda">−{pct(1 - f.precio / f.pvp)}</small>}</td>
                 {cols.map(c => {
