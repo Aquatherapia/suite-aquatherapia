@@ -258,27 +258,47 @@ async function paginaShopify(c: Competidor, handle: string, page: number, limit 
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return ((await res.json()) as { products?: ProductoShopify[] }).products ?? [];
 }
-async function leerShopify(c: Competidor, enlace: string): Promise<SuProducto[]> {
+// El listado de Shopify no trae el EAN (barcode): se toma de la ficha de cada producto (/products/x.json).
+// `eans` es la caché del comparador de Cosméticos24h (un EAN por variante, en el orden de su web);
+// los que falten se leen aquí, pocos a la vez y parando si su web frena o se acaba el tiempo.
+async function leerShopify(c: Competidor, enlace: string, limite: number, eans: Record<string, (string | null)[]> = {}): Promise<SuProducto[]> {
   const handle = handleShopify(enlace);
   if (!handle) throw new Error("El enlace no es una colección de su web (/collections/…)");
-  const out: SuProducto[] = [];
+  const productos: ProductoShopify[] = [];
   for (let page = 1; page <= 10; page++) {
     const lote = await paginaShopify(c, handle, page);
-    for (const p of lote) {
-      // Solo los formatos que se pueden comprar (con existencias)
-      const variantes = (p.variants ?? []).filter(v => v.available !== false).map(v => {
-        const precio = parseFloat(v.price ?? "0"), tachado = v.compare_at_price ? parseFloat(v.compare_at_price) : 0;
-        return { titulo: !v.title || /^default title$/i.test(v.title) ? "" : v.title, precio, pvp: tachado > precio + 0.005 ? tachado : undefined, ean: eanDeSku(v.barcode) ?? eanDeSku(v.sku) };
-      }).filter(v => v.precio > 0);
-      if (variantes.length) out.push({ titulo: decodificar(p.title), url: `${c.web}/products/${p.handle}`, esPack: esPack(p.title), variantes });
-    }
+    productos.push(...lote);
     if (lote.length < 250) break;
+  }
+  const urlDe = (p: ProductoShopify) => `${c.web}/products/${p.handle}`;
+  const faltan = productos.map(urlDe).filter(u => !(u in eans));
+  let frenado = false;
+  for (let i = 0; i < faltan.length && !frenado && Date.now() < limite - 30_000; i += 4) {
+    await Promise.all(faltan.slice(i, i + 4).map(async url => {
+      try {
+        const res = await pedir(`${url}.json`, { headers: { Accept: "application/json" } }, 10_000);
+        if (res.status === 429) { frenado = true; return; }
+        if (!res.ok) return;
+        const data = await res.json() as { product?: { variants?: { barcode?: string | null }[] } };
+        eans[url] = (data.product?.variants ?? []).map(v => normalizarEan(v.barcode));
+      } catch { /* sin EAN: se empareja por nombre */ }
+    }));
+  }
+  const out: SuProducto[] = [];
+  for (const p of productos) {
+    const url = urlDe(p);
+    // Solo los formatos que se pueden comprar (con existencias)
+    const variantes = (p.variants ?? []).map((v, k) => ({ v, ean: eans[url]?.[k] ?? null })).filter(x => x.v.available !== false).map(({ v, ean }) => {
+      const precio = parseFloat(v.price ?? "0"), tachado = v.compare_at_price ? parseFloat(v.compare_at_price) : 0;
+      return { titulo: !v.title || /^default title$/i.test(v.title) ? "" : v.title, precio, pvp: tachado > precio + 0.005 ? tachado : undefined, ean: ean ?? eanDeSku(v.barcode ?? undefined) ?? eanDeSku(v.sku) };
+    }).filter(v => v.precio > 0);
+    if (variantes.length) out.push({ titulo: decodificar(p.title), url, esPack: esPack(p.title), variantes });
   }
   return out;
 }
 
-export async function leerCompetidor(c: Competidor, enlace: string, limite: number, marca: string): Promise<SuProducto[]> {
-  if (c.tipo === "c24") return leerShopify(c, enlace);
+export async function leerCompetidor(c: Competidor, enlace: string, limite: number, marca: string, eansC24?: Record<string, (string | null)[]>): Promise<SuProducto[]> {
+  if (c.tipo === "c24") return leerShopify(c, enlace, limite, eansC24);
   if (c.tipo === "woo") return leerWoo(c, enlace, limite, marca);
   if (c.tipo === "presta") return leerPresta(enlace);
   if (c.tipo === "rosi") return leerRosi(c, enlace);

@@ -142,6 +142,32 @@ function resumenMotivos(sin: NonNullable<EstadoComp["sinPareja"]>): string {
 }
 
 type MiSin = { clave: string; nombre: string };
+
+const sinAcentos = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+// «Enlazar con…»: nuestros productos sin enlazar, por orden alfabético y con buscador
+function ElegirMio({ mios, onElegir }: { mios: MiSin[]; onElegir: (clave: string) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [busca, setBusca] = useState("");
+  if (!abierto) return <button className="cc-enlazar-btn" onClick={() => { setBusca(""); setAbierto(true); }}>Enlazar con…</button>;
+  const palabras = sinAcentos(busca).split(/\s+/).filter(Boolean);
+  const lista = mios
+    .filter(m => { const n = sinAcentos(m.nombre); return palabras.every(w => n.includes(w)); })
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" }));
+  return (
+    <div className="cc-elegir">
+      <div className="cc-elegir-cab">
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar uno de los nuestros…" autoFocus
+          onKeyDown={e => { if (e.key === "Escape") setAbierto(false); if (e.key === "Enter" && lista.length === 1) { onElegir(lista[0].clave); setAbierto(false); } }} />
+        <button className="cc-cambiar" onClick={() => setAbierto(false)}>cancelar</button>
+      </div>
+      <ul>
+        {lista.map(m => <li key={m.clave}><button onClick={() => { onElegir(m.clave); setAbierto(false); }}>{m.nombre}</button></li>)}
+        {!lista.length && <li className="cp-suave-txt">Ninguno de los nuestros sin enlazar se llama así</li>}
+      </ul>
+    </div>
+  );
+}
 type EnlaceManual = { clave: string; nombre: string; titulo: string; url: string };
 
 function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, manuales, metodos, onGuardar, onEmparejar }: {
@@ -157,7 +183,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, manuales,
   const leido = !estado?.error && estado?.leidos != null && !!enlace;
   const n = enlazados ?? estado?.emparejados ?? 0;
   const pct = nuestros ? Math.round((n / nuestros) * 100) : 0;
-  const cambiar = <button className="cc-cambiar" onClick={() => { setValor(enlace ?? ""); setEditando(true); }}>cambiar</button>;
+  const cambiar = <button className="cc-cambiar" title={`Cambiar el enlace de la marca en la web de ${c.nombre}, o marcar que no la vende`} onClick={() => { setValor(enlace ?? ""); setEditando(true); }}>cambiar</button>;
   const susSin = estado?.sinPareja ?? [];
   const hayPorQue = !editando && !noVende && !estado?.error && estado?.leidos != null && (misSin.length > 0 || susSin.length > 0 || manuales.length > 0);
   return (
@@ -234,10 +260,7 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, manuales,
                 <li key={i}>
                   {x.url ? <a href={x.url} target="_blank" rel="noreferrer">{x.titulo}</a> : x.titulo}{x.precio ? ` · ${x.precio.toFixed(2).replace(".", ",")} €` : ""} — <span className="cc-motivo">{x.motivo}</span>
                   {x.url && misSin.length > 0 && (
-                    <select className="cc-enlazar" value="" onChange={e => e.target.value && onEmparejar("emparejar", x.url!, x.titulo, e.target.value)}>
-                      <option value="">Enlazar con…</option>
-                      {misSin.map(m => <option key={m.clave} value={m.clave}>{m.nombre}</option>)}
-                    </select>
+                    <ElegirMio mios={misSin} onElegir={clave => onEmparejar("emparejar", x.url!, x.titulo, clave)} />
                   )}
                 </li>
               ))}</ul>
@@ -344,7 +367,7 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
           <div className="cc-enlaces">
             <div className="cc-nuestros">Nosotros tenemos <b>{r ? `${r.filas.length} productos` : "—"}</b> de {marca.nombre}{r ? ". Cuántos hemos podido enlazar en cada tienda:" : " (pulsa «Revisar»)."}</div>
             <table className="cc-tabla-tiendas">
-              <thead><tr><th>Tienda</th><th>Sus productos</th><th>Enlazados con los nuestros</th><th>Cómo se enlazan</th><th>Por qué no se enlazan los demás</th><th></th></tr></thead>
+              <thead><tr><th>Tienda</th><th>Sus productos</th><th>Enlazados con los nuestros</th><th>Cómo se enlazan</th><th>Por qué no se enlazan los demás</th><th title="El enlace a la marca en su web: cámbialo si no es el bueno, o déjalo vacío si no la venden">Enlace de la marca</th></tr></thead>
               <tbody>
                 {COMPETIDORES.map(c => (
                   <EnlaceComp key={`${c.id}-${enlaces[c.id] ?? "x"}`} id={c.id} estado={estados[c.id]} enlace={enlaces[c.id]} nuestros={r?.filas.length} enlazados={r?.filas.filter(f => f.precios[c.id]).length} metodos={(r?.filas ?? []).reduce((acc, f) => { const p = f.precios[c.id]; if (p) acc[p.por] = (acc[p.por] ?? 0) + 1; return acc; }, {} as Record<string, number>)} misSin={(r?.filas ?? []).filter(f => !f.precios[c.id]).map(f => ({ clave: claveFila(f), nombre: nombreFila(f) }))}
