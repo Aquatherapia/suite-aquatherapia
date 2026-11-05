@@ -9,7 +9,7 @@ export type Competidor = { id: string; nombre: string; corto: string; web: strin
 export const COMPETIDORES: Competidor[] = [
   { id: "c24", nombre: "Cosméticos24h", corto: "Cosméticos24h", web: "https://cosmeticos24h.com", tipo: "c24", color: "#c2367e", fondo: "#fbe9f3" },
   { id: "anadeana", nombre: "Anadeana", corto: "Anadeana", web: "https://anadeana.es", tipo: "woo", color: "#0f766e", fondo: "#e2f3f1" },
-  { id: "vip24", nombre: "Cosmética VIP24", corto: "VIP24", web: "https://cosmeticavip24.com", tipo: "woo", color: "#c2410c", fondo: "#fdeee6" },
+  { id: "vip24", nombre: "Cosmética VIP24", corto: "VIP24", web: "https://cosmeticavip24.com", tipo: "woo", color: "#f97316", fondo: "#fff1e3" },
   { id: "rosi", nombre: "Estética Rosi", corto: "Estética Rosi", web: "https://www.esteticarosi.com", tipo: "rosi", color: "#7c3aed", fondo: "#f1ebfd" },
   { id: "chancosa", nombre: "Mar Chancosa", corto: "Mar Chancosa", web: "https://marchancosa.com", tipo: "woo", color: "#92400e", fondo: "#f6eee6" },
   { id: "pilar", nombre: "Pilar Delgado", corto: "Pilar Delgado", web: "https://tienda.pilar-delgado.com", tipo: "presta", color: "#475569", fondo: "#eceff3" },
