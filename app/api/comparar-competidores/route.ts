@@ -7,8 +7,6 @@ import { buscarListado, leerCompetidor, leerMisProductos, normalizarEan, type Mi
 
 // Leer varias webs a la vez cabe de sobra, pero alguna puede ir lenta: Vercel Hobby permite hasta 300 s
 export const maxDuration = 300;
-// Las tiendas son españolas y alguna no acepta conexiones desde fuera de Europa: se ejecuta en París
-export const preferredRegion = "cdg1";
 
 const USE_KV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 const KV_KEY = "comparar-competidores-config";
