@@ -12,6 +12,19 @@ export default function Home() {
       </header>
 
       <div className="agentes-grid">
+        <Link href="/revisar-fichas" className="agente-card">
+          <span className="agente-icono">✓</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Revisar fichas de nuestra web</div>
+            <div className="agente-desc">
+              Cada mañana revisa todas las fichas y saca las que tienen algún
+              problema: precio a 0 o por debajo del coste, sin EAN, sin
+              descripción o meta, y desactivadas que siguen en Google.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
+
         <Link href="/ficha-producto" className="agente-card">
           <span className="agente-icono">✦</span>
           <div className="agente-info">
@@ -58,19 +71,6 @@ export default function Home() {
               Nuestros precios frente a Cosméticos24h, Anadeana, Cosmética VIP24,
               Estética Rosi, Mar Chancosa y Pilar Delgado, marca a marca y en
               una sola tabla.
-            </div>
-          </div>
-          <span className="agente-arrow">→</span>
-        </Link>
-
-        <Link href="/revisar-fichas" className="agente-card">
-          <span className="agente-icono">✓</span>
-          <div className="agente-info">
-            <div className="agente-nombre">Revisar fichas de nuestra web</div>
-            <div className="agente-desc">
-              Cada mañana revisa todas las fichas y saca las que tienen algún
-              problema: precio a 0 o por debajo del coste, sin EAN, sin
-              descripción o meta, y desactivadas que siguen en Google.
             </div>
           </div>
           <span className="agente-arrow">→</span>
