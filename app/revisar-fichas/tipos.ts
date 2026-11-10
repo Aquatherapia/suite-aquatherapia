@@ -68,7 +68,7 @@ export const GRUPOS: { nombre: string; tipos: { tipo: Tipo; titulo: string; ayud
   {
     nombre: "Google",
     tipos: [
-      { tipo: "desactivada-en-google", titulo: "Desactivadas que siguen en Google", ayuda: "La ficha dice «Ups, este producto ha sido descatalogado», pero sigue en el sitemap y Google puede enseñarla.", hacer: "Si está descatalogado para siempre: sacarla del sitemap y redirigirla (301) a un producto parecido o a la marca. Si va a volver: dejarla con «noindex». Lo hace quien lleva la web." },
+      { tipo: "desactivada-en-google", titulo: "Desactivadas que siguen en Google", ayuda: "La ficha dice «Ups, este producto ha sido descatalogado», pero sigue en el sitemap: le estamos pidiendo a Google que la enseñe. La ficha se deja publicada (con el aviso y el botón para ver los de la marca), así no se pierden los enlaces que ya tiene.", hacer: "Sacarla del sitemap, siempre. La ficha no se borra ni se redirige. Lo hace quien lleva la web." },
       { tipo: "fuera-sitemap", titulo: "Activas que no están en el sitemap", ayuda: "Se venden, pero no están en el sitemap: a Google le cuesta más encontrarlas.", hacer: "Que el sitemap la incluya (normalmente, regenerar el sitemap)." },
       { tipo: "fuera-feed", titulo: "Activas que no están en el feed", ayuda: "Se ven a la venta en la web, pero no salen en el feed: Google Shopping y Boardfy no las tienen.", hacer: "Ver por qué no sale en el feed (marca excluida, sin stock, mal configurada) y activarla." },
       { tipo: "no-abre", titulo: "No abren o redirigen", ayuda: "Están en el sitemap, pero dan error o llevan a otra dirección.", hacer: "Sacarla del sitemap o arreglar la dirección." },
