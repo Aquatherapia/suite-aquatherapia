@@ -1703,3 +1703,4 @@ button:disabled {
 .rf-lista li > .rf-suave { flex-basis: 100%; }
 .rf-lista a { color: #1270b6; text-decoration: none; }
 .rf-lista a:hover { text-decoration: underline; }
+.rf-hacer { font-size: 13px; margin: 0; padding: 8px 10px; background: #eef5fb; border-radius: 8px; color: var(--ink); }

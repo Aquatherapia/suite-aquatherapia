@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { GRUPOS, TITULO, type Pasada, type ProblemaVista, type Tipo } from "./tipos";
+import { GRUPOS, HACER, TITULO, type Pasada, type ProblemaVista, type Tipo } from "./tipos";
 
 type Vista = {
   problemas: ProblemaVista[];
@@ -163,6 +163,7 @@ export default function RevisarFichasPage() {
                     {abierto && (
                       <div className="rf-tipo-cuerpo">
                         <p className="rf-suave">{t.ayuda}</p>
+                        <p className="rf-hacer"><b>Qué hacer:</b> {t.hacer}</p>
                         {lista.length === 0 && <p className="rf-suave">Ninguna. 👍</p>}
                         <ul className="rf-lista">
                           {visibles.map(x => (
@@ -203,6 +204,7 @@ async function descargarExcel(problemas: ProblemaVista[]) {
     { header: "Marca", key: "marca", width: 22 },
     { header: "Producto", key: "producto", width: 60 },
     { header: "Detalle", key: "detalle", width: 34 },
+    { header: "Qué hacer", key: "hacer", width: 60 },
     { header: "Nuevo", key: "nuevo", width: 8 },
     { header: "Ficha", key: "ficha", width: 60 },
   ];
@@ -210,12 +212,12 @@ async function descargarExcel(problemas: ProblemaVista[]) {
   const orden = new Map(GRUPOS.flatMap(g => g.tipos).map((t, i) => [t.tipo, i]));
   const filas = [...problemas].sort((a, b) => orden.get(a.tipo)! - orden.get(b.tipo)! || (a.marca ?? "").localeCompare(b.marca ?? "") || a.nombre.localeCompare(b.nombre));
   for (const p of filas) {
-    ws.addRow({ grupo: grupoDe.get(p.tipo), problema: TITULO[p.tipo], marca: p.marca ?? "", producto: p.nombre, detalle: p.detalle ?? "", nuevo: p.nuevo ? "Sí" : "", ficha: { text: p.url, hyperlink: p.url } });
+    ws.addRow({ grupo: grupoDe.get(p.tipo), problema: TITULO[p.tipo], marca: p.marca ?? "", producto: p.nombre, detalle: p.detalle ?? "", hacer: HACER[p.tipo], nuevo: p.nuevo ? "Sí" : "", ficha: { text: p.url, hyperlink: p.url } });
   }
   const cab = ws.getRow(1);
   cab.font = { bold: true, color: { argb: "FFFFFFFF" } };
   cab.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1270B6" } };
-  ws.autoFilter = { from: "A1", to: "G1" };
+  ws.autoFilter = { from: "A1", to: "H1" };
   ws.getColumn("ficha").font = { color: { argb: "FF1270B6" }, underline: true };
 
   const buf = await wb.xlsx.writeBuffer();
