@@ -46,7 +46,7 @@ export const GRUPOS: { nombre: string; tipos: { tipo: Tipo; titulo: string; ayud
     tipos: [
       { tipo: "precio-cero", titulo: "Precio a 0 €", ayuda: "Ficha activa que se vende a 0 €.", hacer: "Ponerle precio. Si ya no se vende, desactivar la ficha." },
       { tipo: "oferta-mayor-pvp", titulo: "PVP por debajo del precio", ayuda: "El precio de oferta es más alto que el PVP: la ficha enseña un «descuento» al revés.", hacer: "Corregir en el CMS el PVP o el precio de oferta, el que esté mal." },
-      { tipo: "bajo-coste", titulo: "Se vende por debajo del coste", ayuda: "El precio final es igual o más bajo que el precio de coste del feed.", hacer: "Comprobar primero que el coste está bien cargado. Si lo está, subir el precio o quitar la oferta." },
+      { tipo: "bajo-coste", titulo: "Se vende por debajo del coste", ayuda: "El precio final sin IVA (el precio de la web entre 1,21) es igual o más bajo que el precio de coste del feed, que va sin IVA. Al lado sale cuánto se pierde por unidad.", hacer: "Comprobar primero que el coste está bien cargado. Si lo está, subir el precio o quitar la oferta." },
     ],
   },
   {

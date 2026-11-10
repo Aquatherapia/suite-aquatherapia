@@ -27,6 +27,9 @@ export const PASO_MS = 200_000;
 // Una pasada que no da señales en este tiempo se da por muerta y se puede lanzar otra
 export const PASADA_MUERTA_MS = 8 * 60_000;
 
+// IVA de la cosmética: el precio_coste del feed va sin IVA
+const IVA = 0.21;
+
 const vacio = (): Estado => ({ html: {}, vistos: {} });
 
 export async function leerEstado(): Promise<Estado> {
@@ -127,7 +130,9 @@ export async function leerWeb(): Promise<DatosWeb> {
     if (!precio || precio <= 0) p("precio-cero");
     else {
       if (pvp && oferta && oferta > pvp + 0.005) p("oferta-mayor-pvp", `PVP ${eur(pvp)} · precio ${eur(oferta)}`);
-      if (coste && coste > 0 && precio <= coste + 0.005) p("bajo-coste", `Precio ${eur(precio)} · coste ${eur(coste)}`);
+      // El precio de la web lleva IVA y el coste no: se compara el precio sin IVA (21 %) con el coste
+      const sinIva = precio / (1 + IVA);
+      if (coste && coste > 0 && sinIva <= coste + 0.005) p("bajo-coste", `Precio ${eur(precio)} (${eur(sinIva)} sin IVA) · coste ${eur(coste)} · pierde ${eur(coste - sinIva)}`);
     }
 
     const ean = i.gtin >= 0 ? (c[i.gtin] ?? "").trim() : "";
