@@ -497,7 +497,8 @@ Cada mañana (Vercel Cron, 5:00 UTC, ver `vercel.json`) o con el botón **«Revi
 | Google | Activas en la web que no están en el feed (Google Shopping y Boardfy no las ven) | ficha + feed |
 | Google | Del sitemap que dan error o redirigen | ficha |
 
-- **Feed** (`/es/feed_detalles`): se lee entero en segundos. **Fichas**: se abren todas las del sitemap y las del feed (≈4.700), 3 a la vez con pausas, porque nuestra web responde 429 si se va más deprisa. Tarda unos 25 minutos, en pasos de unos 3-4 minutos encadenados (`/api/cron/revisar-fichas?id=…`), porque cada llamada a Vercel corta a los 300 s.
+- **Feed** (`/es/feed_detalles`): pesa más de 5 MB y tarda casi un minuto: se lee solo en el primer paso, y la lista de fichas (dirección, sitemap, feed, marca, nombre) se guarda comprimida aparte (`revisar-fichas-lista`) para los pasos siguientes. **Fichas**: se abren todas las del sitemap y las del feed (≈4.700), 3 a la vez con pausas, porque nuestra web responde 429 si se va más deprisa. Tarda unos 25 minutos, en pasos de unos 3 minutos encadenados (170 s abriendo fichas y ningún reintento pasados 230 s) (`/api/cron/revisar-fichas?id=…`), porque cada llamada a Vercel corta a los 300 s.
+- **Si Vercel corta un paso** y la cadena se pierde, la pasada no se pierde: a los 5 minutos sin avanzar se da por cortada, y se retoma desde donde iba al abrir la página, al pulsar «Revisar ahora» o con el cron de la mañana (si se cortó hace menos de 6 horas).
 - Si una ficha no responde (429, 5xx o sin respuesta), se deja lo que salió la vez anterior.
 - Desde la segunda revisión completa, lo que aparece por primera vez lleva la etiqueta **Nuevo** y hay un filtro «Solo los nuevos».
 - **Excel**: una hoja con grupo, problema, marca, producto, detalle, si es nuevo y el enlace a la ficha (lo que se ve con el filtro puesto).

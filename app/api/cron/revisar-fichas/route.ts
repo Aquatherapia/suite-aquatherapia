@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
-import { autorizado, cabeceraClave } from "../../revisar-fichas/autorizar";
-import { guardarEstado, leerEstado, nuevaPasada, pasadaEnCurso, paso } from "../../revisar-fichas/revision";
+import { autorizado, lanzarPaso } from "../../revisar-fichas/autorizar";
+import { guardarEstado, leerEstado, nuevaPasada, pasadaCortada, pasadaEnCurso, paso } from "../../revisar-fichas/revision";
 
 // Revisión de las fichas de nuestra web. La lanza Vercel Cron cada mañana (vercel.json) o el botón «Revisar ahora».
 // Cada llamada hace un paso de unos 4 minutos y, si quedan fichas, llama a la siguiente con ?id=<pasada>.
@@ -15,19 +15,19 @@ export async function GET(req: NextRequest) {
     // Llamada de Vercel Cron: pasada nueva, salvo que ya haya una en marcha
     const e = await leerEstado();
     if (pasadaEnCurso(e)) return NextResponse.json({ ok: true, enCurso: e.pasada!.id });
-    e.pasada = nuevaPasada("cron");
+    // Si la anterior se quedó a medias hace poco, se sigue por donde iba; si no, pasada nueva
+    if (pasadaCortada(e)) e.pasada!.actualizado = new Date().toISOString();
+    else e.pasada = nuevaPasada("cron");
     await guardarEstado(e);
-    id = e.pasada.id;
+    id = e.pasada!.id;
   }
 
   const base = req.nextUrl.origin;
   const pasada = id;
   after(async () => {
     let quedan = false;
-    try { quedan = await paso(pasada); } catch { /* el siguiente «Revisar ahora» la retoma */ }
-    if (quedan) {
-      await fetch(`${base}/api/cron/revisar-fichas?id=${encodeURIComponent(pasada)}`, { headers: cabeceraClave(), cache: "no-store" }).catch(() => {});
-    }
+    try { quedan = await paso(pasada); } catch { /* se retoma sola al abrir la página */ }
+    if (quedan) await lanzarPaso(base, pasada);
   });
   return NextResponse.json({ ok: true, id });
 }

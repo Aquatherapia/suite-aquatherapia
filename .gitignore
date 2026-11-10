@@ -8,3 +8,4 @@ tsconfig.tsbuildinfo
 .vercel
 .env*
 data/revisar-fichas.json
+data/revisar-fichas-lista.json
