@@ -14,3 +14,9 @@ export function autorizado(req: NextRequest): boolean {
 
 export const cabeceraClave = (): Record<string, string> =>
   process.env.SITE_PASSWORD ? { "x-clave": process.env.SITE_PASSWORD } : {};
+
+// Lanza (sin esperar) el siguiente paso de la pasada «id» en otra llamada a la ruta del cron
+export function lanzarPaso(origen: string, id: string): Promise<void> {
+  return fetch(`${origen}/api/cron/revisar-fichas?id=${encodeURIComponent(id)}`, { headers: cabeceraClave(), cache: "no-store" })
+    .then(() => {}).catch(() => {});
+}

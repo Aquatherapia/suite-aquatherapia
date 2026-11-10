@@ -3,9 +3,11 @@
 //   EAN, descripción e imagen, y las fichas activas que no están en el sitemap.
 // - Abriendo cada ficha del sitemap salen la meta description, el title, las desactivadas que siguen en Google
 //   y las que no abren. Son unas 4.500 fichas: se abren despacio (pocas a la vez) en varios pasos seguidos de
-//   unos 4 minutos, porque cada llamada a Vercel corta a los 300 s.
+//   unos 3 minutos, porque cada llamada a Vercel corta a los 300 s. El feed (más de 5 MB, tarda casi un minuto)
+//   se lee solo en el primer paso; la lista de fichas se guarda aparte y los pasos siguientes la reutilizan.
 import fs from "fs/promises";
 import path from "path";
+import { gunzipSync, gzipSync } from "zlib";
 import { esPack } from "../comparar-competidores/leer";
 import { claveProblema, type Estado, type Pasada, type Problema } from "../../revisar-fichas/tipos";
 
@@ -17,15 +19,47 @@ const UA = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Appl
 const USE_KV = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 const KV_KEY = "revisar-fichas";
 const RUTA = path.join(process.cwd(), "data", "revisar-fichas.json");
+const KV_LISTA = "revisar-fichas-lista";
+const RUTA_LISTA = path.join(process.cwd(), "data", "revisar-fichas-lista.json");
+
+// Fichas que abre una pasada: [dirección, en el sitemap, en el feed, marca, nombre en el feed].
+// Se guarda comprimida (unos 800 KB en JSON, 270 KB así).
+type Lista = { id: string; fichas: [string, 0 | 1, 0 | 1, (string | null)?, (string | null)?][] };
+
+async function leerLista(): Promise<Lista | null> {
+  let z: string | null = null;
+  if (USE_KV) {
+    const { kv } = await import("@vercel/kv");
+    z = await kv.get<string>(KV_LISTA);
+  } else {
+    try { z = await fs.readFile(RUTA_LISTA, "utf-8"); } catch { z = null; }
+  }
+  return z ? JSON.parse(gunzipSync(Buffer.from(z, "base64")).toString("utf-8")) : null;
+}
+
+async function guardarLista(l: Lista) {
+  const z = gzipSync(JSON.stringify(l)).toString("base64");
+  if (USE_KV) {
+    const { kv } = await import("@vercel/kv");
+    await kv.set(KV_LISTA, z);
+    return;
+  }
+  await fs.mkdir(path.dirname(RUTA_LISTA), { recursive: true });
+  await fs.writeFile(RUTA_LISTA, z);
+}
 
 // Fichas abiertas a la vez y pausa entre tandas: con 10 a la vez nuestra web cortaba (comparador, 29/10)
 // y, más deprisa de 4-5 por segundo, responde 429 (demasiadas peticiones)
 const A_LA_VEZ = 3;
 const PAUSA_MS = 400;
-// Tiempo de cada paso antes de pasar al siguiente (Vercel corta a los 300 s)
-export const PASO_MS = 200_000;
+// Tiempo de cada paso, contado desde que empieza (con la lectura del feed dentro). Vercel corta a los 300 s:
+// pasado PASO_MS no se abren más fichas, y ningún reintento empieza después de TOPE_MS.
+export const PASO_MS = 170_000;
+const TOPE_MS = 230_000;
+// Una pasada cortada se retoma sola (al abrir la página) si se cortó hace menos de esto
+export const RETOMAR_MS = 6 * 60 * 60_000;
 // Una pasada que no da señales en este tiempo se da por muerta y se puede lanzar otra
-export const PASADA_MUERTA_MS = 8 * 60_000;
+export const PASADA_MUERTA_MS = 5 * 60_000;
 
 // IVA de la cosmética: el precio_coste del feed va sin IVA
 const IVA = 0.21;
@@ -63,7 +97,12 @@ async function pedir(url: string, ms: number): Promise<Response> {
 }
 
 async function texto(url: string, ms: number): Promise<string> {
-  const r = await fetch(url, { headers: UA, cache: "no-store", signal: AbortSignal.timeout(ms) });
+  let r = await fetch(url, { headers: UA, cache: "no-store", signal: AbortSignal.timeout(ms) });
+  // Nuestra web da a veces un 500 suelto: un reintento a los 5 s
+  if (r.status >= 500) {
+    await new Promise(res => setTimeout(res, 5_000));
+    r = await fetch(url, { headers: UA, cache: "no-store", signal: AbortSignal.timeout(ms) });
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status} al leer ${url}`);
   return r.text();
 }
@@ -90,7 +129,7 @@ export type DatosWeb = { problemas: Problema[]; fichas: number; filas: number; u
 // Lee el feed y el sitemap. Devuelve los problemas del feed y la lista de fichas que hay que abrir
 // (las del sitemap y las activas que faltan en él), siempre en el mismo orden.
 export async function leerWeb(): Promise<DatosWeb> {
-  const [feedTxt, sitemap] = await Promise.all([texto(FEED, 90_000), texto(SITEMAP, 60_000)]);
+  const [feedTxt, sitemap] = await Promise.all([texto(FEED, 100_000), texto(SITEMAP, 45_000)]);
   const lineas = feedTxt.split(/\r?\n/);
   const cab = lineas[0].split("\t").map(c => c.trim().toLowerCase());
   const col = (k: string) => cab.indexOf(k);
@@ -174,14 +213,16 @@ function unicos(ps: Problema[]): Problema[] {
 
 // Abre una ficha y devuelve sus problemas, o null si no se ha podido comprobar
 // (la web no responde, va saturada o pide que se vaya más despacio): entonces se deja lo de la vez anterior.
-async function revisarFicha(url: string, enSitemap: boolean, enFeed: boolean, marca?: string, nombreFeed?: string): Promise<Problema[] | null> {
+async function revisarFicha(url: string, enSitemap: boolean, enFeed: boolean, tope: number, marca?: string, nombreFeed?: string): Promise<Problema[] | null> {
   let r: Response | null = null;
   for (let n = 0; n < 4; n++) {
     if (n > 0) {
       const pide = Number(r?.headers.get("retry-after"));
-      await new Promise(res => setTimeout(res, Number.isFinite(pide) && pide > 0 ? Math.min(pide, 20) * 1000 : 3_000 * n));
+      const espera = Number.isFinite(pide) && pide > 0 ? Math.min(pide, 20) * 1000 : 3_000 * n;
+      if (Date.now() + espera > tope) break; // sin tiempo para reintentar: se queda sin comprobar
+      await new Promise(res => setTimeout(res, espera));
     }
-    try { r = await pedir(url, 15_000); } catch { r = null; }
+    try { r = await pedir(url, Math.max(1_000, Math.min(15_000, tope - Date.now()))); } catch { r = null; }
     if (r && r.status !== 429 && r.status < 500) break;
   }
   if (!r || r.status === 429 || r.status >= 500) return null;
@@ -226,34 +267,43 @@ const nombreDesdeUrl = (url: string) => {
 // Un paso de la pasada: lee feed y sitemap y abre fichas desde donde se quedó hasta agotar el tiempo.
 // Devuelve true si quedan fichas por abrir.
 export async function paso(id: string): Promise<boolean> {
-  const limite = Date.now() + PASO_MS;
+  const empieza = Date.now();
+  const limite = empieza + PASO_MS;
+  const tope = empieza + TOPE_MS;
   const e = await leerEstado();
   if (!e.pasada || e.pasada.id !== id || e.pasada.fin) return false; // otra pasada la ha sustituido
 
-  let web: DatosWeb;
-  try { web = await leerWeb(); }
-  catch (err) {
-    e.pasada = { ...e.pasada, actualizado: new Date().toISOString(), fin: new Date().toISOString(), error: `No se pudo leer nuestra web: ${motivo(err)}` };
-    await guardarEstado(e);
-    return false;
+  // Primer paso (o lista perdida): se lee el feed y el sitemap. Los siguientes reutilizan la lista guardada.
+  let lista = e.pasada.hechas > 0 ? await leerLista().catch(() => null) : null;
+  if (!lista || lista.id !== id) {
+    let web: DatosWeb;
+    try { web = await leerWeb(); }
+    catch (err) {
+      e.pasada = { ...e.pasada, actualizado: new Date().toISOString(), fin: new Date().toISOString(), error: `No se pudo leer nuestra web: ${motivo(err)}` };
+      await guardarEstado(e);
+      return false;
+    }
+    const ahora = new Date().toISOString();
+    // El feed se apunta en el primer paso de cada pasada
+    if (e.pasada.hechas === 0) {
+      e.feed = { fecha: ahora, fichas: web.fichas, filas: web.filas, problemas: web.problemas };
+      for (const p of web.problemas) e.vistos[claveProblema(p)] ??= ahora;
+    }
+    lista = { id, fichas: web.urls.map(u => [u, web.enSitemap.has(u) ? 1 : 0, web.nombreDe.has(u) ? 1 : 0, web.marcaDe.get(u), web.nombreDe.get(u)]) };
+    await guardarLista(lista);
   }
-  const ahora = new Date().toISOString();
-  // El feed se apunta en el primer paso de cada pasada
-  if (e.pasada.hechas === 0) {
-    e.feed = { fecha: ahora, fichas: web.fichas, filas: web.filas, problemas: web.problemas };
-    for (const p of web.problemas) e.vistos[claveProblema(p)] ??= ahora;
-  }
-  e.pasada.total = web.urls.length;
+  const fichas = lista.fichas;
+  e.pasada.total = fichas.length;
   // Se guarda ya: los problemas del feed salen en la página sin esperar a abrir las fichas
-  e.pasada.actualizado = ahora;
+  e.pasada.actualizado = new Date().toISOString();
   await guardarEstado(e);
 
   let k = e.pasada.hechas;
   let ultimoGuardado = Date.now();
-  while (k < web.urls.length && Date.now() < limite) {
-    const tanda = web.urls.slice(k, k + A_LA_VEZ);
-    const res = await Promise.all(tanda.map(u => revisarFicha(u, web.enSitemap.has(u), web.nombreDe.has(u), web.marcaDe.get(u), web.nombreDe.get(u)).catch(() => null)));
-    tanda.forEach((u, j) => {
+  while (k < fichas.length && Date.now() < limite) {
+    const tanda = fichas.slice(k, k + A_LA_VEZ);
+    const res = await Promise.all(tanda.map(([u, sm, fd, marca, nombre]) => revisarFicha(u, !!sm, !!fd, tope, marca ?? undefined, nombre ?? undefined).catch(() => null)));
+    tanda.forEach(([u], j) => {
       const ps = res[j];
       if (ps === null) { e.pasada!.sinComprobar = (e.pasada!.sinComprobar ?? 0) + 1; return; }
       if (ps.length) {
@@ -273,10 +323,10 @@ export async function paso(id: string): Promise<boolean> {
   }
 
   e.pasada.actualizado = new Date().toISOString();
-  const quedan = k < web.urls.length;
+  const quedan = k < fichas.length;
   if (!quedan) {
     // Fin de la pasada: fuera las fichas que ya no existen y los problemas que ya no están
-    const todas = new Set(web.urls);
+    const todas = new Set(fichas.map(f => f[0]));
     for (const u of Object.keys(e.html)) if (!todas.has(u)) delete e.html[u];
     const actuales = new Set([...(e.feed?.problemas ?? []), ...Object.values(e.html).flat()].map(claveProblema));
     for (const key of Object.keys(e.vistos)) if (!actuales.has(key)) delete e.vistos[key];
@@ -287,6 +337,13 @@ export async function paso(id: string): Promise<boolean> {
   }
   await guardarEstado(e);
   return quedan;
+}
+
+// Pasada que se quedó a medias (Vercel cortó un paso y la cadena se perdió) y aún se puede retomar
+export function pasadaCortada(e: Estado): boolean {
+  const p = e.pasada;
+  if (!p || p.fin || pasadaEnCurso(e)) return false;
+  return Date.now() - new Date(p.actualizado).getTime() < RETOMAR_MS;
 }
 
 export function nuevaPasada(origen: Pasada["origen"]): Pasada {

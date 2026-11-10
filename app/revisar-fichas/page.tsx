@@ -104,7 +104,7 @@ export default function RevisarFichasPage() {
             <span className="rf-suave">{miles(p.sinComprobar!)} fichas no respondieron a tiempo: de esas se muestra lo de la revisión anterior.</span>
           )}
           {vista && p && !vista.enCurso && !p.fin && (
-            <span>La última revisión se cortó en {miles(p.hechas)} de {miles(p.total)} fichas. Pulsa «Revisar ahora» para hacer una completa.</span>
+            <span>La última revisión se cortó en {miles(p.hechas)} de {miles(p.total)} fichas. Pulsa «Revisar ahora» para hacer una nueva.</span>
           )}
           {p?.error && <span className="error" style={{ margin: 0 }}>{p.error}</span>}
         </div>
