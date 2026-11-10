@@ -130,7 +130,9 @@ export async function leerWeb(): Promise<DatosWeb> {
     if (!precio || precio <= 0) p("precio-cero");
     else {
       if (pvp && oferta && oferta > pvp + 0.005) p("oferta-mayor-pvp", `PVP ${eur(pvp)} · precio ${eur(oferta)}`);
-      // El precio de la web lleva IVA y el coste no: se compara el precio sin IVA (21 %) con el coste
+      // El precio de la web lleva IVA y el coste no: se compara el precio sin IVA (21 %) con el coste.
+      // precio_coste ya lleva restado el descuento de la marca («Descuento sobre el precio de coste» del programa):
+      // p. ej. 43,00 € con un 8,44 % → 39,37 €.
       const sinIva = precio / (1 + IVA);
       if (coste && coste > 0 && sinIva <= coste + 0.005) p("bajo-coste", `Precio ${eur(precio)} (${eur(sinIva)} sin IVA) · coste ${eur(coste)} · pierde ${eur(coste - sinIva)}`);
     }
