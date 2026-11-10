@@ -487,7 +487,7 @@ Cada mañana (Vercel Cron, 5:00 UTC, ver `vercel.json`) o con el botón **«Revi
 |---|---|---|
 | Precio | Precio a 0 € | feed y ficha |
 | Precio | PVP por debajo del precio (oferta > PVP) | feed |
-| Precio | Se vende por debajo del coste: precio final sin IVA (÷ 1,21) ≤ `precio_coste` del feed, que va sin IVA | feed |
+| Precio | Se vende por debajo del coste: precio final sin IVA (÷ 1,21) ≤ `precio_coste` del feed, que va sin IVA y ya lleva restado el descuento de la marca («Descuento sobre el precio de coste» del programa) | feed |
 | EAN | Sin EAN o EAN no válido (dígito de control); los packs no cuentan | feed |
 | EAN | EAN repetido en fichas distintas | feed |
 | Contenido | Sin descripción (< 80 letras) · sin imagen | feed |
