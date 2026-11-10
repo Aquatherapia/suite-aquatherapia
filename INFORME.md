@@ -14,6 +14,7 @@ Una suite de herramientas con IA para latiendadecosmeticos.com, construida con N
 7. **Responder reseñas de Google** — Pegas la reseña de un cliente y la IA redacta una respuesta profesional lista para publicar (2 negocios)
 8. **Comparar mis precios con Cosméticos24h** — Cruza TUS precios (latiendadecosmeticos.com) con los de Cosméticos24h por marca: marca dónde vas más caro y qué productos tienen ellos que tú no
 9. **Control de márgenes** — Subes el CSV de control de stocks y detecta los productos con menos del 30% de margen; diagnostica si es por descuento o por precio/coste, y exporta a Excel (con EAN) para el encargado de precios
+10. **Revisar fichas de nuestra web** — Cada mañana revisa todas las fichas de latiendadecosmeticos.com y saca las que tienen algún problema (precio, EAN, descripción, meta, desactivadas que siguen en Google), con Excel
 
 **En producción:** https://suite-aquatherapia.vercel.app/
 **Repositorio:** GitHub `Aquatherapia/suite-aquatherapia` conectado a Vercel (push a `main` = deploy automático).
@@ -473,6 +474,36 @@ Separador `;`. Columnas por índice (0-based): 0=ID, 4=MARCA, 5=PRODUCTO, 6=PROP
 
 ### Límites (gratis)
 **No usa Gemini, ni Upstash, ni ninguna API**: todo el cálculo se hace **en el navegador** al subir el CSV. No hay persistencia (cada CSV se procesa en el momento). Sin coste de servidor ni límites de uso. También existe una skill equivalente de Claude Code (`/margen-precios`, `analizar_margen.py`) por si se quiere usar desde el chat en vez de la web.
+
+---
+
+## Agente 10 — Revisar fichas de nuestra web
+
+### URL: `/revisar-fichas`
+
+Cada mañana (Vercel Cron, 5:00 UTC, ver `vercel.json`) o con el botón **«Revisar ahora»**, revisa todas las fichas de la web y lista las que tienen algún problema, agrupadas:
+
+| Grupo | Problema | De dónde sale |
+|---|---|---|
+| Precio | Precio a 0 € | feed y ficha |
+| Precio | PVP por debajo del precio (oferta > PVP) | feed |
+| Precio | Se vende por debajo del coste (`precio_coste` del feed) | feed |
+| EAN | Sin EAN o EAN no válido (dígito de control); los packs no cuentan | feed |
+| EAN | EAN repetido en fichas distintas | feed |
+| Contenido | Sin descripción (< 80 letras) · sin imagen | feed |
+| Contenido | Sin meta description · sin title | ficha |
+| Google | Desactivadas («ha sido descatalogado») que siguen en el sitemap | ficha |
+| Google | Activas que no están en el sitemap | feed + sitemap |
+| Google | Activas en la web que no están en el feed (Google Shopping y Boardfy no las ven) | ficha + feed |
+| Google | Del sitemap que dan error o redirigen | ficha |
+
+- **Feed** (`/es/feed_detalles`): se lee entero en segundos. **Fichas**: se abren todas las del sitemap y las del feed (≈4.700), 3 a la vez con pausas, porque nuestra web responde 429 si se va más deprisa. Tarda unos 25 minutos, en pasos de unos 3-4 minutos encadenados (`/api/cron/revisar-fichas?id=…`), porque cada llamada a Vercel corta a los 300 s.
+- Si una ficha no responde (429, 5xx o sin respuesta), se deja lo que salió la vez anterior.
+- Desde la segunda revisión completa, lo que aparece por primera vez lleva la etiqueta **Nuevo** y hay un filtro «Solo los nuevos».
+- **Excel**: una hoja con grupo, problema, marca, producto, detalle, si es nuevo y el enlace a la ficha (lo que se ve con el filtro puesto).
+- Se guarda en KV con la clave `revisar-fichas` (en local, `data/revisar-fichas.json`).
+- **Seguridad**: `/api/cron/revisar-fichas` solo acepta a Vercel Cron con `CRON_SECRET` o a la propia app con la clave de la web. **Sin `CRON_SECRET` en Vercel, la revisión de la mañana no arranca** (el botón sí funciona).
+- En local, para que el servidor salga a internet a través de un proxy: `NODE_USE_ENV_PROXY=1 npm run dev`.
 
 ---
 

@@ -63,6 +63,19 @@ export default function Home() {
           <span className="agente-arrow">→</span>
         </Link>
 
+        <Link href="/revisar-fichas" className="agente-card">
+          <span className="agente-icono">✓</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Revisar fichas de nuestra web</div>
+            <div className="agente-desc">
+              Cada mañana revisa todas las fichas y saca las que tienen algún
+              problema: precio a 0 o por debajo del coste, sin EAN, sin
+              descripción o meta, y desactivadas que siguen en Google.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
+
         <Link href="/google-business" className="agente-card">
           <span className="agente-icono">◈</span>
           <div className="agente-info">
