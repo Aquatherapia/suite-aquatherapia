@@ -2,11 +2,42 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import ResenasFicha from "./ResenasFicha";
+import { Negocio, Segmentos } from "../_google/ui";
 
-type Negocio = "tienda" | "aquatherapia";
+type Modo = "ficha" | "pegar";
 
 export default function ResponderResenasPage() {
+  const [modo, setModo] = useState<Modo>("ficha");
   const [negocio, setNegocio] = useState<Negocio>("tienda");
+
+  return (
+    <div className="wrap">
+      <Link href="/" className="volver-link">
+        ← Volver
+      </Link>
+      <header>
+        <h1>Responder reseñas de Google</h1>
+        <p className="subtitle">
+          Las reseñas de vuestras fichas: la IA redacta la respuesta, la revisas y la publicas en Google desde aquí.
+        </p>
+      </header>
+      <div style={{ marginBottom: 18 }}>
+        <Segmentos<Modo>
+          opciones={[
+            { valor: "ficha", nombre: "Reseñas de la ficha" },
+            { valor: "pegar", nombre: "Pegar una reseña" },
+          ]}
+          valor={modo}
+          onChange={setModo}
+        />
+      </div>
+      {modo === "ficha" ? <ResenasFicha negocio={negocio} setNegocio={setNegocio} /> : <PegarResena negocio={negocio} setNegocio={setNegocio} />}
+    </div>
+  );
+}
+
+function PegarResena({ negocio, setNegocio }: { negocio: Negocio; setNegocio: (n: Negocio) => void }) {
   const [autor, setAutor] = useState("");
   const [estrellas, setEstrellas] = useState<number>(5);
   const [resena, setResena] = useState("");
@@ -48,18 +79,6 @@ export default function ResponderResenasPage() {
   }
 
   return (
-    <div className="wrap">
-      <Link href="/" className="volver-link">
-        ← Volver
-      </Link>
-      <header>
-        <h1>Responder reseñas de Google</h1>
-        <p className="subtitle">
-          Pega la reseña de un cliente y la IA redacta una respuesta profesional
-          lista para publicar.
-        </p>
-      </header>
-
       <div className="two-col">
         {/* ── Columna izquierda: formulario ── */}
         <div className="left-col">
@@ -248,6 +267,5 @@ export default function ResponderResenasPage() {
           )}
         </div>
       </div>
-    </div>
   );
 }

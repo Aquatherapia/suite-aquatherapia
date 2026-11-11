@@ -20,6 +20,8 @@ export const ICONOS = {
   resenas: ic(<><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z" /></>),
   novedades: ic(<><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" /></>),
   reclamaciones: ic(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></>),
+  datos: ic(<><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>),
+  enlace: ic(<><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></>),
   menu: ic(<><path d="M4 7h16M4 12h16M4 17h16" /></>),
   cerrar: ic(<><path d="M6 6l12 12M18 6L6 18" /></>),
 };
@@ -51,11 +53,18 @@ export const GRUPOS: { titulo: string; herramientas: Herramienta[] }[] = [
     ],
   },
   {
+    titulo: "Google",
+    herramientas: [
+      { href: "/datos-google", icono: "datos", corto: "Datos de Google", nombre: "Datos de Google", desc: "La ficha, Search Console y Analytics de cada negocio: cifras de 28 días comparadas con el periodo anterior." },
+      { href: "/responder-resenas", icono: "resenas", corto: "Reseñas de Google", nombre: "Responder reseñas de Google", desc: "Las reseñas de las fichas, con respuesta de la IA que se edita y se publica desde aquí." },
+      { href: "/google-business", icono: "google", corto: "Posts de Google", nombre: "Post para Google Business", desc: "Texto para una novedad del Perfil de Empresa, que se puede publicar directamente en la ficha." },
+      { href: "/conexion-google", icono: "enlace", corto: "Conexión con Google", nombre: "Conexión con Google", desc: "Conecta la cuenta de Google y elige la ficha, Search Console y Analytics de cada negocio." },
+    ],
+  },
+  {
     titulo: "Clientes y marketing",
     herramientas: [
       { href: "/reclamaciones", icono: "reclamaciones", corto: "Reclamaciones", nombre: "Reclamaciones de clientes", desc: "Respuesta lista para WhatsApp o email a envíos extraviados, roturas o productos dañados." },
-      { href: "/responder-resenas", icono: "resenas", corto: "Reseñas de Google", nombre: "Responder reseñas de Google", desc: "Respuesta profesional a cada reseña, para La Tienda o Aquatherapia." },
-      { href: "/google-business", icono: "google", corto: "Posts de Google", nombre: "Post para Google Business", desc: "Texto listo para publicar como novedad en el Perfil de Empresa." },
       { href: "/informes", icono: "informe", corto: "Informe mensual", nombre: "Informe de marketing mensual", desc: "El informe del mes con canales, ventas, ROAS, embudo y comparativa interanual." },
     ],
   },

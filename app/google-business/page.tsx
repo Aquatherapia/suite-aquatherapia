@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import PublicarEnFicha from "./PublicarEnFicha";
 
 type Negocio = "tienda" | "aquatherapia";
 
@@ -74,7 +75,7 @@ export default function GoogleBusinessPage() {
       <header>
         <h1>Post para Google Business</h1>
         <p className="subtitle">
-          Genera el texto para mantener tu ficha de Google actualizada.
+          Genera el texto para mantener tu ficha de Google actualizada, retócalo y publícalo en la ficha desde aquí.
         </p>
       </header>
 
@@ -243,16 +244,12 @@ export default function GoogleBusinessPage() {
                     </button>
                   </div>
                 </div>
-                <div
-                  style={{
-                    padding: "16px 14px",
-                    fontSize: 14,
-                    lineHeight: 1.7,
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {texto}
-                </div>
+                <textarea
+                  value={texto}
+                  onChange={(e) => setTexto(e.target.value)}
+                  rows={Math.min(18, Math.max(8, texto.split("\n").length + 2))}
+                  style={{ border: 0, borderRadius: 0, fontSize: 14, lineHeight: 1.7, padding: "16px 14px", resize: "vertical" }}
+                />
               </div>
 
               <button
@@ -273,6 +270,8 @@ export default function GoogleBusinessPage() {
                   "Regenerar versión diferente"
                 )}
               </button>
+
+              <PublicarEnFicha negocio={negocio} texto={texto} />
             </>
           )}
         </div>
