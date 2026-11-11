@@ -25,19 +25,6 @@ export default function Home() {
           <span className="agente-arrow">→</span>
         </Link>
 
-        <Link href="/margen-productos" className="agente-card">
-          <span className="agente-icono">€</span>
-          <div className="agente-info">
-            <div className="agente-nombre">Margen de cada producto</div>
-            <div className="agente-desc">
-              El margen de todos los productos de la web, sacado del feed: por
-              marca y por producto, con los que pierden dinero, los de margen
-              bajo y los que no tienen coste. Con filtros y Excel.
-            </div>
-          </div>
-          <span className="agente-arrow">→</span>
-        </Link>
-
         <Link href="/ficha-producto" className="agente-card">
           <span className="agente-icono">✦</span>
           <div className="agente-info">
@@ -167,14 +154,14 @@ export default function Home() {
           <span className="agente-arrow">→</span>
         </Link>
 
-        <Link href="/margenes" className="agente-card">
-          <span className="agente-icono">％</span>
+        <Link href="/margen-productos" className="agente-card">
+          <span className="agente-icono">€</span>
           <div className="agente-info">
-            <div className="agente-nombre">Control de márgenes</div>
+            <div className="agente-nombre">Margen de cada producto</div>
             <div className="agente-desc">
-              Sube el CSV de control de stocks y detecta los productos con menos
-              del 30% de margen. Te dice si el problema es un descuento excesivo
-              o un precio/coste mal puesto.
+              El margen de todos los productos de la web, sacado del feed: por
+              marca y por producto, con los que pierden dinero, los de margen
+              bajo y los que no tienen coste. Con filtros y Excel.
             </div>
           </div>
           <span className="agente-arrow">→</span>
