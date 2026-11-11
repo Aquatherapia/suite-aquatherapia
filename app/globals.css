@@ -1704,3 +1704,36 @@ button:disabled {
 .rf-lista a { color: #1270b6; text-decoration: none; }
 .rf-lista a:hover { text-decoration: underline; }
 .rf-hacer { font-size: 13px; margin: 0; padding: 8px 10px; background: #eef5fb; border-radius: 8px; color: var(--ink); }
+
+/* Margen de cada producto */
+.mp-cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin: 14px 0 0; }
+.mp-cifras > div { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.mp-cifras b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.mp-cifras span { font-size: 12.5px; color: var(--muted); }
+.mp .rf-filtros select { flex: 0 1 220px; width: auto; margin: 0; }
+.mp-chip { cursor: pointer; font-family: inherit; margin: 0; width: auto; padding: 5px 10px; font-weight: 400; border: 1px solid var(--border); }
+.mp-chip-on { border-color: #1270b6; background: #e8f1f9; }
+.mp-pestanas { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0 8px; }
+.mp-pestanas button { margin: 0; width: auto; padding: 7px 12px; font-size: 13px; background: var(--card); color: var(--ink); border: 1px solid var(--border); border-radius: 8px; }
+.mp-pestanas button.on { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.mp-pestanas select { margin: 0 0 0 auto; width: auto; font-size: 13px; padding-top: 7px; padding-bottom: 7px; }
+.mp-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.mp-lista li { padding: 10px 2px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mp-marca { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; width: 100%; margin: 0; padding: 0; background: transparent; color: var(--ink); text-align: left; font-size: 15px; border: 0; }
+button.mp-marca { cursor: pointer; }
+.mp-nombre { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+button.mp-marca .mp-nombre { font-weight: 600; }
+a.mp-nombre { color: #1270b6; text-decoration: none; }
+.mp-pct { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mp-numeros { font-size: 13px; color: var(--ink); }
+.mp-rojo { color: #b91c1c; }
+.mp-ambar { color: #b45309; }
+.mp-verde { color: #15803d; }
+.mp-azul { color: #1d4ed8; }
+.mp-gris { color: var(--muted); }
+.mp-mas { margin-top: 12px; }
+.mp-nota { margin-top: 18px; }
+@media (max-width: 600px) {
+  .mp .rf-filtros select { flex: 1 1 100%; }
+  .mp-pestanas select { margin-left: 0; flex: 1 1 100%; }
+}

@@ -25,6 +25,19 @@ export default function Home() {
           <span className="agente-arrow">→</span>
         </Link>
 
+        <Link href="/margen-productos" className="agente-card">
+          <span className="agente-icono">€</span>
+          <div className="agente-info">
+            <div className="agente-nombre">Margen de cada producto</div>
+            <div className="agente-desc">
+              El margen de todos los productos de la web, sacado del feed: por
+              marca y por producto, con los que pierden dinero, los de margen
+              bajo y los que no tienen coste. Con filtros y Excel.
+            </div>
+          </div>
+          <span className="agente-arrow">→</span>
+        </Link>
+
         <Link href="/ficha-producto" className="agente-card">
           <span className="agente-icono">✦</span>
           <div className="agente-info">
