@@ -13,7 +13,7 @@ Una suite de herramientas con IA para latiendadecosmeticos.com, construida con N
 6. **Vigilar novedades de marcas** — Detecta cuándo una marca sube productos nuevos a su web, para ser de los primeros en venderlos
 7. **Responder reseñas de Google** — Pegas la reseña de un cliente y la IA redacta una respuesta profesional lista para publicar (2 negocios)
 8. **Comparar mis precios con Cosméticos24h** — Cruza TUS precios (latiendadecosmeticos.com) con los de Cosméticos24h por marca: marca dónde vas más caro y qué productos tienen ellos que tú no
-9. **Control de márgenes** — Subes el CSV de control de stocks y detecta los productos con menos del 30% de margen; diagnostica si es por descuento o por precio/coste, y exporta a Excel (con EAN) para el encargado de precios
+9. **Control de márgenes** (fuera de la home desde el 11/11/2026; sigue en `/margenes`) — Subes el CSV de control de stocks y detecta los productos con menos del 30% de margen; diagnostica si es por descuento o por precio/coste, y exporta a Excel (con EAN) para el encargado de precios
 10. **Revisar fichas de nuestra web** — Cada mañana revisa todas las fichas de latiendadecosmeticos.com y saca las que tienen algún problema (precio, EAN, descripción, meta, desactivadas que siguen en Google), con Excel
 11. **Margen de cada producto** — El margen de todos los productos de la web sacado del feed (sin subir nada): por marca y por producto, con filtros (marca, pierden dinero, margen bajo, sin coste, muy alto), orden y Excel
 
