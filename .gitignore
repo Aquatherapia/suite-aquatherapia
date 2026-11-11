@@ -9,3 +9,4 @@ tsconfig.tsbuildinfo
 .env*
 data/revisar-fichas.json
 data/revisar-fichas-lista.json
+data/margen-productos.json

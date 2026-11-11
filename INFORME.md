@@ -15,6 +15,7 @@ Una suite de herramientas con IA para latiendadecosmeticos.com, construida con N
 8. **Comparar mis precios con Cosméticos24h** — Cruza TUS precios (latiendadecosmeticos.com) con los de Cosméticos24h por marca: marca dónde vas más caro y qué productos tienen ellos que tú no
 9. **Control de márgenes** — Subes el CSV de control de stocks y detecta los productos con menos del 30% de margen; diagnostica si es por descuento o por precio/coste, y exporta a Excel (con EAN) para el encargado de precios
 10. **Revisar fichas de nuestra web** — Cada mañana revisa todas las fichas de latiendadecosmeticos.com y saca las que tienen algún problema (precio, EAN, descripción, meta, desactivadas que siguen en Google), con Excel
+11. **Margen de cada producto** — El margen de todos los productos de la web sacado del feed (sin subir nada): por marca y por producto, con filtros (marca, pierden dinero, margen bajo, sin coste, muy alto), orden y Excel
 
 **En producción:** https://suite-aquatherapia.vercel.app/
 **Repositorio:** GitHub `Aquatherapia/suite-aquatherapia` conectado a Vercel (push a `main` = deploy automático).
@@ -508,6 +509,37 @@ Cada mañana (Vercel Cron, 5:00 UTC, ver `vercel.json`) o con el botón **«Revi
 
 ---
 
+
+## Agente 11 — Margen de cada producto
+
+### URL: `/margen-productos`
+
+El margen de **todos** los productos de latiendadecosmeticos.com, sin subir ningún archivo: lo saca del feed público (`/es/feed_detalles`), una fila por formato. A diferencia de «Control de márgenes» (Agente 9), que trabaja con el CSV de stocks de una marca, este ve el catálogo entero de una vez.
+
+### Cálculo
+```
+Precio de venta = precio de oferta (sale_price) si lo hay; si no, el PVP (price). Con IVA.
+Venta sin IVA   = precio de venta ÷ 1,21
+Coste           = precio_coste del feed (sin IVA, ya con el descuento de la marca)
+Margen €        = venta sin IVA − coste
+Margen %        = margen € ÷ venta sin IVA        (sobre la venta, como el Agente 9)
+Margen sin oferta = el mismo cálculo con el PVP
+```
+Por marca, el margen % está **ponderado por precio** (suma de márgenes ÷ suma de ventas sin IVA). Es margen de catálogo: no sabe cuántas unidades se venden ni descuenta envíos, comisiones ni publicidad.
+
+### Estados (filtros)
+| Estado | Regla |
+|---|---|
+| Pierden dinero | margen < 0 (casi siempre, coste mal cargado: Selvert, Wherteimar) |
+| Margen bajo | margen < 30 % |
+| Margen normal | 30-80 % |
+| Margen muy alto | > 80 % (sospecha de coste cargado de menos) |
+| Sin coste | precio_coste vacío o 0 |
+
+Filtros: marca, búsqueda (producto, marca o EAN), solo en stock y estado. Vista **por marca** (ordenable; al tocar una marca se ven sus productos) y **por producto** (orden por margen %, margen €, descuento o nombre). **Excel** con dos hojas (Por marca y Productos) de lo que se ve con los filtros puestos.
+
+### Datos
+`POST /api/margen-productos {action:"actualizar"}` lee el feed (de 10 s a 1 min) y lo guarda comprimido (KV `margen-productos` o `data/margen-productos.json`, ~300 KB). `GET` devuelve lo guardado; el cálculo se hace en el navegador. La primera vez que se abre sin datos, lee el feed solo.
 ## Exclusión de packs (Agentes 2, 4 y 6)
 
 Ambos vigiladores filtran títulos que contengan: `pack, set, kit, lote, duo, dúo, trio, trío, estuche, bundle, caja, cofre, box, programa, rutina`.
@@ -553,6 +585,7 @@ suite-aquatherapia/
 │   ├── responder-resenas/page.tsx     ← Agente 7: respuestas a reseñas
 │   ├── comparar-precios/page.tsx      ← Agente 8: comparar mis precios vs Cosméticos24h
 │   ├── margenes/page.tsx              ← Agente 9: control de márgenes (cálculo en cliente, sin API)
+│   ├── margen-productos/              ← Agente 11: margen de cada producto (page.tsx, tipos.ts; API en api/margen-productos)
 │   └── api/
 │       ├── gemini.ts                  ← Lógica compartida Gemini
 │       ├── generate/route.ts          ← Generación de ficha completa
