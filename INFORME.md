@@ -536,7 +536,7 @@ Por marca, el margen % está **ponderado por precio** (suma de márgenes ÷ suma
 | Margen muy alto | > 80 % (sospecha de coste cargado de menos) |
 | Sin coste | precio_coste vacío o 0 |
 
-Filtros: marca, búsqueda (producto, marca o EAN), solo en stock y estado. Vista **por marca** (ordenable; al tocar una marca se ven sus productos) y **por producto** (orden por margen %, margen €, descuento o nombre). **Excel** con dos hojas (Por marca y Productos) de lo que se ve con los filtros puestos.
+Filtros: marca, búsqueda (producto, marca o EAN), solo en stock y estado. Por defecto se ven **todos los productos**; al elegir una marca solo salen los suyos. Pestaña **Resumen por marca** (ordenable; al tocar una marca se ven sus productos). Productos (orden por margen %, margen €, descuento o nombre). **Excel** con dos hojas (Por marca y Productos) de lo que se ve con los filtros puestos.
 
 ### Datos
 `POST /api/margen-productos {action:"actualizar"}` lee el feed (de 10 s a 1 min) y lo guarda comprimido (KV `margen-productos` o `data/margen-productos.json`, ~300 KB). `GET` devuelve lo guardado; el cálculo se hace en el navegador. La primera vez que se abre sin datos, lee el feed solo.
