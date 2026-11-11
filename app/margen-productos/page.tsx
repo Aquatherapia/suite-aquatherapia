@@ -35,7 +35,7 @@ export default function MargenProductosPage() {
   const [datos, setDatos] = useState<Datos | null | undefined>(undefined);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
-  const [vista, setVista] = useState<"marcas" | "productos">("marcas");
+  const [vista, setVista] = useState<"marcas" | "productos">("productos");
   const [marca, setMarca] = useState("");
   const [estado, setEstado] = useState<Estado | "todos">("todos");
   const [buscar, setBuscar] = useState("");
@@ -152,7 +152,7 @@ export default function MargenProductosPage() {
           </div>
 
           <div className="rf-filtros">
-            <select id="mp-marca" className="rc-select" value={marca} onChange={e => setMarca(e.target.value)} aria-label="Marca">
+            <select id="mp-marca" className="rc-select" value={marca} onChange={e => { setMarca(e.target.value); if (e.target.value) setVista("productos"); }} aria-label="Marca">
               <option value="">Todas las marcas ({marcas.length})</option>
               {marcas.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -174,8 +174,8 @@ export default function MargenProductosPage() {
           {ayuda && <p className="rf-hacer">{ayuda}</p>}
 
           <div className="mp-pestanas">
-            <button className={vista === "marcas" ? "on" : ""} onClick={() => setVista("marcas")}>Por marca ({miles(resumenMarcas.length)})</button>
-            <button className={vista === "productos" ? "on" : ""} onClick={() => setVista("productos")}>Por producto ({miles(filtrados.length)})</button>
+            <button className={vista === "productos" ? "on" : ""} onClick={() => setVista("productos")}>Productos ({miles(filtrados.length)})</button>
+            <button className={vista === "marcas" ? "on" : ""} onClick={() => setVista("marcas")}>Resumen por marca ({miles(resumenMarcas.length)})</button>
             {vista === "marcas" ? (
               <select className="rc-select" value={ordenMarcas} onChange={e => setOrdenMarcas(e.target.value as typeof ordenMarcas)} aria-label="Ordenar marcas">
                 <option value="margen-asc">Margen: de menos a más</option>
