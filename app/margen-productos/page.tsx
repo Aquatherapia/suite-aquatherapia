@@ -225,7 +225,7 @@ export default function MargenProductosPage() {
                       {p.marca}{p.ean ? ` · EAN ${p.ean}` : ""}{!p.stock ? " · sin stock" : ""}
                     </div>
                     <div className="mp-numeros">
-                      Venta {eur(p.venta)}{p.descuento > 0.005 ? <> (PVP {eur(p.pvp)}, −{Math.round(p.descuento * 100)} %)</> : null} · sin IVA {eur(p.ventaSinIva)} · coste {eur(p.coste)}
+                      Venta {eur(p.venta)}{p.descuento > 0.005 ? <> (PVP {eur(p.pvp)}, −{Math.round(p.descuento * 100)} %)</> : null} · sin IVA {eur(p.ventaSinIva)} · coste con dto. {eur(p.coste)}
                       {p.margen !== null && <> · <b className={clase(p.margenPct)}>margen {eur(p.margen)}</b></>}
                       {p.descuento > 0.005 && p.margenPvpPct !== null && <> · sin oferta {pct(p.margenPvpPct)}</>}
                     </div>
@@ -298,7 +298,7 @@ async function descargarExcel(productos: Producto[], marcas: ResumenMarca[], tot
     { header: "Precio de venta", key: "venta", width: 11, style: { numFmt: EUR } },
     { header: "Descuento", key: "descuento", width: 10, style: { numFmt: "0%" } },
     { header: "Venta sin IVA", key: "ventaSinIva", width: 11, style: { numFmt: EUR } },
-    { header: "Coste (sin IVA, con dto. marca)", key: "coste", width: 13, style: { numFmt: EUR } },
+    { header: "Coste con dto. (sin IVA)", key: "coste", width: 13, style: { numFmt: EUR } },
     { header: "Margen por unidad", key: "margen", width: 11, style: { numFmt: EUR } },
     { header: "Margen % sobre venta", key: "margenPct", width: 11, style: { numFmt: PCT } },
     { header: "Margen % sin oferta", key: "margenPvpPct", width: 11, style: { numFmt: PCT } },
