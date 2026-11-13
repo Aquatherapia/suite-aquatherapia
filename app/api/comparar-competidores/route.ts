@@ -77,7 +77,10 @@ async function guardarConfig(config: Config) {
 
 async function leerC24(): Promise<ConfigC24> {
   const c = await leerJson<ConfigC24>(KV_KEY_C24, CONFIG_PATH_C24);
-  return { marcas: c?.marcas ?? [], resultados: c?.resultados ?? [], cupon: c?.cupon, eanVariantes: c?.eanVariantes ?? {} };
+  // Un cupón detectado sin código y sin «en tu carrito» no es un cupón (p. ej. «Hasta el 50% de descuento» del Black Friday)
+  const cu = c?.cupon;
+  const cupon = cu && cu.pct != null && !(cu as { manual?: boolean }).manual && !cu.codigo && !cu.directo ? undefined : cu;
+  return { marcas: c?.marcas ?? [], resultados: c?.resultados ?? [], cupon, eanVariantes: c?.eanVariantes ?? {} };
 }
 
 const soloLetras = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
