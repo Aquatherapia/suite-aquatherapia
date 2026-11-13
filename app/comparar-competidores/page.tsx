@@ -290,24 +290,16 @@ function EnlaceComp({ id, estado, enlace, nuestros, enlazados, misSin, manuales,
 
 // «Para la marca»: lo que la competencia vende por debajo de nuestro dto. autorizado (sin dto., por debajo del PVP), en PDF o Excel
 function ParaMarca({ marca, filas, descuento }: { marca: string; filas: FilaComp[]; descuento: number | null }) {
-  const [abierto, setAbierto] = useState(false);
   const n = filasParaMarca(filas, descuento ?? 0).length;
   const bajar = (formato: "pdf" | "excel") => {
-    setAbierto(false);
     descargarParaMarca(marca, filas, descuento ?? 0, formato).catch(err => alert("No se pudo crear el informe: " + err));
   };
   return (
-    <span className="cp-para-marca" onClick={e => e.stopPropagation()}>
-      <button className="regen-btn" disabled={n === 0} onClick={() => setAbierto(a => !a)}
-        title={`${n === 0 ? "Ningún competidor vende nada" : `Informe para enviar a la marca: ${n} precio${n !== 1 ? "s" : ""} de la competencia`} por debajo ${descuento == null ? "del PVP (la marca no tiene descuento autorizado)" : "del descuento autorizado"}`}>
-        Para la marca{n > 0 ? ` (${n})` : ""}
-      </button>
-      {abierto && (
-        <span className="cp-para-marca-menu">
-          <button className="regen-btn" onClick={() => bajar("pdf")}>PDF</button>
-          <button className="regen-btn" onClick={() => bajar("excel")}>Excel</button>
-        </span>
-      )}
+    <span className={`cp-para-marca${n === 0 ? " cp-para-marca-off" : ""}`} onClick={e => e.stopPropagation()}
+      title={`${n === 0 ? "Ningún competidor vende nada" : `Informe para enviar a la marca: ${n} precio${n !== 1 ? "s" : ""} de la competencia`} por debajo ${descuento == null ? "del PVP (la marca no tiene descuento autorizado)" : "del descuento autorizado"}`}>
+      <span className="cp-para-marca-txt">Para la marca{n > 0 ? ` (${n})` : ""}</span>
+      <button className="regen-btn" disabled={n === 0} onClick={() => bajar("pdf")}>PDF</button>
+      <button className="regen-btn" disabled={n === 0} onClick={() => bajar("excel")}>Excel</button>
     </span>
   );
 }

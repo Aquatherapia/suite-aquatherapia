@@ -163,29 +163,17 @@ async function descargarParaMarca(r: ResultadoMarca, descuento: number, cupon: C
 
 // Botón «Para la marca»: elige PDF o Excel. Sin descuento autorizado cuenta como 0 % (mínimo = PVP). Desactivado si no hay nada por debajo
 function ParaMarca({ r, descuento: dto, cupon }: { r: ResultadoMarca; descuento: number | null; cupon: CuponExcel }) {
-  const [abierto, setAbierto] = useState(false);
   const descuento = dto ?? 0;
   const n = filasParaMarca(r.comparaciones, descuento).length;
   const bajar = (formato: "pdf" | "excel") => {
-    setAbierto(false);
     descargarParaMarca(r, descuento, cupon, formato).catch(err => alert("No se pudo crear el informe: " + err));
   };
   return (
-    <span className="cp-para-marca" onClick={e => e.stopPropagation()}>
-      <button
-        className="regen-btn"
-        disabled={n === 0}
-        onClick={() => setAbierto(a => !a)}
-        title={`${n === 0 ? "Cosméticos24h no vende nada" : `Informe para enviar a la marca: ${n} producto${n !== 1 ? "s" : ""} de Cosméticos24h`} por debajo ${dto == null ? "del PVP (la marca no tiene descuento autorizado)" : "del descuento autorizado"}`}
-      >
-        Para la marca{n > 0 ? ` (${n})` : ""}
-      </button>
-      {abierto && (
-        <span className="cp-para-marca-menu">
-          <button className="regen-btn" onClick={() => bajar("pdf")}>PDF</button>
-          <button className="regen-btn" onClick={() => bajar("excel")}>Excel</button>
-        </span>
-      )}
+    <span className={`cp-para-marca${n === 0 ? " cp-para-marca-off" : ""}`} onClick={e => e.stopPropagation()}
+      title={`${n === 0 ? "Cosméticos24h no vende nada" : `Informe para enviar a la marca: ${n} producto${n !== 1 ? "s" : ""} de Cosméticos24h`} por debajo ${dto == null ? "del PVP (la marca no tiene descuento autorizado)" : "del descuento autorizado"}`}>
+      <span className="cp-para-marca-txt">Para la marca{n > 0 ? ` (${n})` : ""}</span>
+      <button className="regen-btn" disabled={n === 0} onClick={() => bajar("pdf")}>PDF</button>
+      <button className="regen-btn" disabled={n === 0} onClick={() => bajar("excel")}>Excel</button>
     </span>
   );
 }
