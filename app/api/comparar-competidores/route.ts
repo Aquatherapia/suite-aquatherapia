@@ -4,8 +4,10 @@ import path from "path";
 import { emparejarPorNombre } from "./emparejar-nombre";
 import { emparejarConIa } from "./emparejar-ia";
 import { motivoSinPareja } from "./motivo";
-import { COMPETIDORES, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
-import { buscarListado, leerCompetidor, leerMarcasWeb, leerMisProductos, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
+import { BASE, COLORES_EXTRA, COMPETIDORES, ponerCompetidores, type AjustesCompetidores, type Competidor, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
+import { competidoresDeGoogle, type Propuesta } from "./merchant";
+import { ErrorGoogle } from "../../_google/cliente";
+import { buscarListado, detectarPlataforma, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
 
 // Leer varias webs a la vez cabe de sobra, pero alguna puede ir lenta: Vercel Hobby permite hasta 300 s
 export const maxDuration = 300;
@@ -30,6 +32,11 @@ type Config = {
   descuentos?: Record<string, number>;
   // Por marca y competidor: productos suyos enlazados a mano con los nuestros
   manuales?: Record<string, Record<string, Manual[]>>;
+  // Tiendas quitadas de las de siempre y tiendas añadidas desde la app
+  competidores?: AjustesCompetidores;
+  // Cuenta de Merchant Center y la última lista de competidores que propuso Google
+  merchantId?: string;
+  propuestas?: { fecha: string; lista: Propuesta[]; avisos: string[] };
 };
 
 // Una marca de este apartado: las del comparador de Cosméticos24h y el resto de las de nuestra web
@@ -51,8 +58,12 @@ async function leerJson<T>(clave: string, ruta: string): Promise<T | null> {
 }
 
 async function leerConfig(): Promise<Config> {
-  return { ...vacia(), ...(await leerJson<Config>(KV_KEY, CONFIG_PATH)) };
+  const config = { ...vacia(), ...(await leerJson<Config>(KV_KEY, CONFIG_PATH)) };
+  ponerCompetidores(config.competidores);
+  return config;
 }
+
+const dominioDe = (web: string) => { try { return new URL(web).host.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
 
 async function guardarConfig(config: Config) {
   if (USE_KV) {
@@ -138,6 +149,66 @@ export async function POST(req: NextRequest) {
       if (valor == null) delete config.descuentos[slug]; else config.descuentos[slug] = valor;
       await guardarConfig(config);
     }
+    return respuesta(config);
+  }
+
+  // Competidores que propone Google (Merchant Center): webs que salen con nosotros en Google Shopping
+  if (body.action === "buscar-competidores") {
+    const cuenta = String(body.merchantId ?? config.merchantId ?? "").replace(/\D/g, "");
+    if (!cuenta) return NextResponse.json({ error: "Pon el número de cuenta de Merchant Center (arriba a la derecha en merchants.google.com)." });
+    config.merchantId = cuenta;
+    try {
+      const { propuestas, avisos } = await competidoresDeGoogle(cuenta);
+      config.propuestas = { fecha: new Date().toISOString(), lista: propuestas.slice(0, 40), avisos };
+    } catch (e) {
+      await guardarConfig(config);
+      return NextResponse.json({ error: e instanceof Error ? e.message : String(e), sinConexion: e instanceof ErrorGoogle && e.status === 401 });
+    }
+    await guardarConfig(config);
+    return respuesta(config);
+  }
+
+  // Añadir una tienda: se mira con qué está hecha su web (Shopify, WooCommerce o PrestaShop) para saber leerla
+  if (body.action === "anadir-competidor") {
+    let web: string;
+    try { web = new URL(/^https?:\/\//.test(String(body.web ?? "").trim()) ? String(body.web).trim() : `https://${String(body.web ?? "").trim()}`).origin; }
+    catch { return NextResponse.json({ error: "Esa dirección no es válida. Pon algo como https://tienda.com" }); }
+    const dominio = dominioDe(web);
+    const ajustes: AjustesCompetidores = { extra: [...(config.competidores?.extra ?? [])], quitados: [...(config.competidores?.quitados ?? [])] };
+    const yaBase = BASE.find(c => dominioDe(c.web) === dominio);
+    if (yaBase) {
+      ajustes.quitados = ajustes.quitados!.filter(id => id !== yaBase.id);
+    } else if (!ajustes.extra!.some(c => dominioDe(c.web) === dominio)) {
+      const tipo = await detectarPlataforma(web);
+      if (!tipo) return NextResponse.json({ error: `No sé leer ${dominio}: su web no es Shopify, WooCommerce ni PrestaShop. Si te interesa, pídemelo y la preparo a mano.` });
+      const nombre = String(body.nombre ?? "").trim() || await nombreDeTienda(web);
+      const [color, fondo] = COLORES_EXTRA[ajustes.extra!.length % COLORES_EXTRA.length];
+      let id = dominio.replace(/[^a-z0-9]+/g, "-");
+      while ([...BASE, ...ajustes.extra!].some(c => c.id === id)) id += "-2";
+      const nuevo: Competidor = { id, nombre, corto: nombre.length > 16 ? dominio : nombre, web, tipo, color, fondo, extra: true };
+      ajustes.extra!.push(nuevo);
+    }
+    config.competidores = ajustes;
+    ponerCompetidores(ajustes);
+    await guardarConfig(config);
+    return respuesta(config);
+  }
+
+  // Quitar una tienda de la comparación (las de siempre se pueden volver a poner) o volver a ponerla
+  if (body.action === "quitar-competidor" || body.action === "activar-competidor") {
+    const id = String(body.id ?? "");
+    const ajustes: AjustesCompetidores = { extra: [...(config.competidores?.extra ?? [])], quitados: [...(config.competidores?.quitados ?? [])] };
+    if (body.action === "activar-competidor") ajustes.quitados = ajustes.quitados!.filter(x => x !== id);
+    else if (BASE.some(c => c.id === id)) { if (!ajustes.quitados!.includes(id)) ajustes.quitados!.push(id); }
+    else ajustes.extra = ajustes.extra!.filter(c => c.id !== id);
+    if (!BASE.some(c => c.id === id) && body.action === "quitar-competidor") {
+      // Una tienda añadida que se quita: fuera también sus enlaces y precios guardados
+      for (const slug of Object.keys(config.enlaces)) { delete config.enlaces[slug]?.[id]; delete config.auto[slug]?.[id]; }
+      for (const r of Object.values(config.resultados)) { delete r.competidores[id]; for (const f of r.filas) delete f.precios[id]; }
+    }
+    config.competidores = ajustes;
+    ponerCompetidores(ajustes);
+    await guardarConfig(config);
     return respuesta(config);
   }
 

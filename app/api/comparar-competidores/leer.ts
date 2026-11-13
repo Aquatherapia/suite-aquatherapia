@@ -301,7 +301,7 @@ async function leerShopify(c: Competidor, enlace: string, limite: number, eans: 
 // Mar Chancosa en la referencia (SKU), Pilar Delgado en su API (ean13). Anadeana, VIP24 y Estética Rosi no lo publican:
 // con ellas se empareja por referencia, nombre y formato, IA o a mano.
 export async function leerCompetidor(c: Competidor, enlace: string, limite: number, marca: string, eansC24?: Record<string, (string | null)[]>): Promise<SuProducto[]> {
-  if (c.tipo === "c24") return leerShopify(c, enlace, limite, eansC24);
+  if (c.tipo === "c24" || c.tipo === "shopify") return leerShopify(c, enlace, limite, eansC24);
   if (c.tipo === "woo") return leerWoo(c, enlace, limite, marca);
   if (c.tipo === "presta") return leerPresta(enlace);
   if (c.tipo === "rosi") return leerRosi(c, enlace);
@@ -313,7 +313,7 @@ export async function leerCompetidor(c: Competidor, enlace: string, limite: numb
 export async function buscarListado(c: Competidor, marca: { nombre: string; slug: string }): Promise<string | null> {
   const clave = soloLetras(marca.nombre);
   try {
-    if (c.tipo === "c24") {
+    if (c.tipo === "c24" || c.tipo === "shopify") {
       // La colección suele llamarse como la marca en minúsculas y con guiones («germaine-de-capuccini»)
       const guiones = normalizar(marca.nombre).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       for (const h of [...new Set([marca.slug, guiones, clave])].filter(Boolean)) {
@@ -348,6 +348,45 @@ export async function buscarListado(c: Competidor, marca: { nombre: string; slug
     throw e;
   }
   return null;
+}
+
+// ── Tiendas nuevas: con qué está hecha su web ──────────────────────────
+// Solo se pueden leer las Shopify, WooCommerce y PrestaShop (las tres publican sus productos de forma estándar).
+export type Plataforma = "shopify" | "woo" | "presta";
+export async function detectarPlataforma(web: string): Promise<Plataforma | null> {
+  const json = async (url: string) => {
+    try {
+      const r = await pedir(url, { headers: { Accept: "application/json" } }, 15_000);
+      if (!r.ok || !/json/i.test(r.headers.get("content-type") ?? "")) return null;
+      return await r.json() as unknown;
+    } catch { return null; }
+  };
+  const shop = await json(`${web}/products.json?limit=1`) as { products?: unknown[] } | null;
+  if (shop && Array.isArray(shop.products)) return "shopify";
+  const woo = await json(`${web}/wp-json/wc/store/v1/products?per_page=1`);
+  if (Array.isArray(woo)) return "woo";
+  try {
+    const r = await pedir(web, undefined, 15_000);
+    const html = r.ok ? await r.text() : "";
+    if (/prestashop/i.test(html)) return "presta";
+  } catch { /* no responde */ }
+  return null;
+}
+
+// Nombre de la tienda: el de su web (og:site_name o <title>), o el dominio
+export async function nombreDeTienda(web: string): Promise<string> {
+  const dominio = new URL(web).hostname.replace(/^www\./, "");
+  try {
+    const r = await pedir(web, undefined, 15_000);
+    if (r.ok) {
+      const doc = parse(await r.text());
+      const og = doc.querySelector('meta[property="og:site_name"]')?.getAttribute("content")?.trim();
+      const t = doc.querySelector("title")?.text.trim().split(/\s[|\-–—·:]\s/).pop()?.trim();
+      const n = decodificar(og || t || "");
+      if (n && n.length <= 40) return n;
+    }
+  } catch { /* se usa el dominio */ }
+  return dominio;
 }
 
 function decodificar(t: string): string {

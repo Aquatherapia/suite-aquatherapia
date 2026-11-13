@@ -3,10 +3,12 @@
 //   woo: WooCommerce (API pública de la tienda, por categoría)
 //   presta: PrestaShop (listado de la marca en JSON)
 //   rosi: Estética Rosi (web propia: listado HTML de la marca)
-export type TipoCompetidor = "c24" | "woo" | "presta" | "rosi";
-export type Competidor = { id: string; nombre: string; corto: string; web: string; tipo: TipoCompetidor; color: string; fondo: string };
+//   shopify: cualquier otra tienda Shopify añadida desde la app (se lee igual que Cosméticos24h)
+export type TipoCompetidor = "c24" | "woo" | "presta" | "rosi" | "shopify";
+export type Competidor = { id: string; nombre: string; corto: string; web: string; tipo: TipoCompetidor; color: string; fondo: string; extra?: boolean };
 
-export const COMPETIDORES: Competidor[] = [
+// Las tiendas de siempre. Desde la app se pueden quitar (y volver a poner) y añadir otras.
+export const BASE: Competidor[] = [
   { id: "c24", nombre: "Cosméticos24h", corto: "Cosméticos24h", web: "https://cosmeticos24h.com", tipo: "c24", color: "#c2367e", fondo: "#fbe9f3" },
   { id: "anadeana", nombre: "Anadeana", corto: "Anadeana", web: "https://anadeana.es", tipo: "woo", color: "#0f766e", fondo: "#e2f3f1" },
   { id: "vip24", nombre: "Cosmética VIP24", corto: "VIP24", web: "https://cosmeticavip24.com", tipo: "woo", color: "#f97316", fondo: "#fff1e3" },
@@ -14,6 +16,25 @@ export const COMPETIDORES: Competidor[] = [
   { id: "chancosa", nombre: "Mar Chancosa", corto: "Mar Chancosa", web: "https://marchancosa.com", tipo: "woo", color: "#92400e", fondo: "#f6eee6" },
   { id: "pilar", nombre: "Pilar Delgado", corto: "Pilar Delgado", web: "https://tienda.pilar-delgado.com", tipo: "presta", color: "#475569", fondo: "#eceff3" },
 ];
+
+// Colores para las tiendas que se añaden desde la app, por orden
+export const COLORES_EXTRA: [string, string][] = [
+  ["#be123c", "#fde8ec"], ["#0369a1", "#e3f1fa"], ["#4d7c0f", "#eef5e2"], ["#a21caf", "#f8e8fa"],
+  ["#b45309", "#fbf0e1"], ["#0e7490", "#e1f3f6"], ["#9f1239", "#fbe6ec"], ["#3f6212", "#ecf2e3"],
+];
+
+// Las tiendas con las que se compara ahora: las de siempre que no se han quitado y las añadidas.
+// Es la misma lista en el servidor y en la página: los dos la ponen al día con `ponerCompetidores`.
+export const COMPETIDORES: Competidor[] = [...BASE];
+export type AjustesCompetidores = { extra?: Competidor[]; quitados?: string[] };
+export function ponerCompetidores(a: AjustesCompetidores | null | undefined) {
+  const quitados = new Set(a?.quitados ?? []);
+  const lista = [...BASE, ...(a?.extra ?? [])].filter(c => !quitados.has(c.id));
+  COMPETIDORES.splice(0, COMPETIDORES.length, ...lista);
+}
+// Para colores y nombres de tiendas que ya no están en la lista (quitadas), pero salen en revisiones guardadas
+export const competidorDe = (id: string, a?: AjustesCompetidores | null): Competidor =>
+  [...BASE, ...(a?.extra ?? [])].find(c => c.id === id) ?? { id, nombre: id, corto: id, web: "", tipo: "woo", color: "#64748b", fondo: "#eef1f5" };
 
 // Precio de un competidor para uno de nuestros productos
 export type PrecioComp = {

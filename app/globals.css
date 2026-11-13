@@ -1868,3 +1868,26 @@ label { color: #3f3f46; font-weight: 500; font-size: 13px; }
   .panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .panel-valor { font-size: 22px; }
 }
+
+/* Comparar con la competencia: panel de tiendas */
+.ct-panel { border: 1px solid var(--border); border-radius: 10px; background: #fff; margin: 0 0 16px; }
+.ct-cab { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; background: transparent; border: 0; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.ct-cuerpo { padding: 0 16px 16px; border-top: 1px solid var(--border); }
+.ct-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 8px; }
+.ct-chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 4px 6px 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+.ct-chip a { text-decoration: none; }
+.ct-chip .ct-x { margin: 0; height: auto; align-self: center; background: transparent; border: 0; box-shadow: none; color: inherit; font-size: 16px; line-height: 1; padding: 0 4px; min-height: 0; width: auto; cursor: pointer; opacity: .7; }
+.ct-chip .ct-x:hover { opacity: 1; background: transparent; }
+.ct-fila { display: flex; gap: 8px; margin: 12px 0 4px; }
+.ct-fila input { flex: 1; min-width: 0; }
+.ct-nota { font-size: 13px; color: var(--muted, #71717a); margin: 6px 0; }
+.ct-h { font-size: 14px; margin: 20px 0 4px; }
+.ct-lista { list-style: none; padding: 0; margin: 8px 0 0; }
+.ct-lista li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.ct-dom { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ct-datos { color: var(--muted, #71717a); font-size: 13px; white-space: nowrap; }
+.ct-ya { color: var(--muted, #71717a); font-size: 13px; }
+@media (max-width: 640px) {
+  .ct-lista li { flex-wrap: wrap; gap: 4px 12px; }
+  .ct-dom { flex-basis: 100%; }
+}
