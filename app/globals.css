@@ -1621,7 +1621,11 @@ button:disabled {
 .cp-informe .cp-ambar-texto { color: #b45309; }
 
 /* Botón «Para la marca» con su menú PDF / Excel */
-.cp-para-marca { position: relative; display: inline-flex; }
+.cp-para-marca { position: relative; display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: 8px; background: #fff; overflow: hidden; white-space: nowrap; }
+.cp-para-marca-txt { display: inline-flex; align-items: center; padding: 0 10px; font-size: 13px; color: var(--ink); background: #f7f7f8; border-right: 1px solid var(--border); }
+.cp-para-marca .regen-btn { border: 0; border-radius: 0; margin: 0; box-shadow: none; }
+.cp-para-marca .regen-btn + .regen-btn { border-left: 1px solid var(--border); }
+.cp-para-marca-off { opacity: .55; }
 .cp-para-marca-menu { position: absolute; top: 100%; right: 0; z-index: 5; display: flex; gap: 4px; margin-top: 4px; padding: 4px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12); }
 
 /* ── Comparar precios con la competencia ── */
