@@ -82,7 +82,7 @@ async function competidoresDeGoogleSinRegistro(cuenta: string): Promise<{ propue
   let algunaBien = false;
   for (const cat of CATEGORIAS) {
     for (const fuente of ["ORGANIC", "ADS"]) {
-      const query = `SELECT domain, is_your_domain, rank, page_overlap_rate, higher_position_rate, relative_visibility
+      const query = `SELECT report_country_code, report_category_id, traffic_source, domain, is_your_domain, rank, page_overlap_rate, higher_position_rate, relative_visibility
         FROM competitive_visibility_competitor_view
         WHERE date BETWEEN '${dia(33)}' AND '${dia(3)}'
         AND report_country_code = 'ES' AND report_category_id = ${cat.id} AND traffic_source = '${fuente}'`;
