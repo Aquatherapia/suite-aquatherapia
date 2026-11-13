@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { COMPETIDORES, claveFila, explicarError, type FilaComp, type ResultadoComp, type EstadoComp } from "./competidores";
+import { COMPETIDORES, claveFila, explicarError, ponerCompetidores, type AjustesCompetidores, type FilaComp, type ResultadoComp, type EstadoComp } from "./competidores";
+import Tiendas, { type PropuestaGoogle } from "./tiendas";
 import { descuentoBoardfy } from "../comparar-precios/boardfy";
 import { aplicarCupon, calcularFila, columnasDe, cuponDeMarca, descuentoDe, ordenar, pctTexto, type CuponComp, type MarcaComp } from "./calculo";
 import { descargarExcel, descargarPdf, descargarParaMarca, descargarParaTodas, filasParaMarca } from "./exportar";
@@ -12,6 +13,9 @@ type Config = {
   enlaces: Record<string, Record<string, string>>;
   resultados: Record<string, ResultadoComp>;
   cupon: CuponComp;
+  competidores?: AjustesCompetidores;
+  merchantId?: string;
+  propuestas?: { fecha: string; lista: PropuestaGoogle[]; avisos: string[] };
 };
 
 const eur = (n: number) => n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
@@ -405,7 +409,9 @@ export default function CompararCompetidores() {
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [filtro, setFiltro] = useState("");
 
-  useEffect(() => { fetch("/api/comparar-competidores").then(r => r.json()).then(setConfig); }, []);
+  // La lista de tiendas (con las quitadas y añadidas) se pone al día antes de pintar
+  const ponerConfig = (d: Config) => { ponerCompetidores(d.competidores); setConfig(d); };
+  useEffect(() => { fetch("/api/comparar-competidores").then(r => r.json()).then(ponerConfig); }, []);
 
   async function enviar(body: object) {
     const res = await fetch("/api/comparar-competidores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -420,7 +426,7 @@ export default function CompararCompetidores() {
       return false;
     }
     if (data.error) { setError(explicarError(data.error)); return false; }
-    setConfig(data);
+    ponerConfig(data);
     return true;
   }
 
@@ -468,6 +474,7 @@ export default function CompararCompetidores() {
           }}>Excel para las marcas (todas)</button>
       </div>
       {error && <div className="error">{error}</div>}
+      {config && <Tiendas ajustes={config.competidores} merchantId={config.merchantId} propuestas={config.propuestas} enviar={async b => { setError(""); return enviar(b); }} />}
       {!config && <p className="cc-nota">Cargando…</p>}
       {marcas.map(m => (
         <MarcaBloque key={m.slug} marca={m} r={config?.resultados[m.slug]} enlaces={config?.enlaces[m.slug] ?? {}} cupon={config?.cupon ?? null}
