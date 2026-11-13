@@ -63,7 +63,8 @@ export function SelectorNegocio({ valor, onChange }: { valor: Negocio; onChange:
 
 // ── Formatos ──
 export type Formato = "num" | "pct" | "eur" | "pos" | "dec";
-const nf = new Intl.NumberFormat("es-ES");
+// useGrouping "always": en es-ES, por defecto 9331 sale sin punto de miles
+const nf = new Intl.NumberFormat("es-ES", { useGrouping: "always" } as Intl.NumberFormatOptions);
 export function formatear(v: number | string | null | undefined, f?: Formato) {
   if (v === null || v === undefined) return "—";
   if (typeof v === "string") return v;
@@ -71,7 +72,7 @@ export function formatear(v: number | string | null | undefined, f?: Formato) {
     case "pct":
       return `${(v * 100).toLocaleString("es-ES", { maximumFractionDigits: 1 })} %`;
     case "eur":
-      return v.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: v >= 1000 ? 0 : 2 });
+      return v.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: v >= 1000 ? 0 : 2, useGrouping: "always" } as Intl.NumberFormatOptions);
     case "pos":
     case "dec":
       return v.toLocaleString("es-ES", { maximumFractionDigits: 1 });
