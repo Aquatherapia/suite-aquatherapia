@@ -161,7 +161,9 @@ async function leerWoo(c: Competidor, enlace: string, limite: number, marca: str
     }
     return out;
   };
-  let productos = await pedirTodos(`category=${encodeURIComponent(ids.size ? [...ids].join(",") : slug)}`);
+  // Enlace sin categoría (/marca/x de una tienda añadida): directamente por el buscador
+  const soloBuscar = !raiz && /\/marca\//.test(enlace);
+  let productos = soloBuscar ? [] : await pedirTodos(`category=${encodeURIComponent(ids.size ? [...ids].join(",") : slug)}`);
   // Si por categoría no sale nada, se buscan los productos que llevan la marca en el nombre
   if (!productos.length) {
     const clave = soloLetras(marca);
@@ -197,12 +199,13 @@ type ProductoPresta = { name: string; url: string; price_amount: number; regular
 
 async function leerPresta(enlace: string): Promise<SuProducto[]> {
   const out: SuProducto[] = [];
-  let base = enlace.split("?")[0];
+  // Listado de marca (/marcas/x) o búsqueda (…?controller=search&s=x): se conserva la búsqueda
+  let base = /controller=search/.test(enlace) ? enlace : enlace.split("?")[0];
   for (let pagina = 1; pagina <= 25; pagina++) {
-    const res = await pedir(`${base}?page=${pagina}`, { headers: { Accept: "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest" } });
+    const res = await pedir(`${base}${base.includes("?") ? "&" : "?"}page=${pagina}`, { headers: { Accept: "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest" } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     // PrestaShop redirige /marcas/eberlin a /eberlin: vale, salvo que acabe en la portada (la marca no existe)
-    if (pagina === 1 && res.url && !mismaRuta(res.url, base)) {
+    if (pagina === 1 && res.url && !base.includes("?") && !mismaRuta(res.url, base)) {
       if (new URL(res.url).pathname.replace(/\/$/, "") === "") throw new Error("El enlace lleva a la portada");
       base = res.url.split("?")[0];
     }
@@ -328,18 +331,37 @@ export async function buscarListado(c: Competidor, marca: { nombre: string; slug
       const candidatas = cats.filter(x => x.count > 0 && (soloLetras(x.name) === clave || soloLetras(x.slug) === clave || soloLetras(x.slug).replace(/online|comprar|tienda|cosmetica|cosmeticos/g, "") === clave))
         .sort((a, b) => b.count - a.count);
       const cat = candidatas[0];
-      return cat ? (cat.permalink ?? `${c.web}/categoria-producto/${cat.slug}/`) : null;
+      if (cat) return cat.permalink ?? `${c.web}/categoria-producto/${cat.slug}/`;
+      // Tiendas WooCommerce añadidas: muchas ordenan por marca sin categoría; si su buscador da productos de la marca,
+      // se usa un enlace sin categoría y al leer se buscan por nombre
+      if (c.extra) {
+        const r = await pedir(`${c.web}/wp-json/wc/store/v1/products?search=${encodeURIComponent(marca.nombre)}&per_page=20`, undefined, 15_000);
+        if (!r.ok) return null;
+        const ps = await r.json() as { name?: string }[];
+        return Array.isArray(ps) && ps.some(p => soloLetras(decodificar(p.name ?? "")).includes(clave)) ? `${c.web}/marca/${marca.slug}/` : null;
+      }
+      return null;
     }
     if (c.tipo === "presta" || c.tipo === "rosi") {
       const url = `${c.web}/${c.tipo === "presta" ? "marcas" : "nuestras-marcas"}/${marca.slug}`;
       if (c.tipo === "rosi") return (await leerRosi(c, url)).length ? url : null;
       // PrestaShop: se guarda la dirección final, por si redirige (/marcas/eberlin → /eberlin)
-      const res = await pedir(url, { headers: { Accept: "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest" } });
-      if (!res.ok) return null;
-      const final = (res.url || url).split("?")[0];
-      if (new URL(final).pathname.replace(/\/$/, "") === "") return null;
-      const data = await res.json() as { products?: unknown[] };
-      return data.products?.length ? final : null;
+      const ajax = { headers: { Accept: "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest" } };
+      const res = await pedir(url, ajax);
+      if (res.ok && /json/i.test(res.headers.get("content-type") ?? "")) {
+        const final = (res.url || url).split("?")[0];
+        const data = await res.json() as { products?: unknown[] };
+        if (new URL(final).pathname.replace(/\/$/, "") !== "" && data.products?.length) return final;
+      }
+      // Tiendas PrestaShop añadidas: su buscador, quedándose con los productos que llevan la marca en el nombre
+      if (c.extra) {
+        const busca = `${c.web}/index.php?controller=search&s=${encodeURIComponent(marca.nombre)}`;
+        const r = await pedir(busca, ajax);
+        if (!r.ok || !/json/i.test(r.headers.get("content-type") ?? "")) return null;
+        const d = await r.json() as { products?: { name?: string }[] };
+        return (d.products ?? []).some(p => soloLetras(p.name ?? "").includes(clave)) ? busca : null;
+      }
+      return null;
     }
   } catch (e) {
     // La marca no existe en su web (redirige a otra página): no la vende

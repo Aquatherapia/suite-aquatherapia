@@ -5,7 +5,7 @@
 //   rosi: Estética Rosi (web propia: listado HTML de la marca)
 //   shopify: cualquier otra tienda Shopify añadida desde la app (se lee igual que Cosméticos24h)
 export type TipoCompetidor = "c24" | "woo" | "presta" | "rosi" | "shopify";
-export type Competidor = { id: string; nombre: string; corto: string; web: string; tipo: TipoCompetidor; color: string; fondo: string; extra?: boolean };
+export type Competidor = { id: string; nombre: string; corto: string; web: string; tipo: TipoCompetidor; color: string; fondo: string; extra?: boolean; auto?: boolean /* añadida sola desde Google */ };
 
 // Las tiendas de siempre. Desde la app se pueden quitar (y volver a poner) y añadir otras.
 export const BASE: Competidor[] = [
@@ -26,7 +26,7 @@ export const COLORES_EXTRA: [string, string][] = [
 // Las tiendas con las que se compara ahora: las de siempre que no se han quitado y las añadidas.
 // Es la misma lista en el servidor y en la página: los dos la ponen al día con `ponerCompetidores`.
 export const COMPETIDORES: Competidor[] = [...BASE];
-export type AjustesCompetidores = { extra?: Competidor[]; quitados?: string[] };
+export type AjustesCompetidores = { extra?: Competidor[]; quitados?: string[]; descartados?: string[] /* dominios quitados a mano: no se vuelven a añadir solos */ };
 export function ponerCompetidores(a: AjustesCompetidores | null | undefined) {
   const quitados = new Set(a?.quitados ?? []);
   const lista = [...BASE, ...(a?.extra ?? [])].filter(c => !quitados.has(c.id));
