@@ -157,6 +157,8 @@ function explicarError(api: string, status: number, data: unknown): string {
     return `La API de ${NOMBRES[api] ?? "Google"} no está activada en el proyecto de Google Cloud. Actívala en «APIs y servicios → Biblioteca».`;
   }
   if (status === 403) return `La cuenta conectada no tiene permiso para esto en ${NOMBRES[api]}. Si es un permiso nuevo, vuelve a conectar en «Conexión con Google».`;
+  // Merchant API: el proyecto de Google Cloud tiene que estar registrado una vez en la cuenta de Merchant Center
+  if (api === "merchant" && /not registered with the merchant account/i.test(msg)) return `SIN_REGISTRAR: ${msg}`;
   if (status === 401) return "Google ha rechazado el acceso. Vuelve a conectar en «Conexión con Google».";
   return msg || `Error ${status} de Google`;
 }
