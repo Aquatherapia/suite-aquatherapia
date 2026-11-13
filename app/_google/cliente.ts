@@ -14,6 +14,8 @@ export const SCOPES = [
   "https://www.googleapis.com/auth/business.manage",
   "https://www.googleapis.com/auth/webmasters.readonly",
   "https://www.googleapis.com/auth/analytics.readonly",
+  // Merchant Center (Merchant API): visibilidad frente a la competencia
+  "https://www.googleapis.com/auth/content",
 ];
 
 export type AjustesNegocio = {
@@ -114,7 +116,8 @@ export class ErrorGoogle extends Error {
   }
 }
 
-async function tokenDeAcceso(): Promise<string> {
+/** Token de acceso vigente de la cuenta conectada (se renueva solo). Úsalo para llamar a cualquier API de Google incluida en SCOPES. */
+export async function tokenDeAcceso(): Promise<string> {
   const k = await kv();
   const cache = await k.get<{ token: string; caduca: number }>(K_TOKEN);
   if (cache && cache.caduca > Date.now() + 60_000) return cache.token;
@@ -146,19 +149,20 @@ async function tokenDeAcceso(): Promise<string> {
 function explicarError(api: string, status: number, data: unknown): string {
   const err = (data as { error?: { message?: string; status?: string; details?: unknown[] } })?.error;
   const msg = err?.message ?? "";
+  const NOMBRES: Record<string, string> = { sc: "Search Console", ga: "Google Analytics", merchant: "Merchant Center", ficha: "Perfil de Empresa" };
   if (api === "ficha" && (status === 429 || /quota|Quota/.test(msg) || /has not been used|is disabled/.test(msg))) {
     return "Google todavía no ha dado acceso a la API de Perfil de Empresa (o falta activarla en Google Cloud). En cuanto aprueben la solicitud, funcionará sin tocar nada.";
   }
   if (/has not been used|is disabled|SERVICE_DISABLED/.test(msg)) {
-    return `La API de ${api === "sc" ? "Search Console" : api === "ga" ? "Google Analytics" : "Google"} no está activada en el proyecto de Google Cloud. Actívala en «APIs y servicios → Biblioteca».`;
+    return `La API de ${NOMBRES[api] ?? "Google"} no está activada en el proyecto de Google Cloud. Actívala en «APIs y servicios → Biblioteca».`;
   }
-  if (status === 403) return `La cuenta conectada no tiene permiso para esto en ${api === "sc" ? "Search Console" : api === "ga" ? "Analytics" : "el Perfil de Empresa"}.`;
+  if (status === 403) return `La cuenta conectada no tiene permiso para esto en ${NOMBRES[api]}. Si es un permiso nuevo, vuelve a conectar en «Conexión con Google».`;
   if (status === 401) return "Google ha rechazado el acceso. Vuelve a conectar en «Conexión con Google».";
   return msg || `Error ${status} de Google`;
 }
 
 export async function llamarGoogle<T = unknown>(
-  api: "ficha" | "sc" | "ga",
+  api: "ficha" | "sc" | "ga" | "merchant",
   url: string,
   init: { method?: string; body?: unknown } = {}
 ): Promise<T> {

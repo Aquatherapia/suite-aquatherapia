@@ -1,6 +1,6 @@
 # Conexión con Google (fichas, Search Console y Analytics)
 
-La Suite usa una sola cuenta de Google (la que gestiona las fichas y tiene acceso a Search Console y GA4), conectada por OAuth desde **Conexión con Google** (`/conexion-google`). El permiso permanente (refresh token) y qué ficha/propiedad corresponde a cada negocio se guardan en Upstash KV (`google-conexion`, `google-ajustes`).
+La Suite usa una sola cuenta de Google (la que gestiona las fichas y tiene acceso a Search Console y GA4), conectada por OAuth (fichas, Search Console, GA4 y Merchant Center) desde **Conexión con Google** (`/conexion-google`). El permiso permanente (refresh token) y qué ficha/propiedad corresponde a cada negocio se guardan en Upstash KV (`google-conexion`, `google-ajustes`).
 
 ## Qué hace
 - **Datos de Google** (`/datos-google`): ficha (Business Profile Performance API), Search Console (Search Analytics) y GA4 (Data API). Por defecto 28 días comparados con los 28 anteriores. La posición media no se muestra con menos de 100 impresiones.
@@ -12,6 +12,7 @@ La Suite usa una sola cuenta de Google (la que gestiona las fichas y tiene acces
 2. **APIs y servicios → Biblioteca**, activar:
    - Google Search Console API
    - Google Analytics Data API y Google Analytics Admin API
+   - Merchant API (para «Comparar con la competencia»: visibilidad frente a la competencia de Merchant Center)
    - My Business Account Management API, My Business Business Information API, Business Profile Performance API y Google My Business API
 3. **Pedir acceso a la API de Perfil de Empresa**: formulario «Business Profile API access» (https://support.google.com/business/contact/api_default), con el número del proyecto. Sin aprobación, las APIs de fichas tienen cuota 0. Search Console y Analytics funcionan sin esperar.
 4. **Pantalla de consentimiento de OAuth**: tipo **Interno** si la cuenta es de Google Workspace (no caduca y no hay que verificar). Si es una cuenta @gmail.com, tipo Externo y **publicar la app** («En producción»): en modo Prueba Google corta el permiso a los 7 días.
@@ -21,3 +22,6 @@ La Suite usa una sola cuenta de Google (la que gestiona las fichas y tiene acces
 
 ## Cuotas
 Search Console: 1.200 consultas/min. GA4 Data API: 200.000 tokens/día por propiedad. Business Profile: 300 consultas/min una vez aprobado. Cada vista de «Datos de Google» hace entre 1 y 5 consultas: no hay riesgo con el uso normal.
+
+## Usar la conexión desde otro apartado
+`app/_google/cliente.ts` exporta `tokenDeAcceso()` (token vigente, se renueva solo) y `llamarGoogle(api, url, { method, body })`, que añade el token y traduce los errores. Si se añade un permiso nuevo a `SCOPES`, hay que volver a conectar la cuenta.
