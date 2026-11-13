@@ -388,15 +388,50 @@ function MarcaBloque({
 
   return (
     <div className="vp-accordion">
-      <div className="vp-accordion-header" onClick={onToggle} role="button" tabIndex={0}>
-        <span className="vp-accordion-marca">
-          {r.marca}
-          {r.revisadoEn && (
-            <span className="cp-revisado" title={`Esta marca se revisó el ${fechaExacta(r.revisadoEn)}`}>
-              Revisada el {fechaExacta(r.revisadoEn)} · {tiempoDesde(r.revisadoEn)}
-            </span>
-          )}
-          {!r.revisadoEn && <span className="cp-revisado">Sin revisar todavía</span>}
+      <div className="vp-accordion-header cp-cab" onClick={onToggle} role="button" tabIndex={0}>
+        <div className="cp-cab-fila">
+          <span className="vp-accordion-marca">
+            {r.marca}
+            {r.revisadoEn && (
+              <span className="cp-revisado" title={`Esta marca se revisó el ${fechaExacta(r.revisadoEn)}`}>
+                Revisada el {fechaExacta(r.revisadoEn)} · {tiempoDesde(r.revisadoEn)}
+              </span>
+            )}
+            {!r.revisadoEn && <span className="cp-revisado">Sin revisar todavía</span>}
+          </span>
+          <div className="cp-cab-acciones">
+            <button
+              className="regen-btn cp-revisar-btn"
+              onClick={e => { e.stopPropagation(); onRevisar(); }}
+              disabled={ocupado}
+              title="Volver a leer los precios de esta marca en las dos webs"
+            >
+              {revisando ? "Revisando…" : "Revisar"}
+            </button>
+            <button
+              className="regen-btn"
+              disabled={r.comparaciones.length === 0}
+              onClick={e => { e.stopPropagation(); descargarPdf(r, descuento, cupon).catch(err => alert("No se pudo crear el PDF: " + err)); }}
+              title="Descargar el informe de esta marca en PDF"
+            >
+              PDF
+            </button>
+            <button
+              className="regen-btn"
+              disabled={r.comparaciones.length === 0}
+              onClick={e => { e.stopPropagation(); descargarExcel(r, descuento, cupon).catch(err => alert("No se pudo crear el Excel: " + err)); }}
+              title="Descargar el informe de esta marca en Excel"
+            >
+              Excel
+            </button>
+            <ParaMarca r={r} descuento={descuento} cupon={cupon} />
+            {confirmarBorrar
+              ? <button className="vp-delete-btn cp-borrar-confirmar" onClick={e => { e.stopPropagation(); onBorrar(); }} onBlur={() => setConfirmarBorrar(false)} autoFocus>¿Quitar marca?</button>
+              : <button className="vp-delete-btn" title="Quitar esta marca" onClick={e => { e.stopPropagation(); setConfirmarBorrar(true); }}>×</button>}
+            <span className="vp-chevron">{expandido ? "▲" : "▼"}</span>
+          </div>
+        </div>
+        <div className="cp-cab-fila cp-cab-datos">
           <label className="cp-dto" title="Descuento autorizado sobre el PVP. Puedes cambiarlo a mano" onClick={e => e.stopPropagation()}>
             Dto. autorizado
             <input
@@ -411,8 +446,6 @@ function MarcaBloque({
             %
             {descuento == null && <span className="cp-dto-fuente cp-suave-txt">sin límite</span>}
           </label>
-        </span>
-        <div className="vp-accordion-right">
           {masCaro.length > 0 && (
             <span className="vp-pill vp-pill-nuevo">{masCaro.length} caro{masCaro.length !== 1 ? "s" : ""}</span>
           )}
@@ -426,35 +459,6 @@ function MarcaBloque({
           <span className="vp-accordion-count">
             {r.comparaciones.length} comparados · {soloEllosReal.length} solo ellos
           </span>
-          <button
-            className="regen-btn cp-revisar-btn"
-            onClick={e => { e.stopPropagation(); onRevisar(); }}
-            disabled={ocupado}
-            title="Volver a leer los precios de esta marca en las dos webs"
-          >
-            {revisando ? "Revisando…" : "Revisar"}
-          </button>
-          <button
-            className="regen-btn"
-            disabled={r.comparaciones.length === 0}
-            onClick={e => { e.stopPropagation(); descargarPdf(r, descuento, cupon).catch(err => alert("No se pudo crear el PDF: " + err)); }}
-            title="Descargar el informe de esta marca en PDF"
-          >
-            PDF
-          </button>
-          <button
-            className="regen-btn"
-            disabled={r.comparaciones.length === 0}
-            onClick={e => { e.stopPropagation(); descargarExcel(r, descuento, cupon).catch(err => alert("No se pudo crear el Excel: " + err)); }}
-            title="Descargar el informe de esta marca en Excel"
-          >
-            Excel
-          </button>
-          <ParaMarca r={r} descuento={descuento} cupon={cupon} />
-          {confirmarBorrar
-            ? <button className="vp-delete-btn cp-borrar-confirmar" onClick={e => { e.stopPropagation(); onBorrar(); }} onBlur={() => setConfirmarBorrar(false)} autoFocus>¿Quitar marca?</button>
-            : <button className="vp-delete-btn" title="Quitar esta marca" onClick={e => { e.stopPropagation(); setConfirmarBorrar(true); }}>×</button>}
-          <span className="vp-chevron">{expandido ? "▲" : "▼"}</span>
         </div>
       </div>
 

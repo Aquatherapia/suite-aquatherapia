@@ -1891,3 +1891,22 @@ label { color: #3f3f46; font-weight: 500; font-size: 13px; }
   .ct-lista li { flex-wrap: wrap; gap: 4px 12px; }
   .ct-dom { flex-basis: 100%; }
 }
+
+/* Cabecera de cada marca (comparadores): arriba nombre y botones, debajo dto. autorizado y avisos */
+.vp-accordion-header.cp-cab { flex-direction: column; align-items: stretch; gap: 8px; padding: 14px 0; }
+.cp-cab-fila { display: flex; align-items: center; gap: 8px 16px; min-width: 0; }
+.cp-cab .vp-accordion-marca { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 600; }
+.cp-cab .cp-revisado { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-cab-acciones { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.cp-cab-acciones .regen-btn { padding: 5px 12px; font-size: 13px; white-space: nowrap; }
+.cp-cab-acciones .vp-delete-btn { margin-left: 4px; }
+.cp-cab-datos { flex-wrap: wrap; gap: 6px 8px; }
+.cp-cab-datos .cp-dto { margin: 0 6px 0 0; font-size: 12px; white-space: nowrap; }
+.cp-cab-datos .vp-accordion-count { margin-left: 4px; white-space: nowrap; }
+@media (max-width: 900px) {
+  .cp-cab > .cp-cab-fila:first-child { flex-wrap: wrap; }
+  .cp-cab .vp-accordion-marca { flex-basis: 100%; }
+  .cp-cab .cp-revisado { white-space: normal; }
+  .cp-cab-acciones { flex-wrap: wrap; flex: 1 1 100%; }
+  .cp-cab-acciones .vp-chevron { margin-left: auto; }
+}
