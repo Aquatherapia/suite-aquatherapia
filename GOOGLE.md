@@ -15,7 +15,7 @@ La Suite usa una sola cuenta de Google (la que gestiona las fichas y tiene acces
    - Merchant API (para «Comparar con la competencia»: visibilidad frente a la competencia de Merchant Center)
    - My Business Account Management API, My Business Business Information API, Business Profile Performance API y Google My Business API
 3. **Pedir acceso a la API de Perfil de Empresa**: formulario «Business Profile API access» (https://support.google.com/business/contact/api_default), con el número del proyecto. Sin aprobación, las APIs de fichas tienen cuota 0. Search Console y Analytics funcionan sin esperar.
-4. **Pantalla de consentimiento de OAuth**: tipo **Interno** si la cuenta es de Google Workspace (no caduca y no hay que verificar). Si es una cuenta @gmail.com, tipo Externo y **publicar la app** («En producción»): en modo Prueba Google corta el permiso a los 7 días.
+4. **Pantalla de consentimiento de OAuth** (Google Auth Platform): la cuenta no es de Google Workspace, así que el público es **Externo** y hay que pulsar **Publicar aplicación** en «Público»; en modo Prueba Google corta el permiso a los 7 días. Al conectar sale el aviso de «app no verificada»: Configuración avanzada → Ir a Suite Aquatherapia.
 5. **Credenciales → Crear credenciales → ID de cliente de OAuth → Aplicación web**. URI de redirección autorizado: `https://suite-aquatherapia.vercel.app/api/google/callback` (y `http://localhost:3000/api/google/callback` para local).
 6. **Vercel → Settings → Environment Variables**: `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`. Volver a desplegar.
 7. En la Suite, **Conexión con Google → Conectar con Google**, aceptar los permisos y elegir la ficha, la propiedad de Search Console y la de GA4 de cada negocio.
@@ -25,3 +25,7 @@ Search Console: 1.200 consultas/min. GA4 Data API: 200.000 tokens/día por propi
 
 ## Usar la conexión desde otro apartado
 `app/_google/cliente.ts` exporta `tokenDeAcceso()` (token vigente, se renueva solo) y `llamarGoogle(api, url, { method, body })`, que añade el token y traduce los errores. Si se añade un permiso nuevo a `SCOPES`, hay que volver a conectar la cuenta.
+
+## Estado (13/11/2026)
+- Proyecto de Google Cloud: **Suite Aquatherapia** (hay otro, «latienda», sin usar).
+- Acceso a la API de Perfil de Empresa pedido el 13/11: caso 5-6041000041956, de 7 a 10 días hábiles.
