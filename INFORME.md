@@ -17,6 +17,8 @@ Una suite de herramientas con IA para latiendadecosmeticos.com, construida con N
 10. **Revisar fichas de nuestra web** — Cada mañana revisa todas las fichas de latiendadecosmeticos.com y saca las que tienen algún problema (precio, EAN, descripción, meta, desactivadas que siguen en Google), con Excel
 11. **Margen de cada producto** — El margen de todos los productos de la web sacado del feed (sin subir nada): por marca y por producto, con filtros (marca, pierden dinero, margen bajo, sin coste, muy alto), orden y Excel
 
+12. **Google: datos, reseñas y posts** — Conectada con la API de Google: **Datos de Google** (`/datos-google`) con la ficha, Search Console y GA4 de cada negocio; las reseñas reales se responden y publican desde «Responder reseñas»; los posts se publican en la ficha. Configuración en `GOOGLE.md`; conexión en `/conexion-google`.
+
 **En producción:** https://suite-aquatherapia.vercel.app/
 **Repositorio:** GitHub `Aquatherapia/suite-aquatherapia` conectado a Vercel (push a `main` = deploy automático).
 
