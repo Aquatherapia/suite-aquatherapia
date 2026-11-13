@@ -90,3 +90,15 @@ export async function competidoresDeGoogle(cuenta: string): Promise<{ propuestas
     .sort((a, b) => b.coincidencia - a.coincidencia || a.rank - b.rank);
   return { propuestas, avisos };
 }
+
+// Cuentas de Merchant Center a las que tiene acceso la cuenta de Google conectada, para no tener que buscar el número
+export async function cuentasMerchant(): Promise<{ id: string; nombre: string }[]> {
+  type R = { accounts?: { name?: string; accountId?: string; accountName?: string }[]; nextPageToken?: string };
+  let data: R;
+  try { data = await llamarGoogle<R>("merchant", "https://merchantapi.googleapis.com/accounts/v1beta/accounts?pageSize=250"); }
+  catch (e) {
+    if (!/404|not found|JSON|Unexpected token/i.test(e instanceof Error ? e.message : "")) throw e;
+    data = await llamarGoogle<R>("merchant", "https://merchantapi.googleapis.com/accounts/v1/accounts?pageSize=250");
+  }
+  return (data.accounts ?? []).map(a => ({ id: String(a.accountId ?? a.name?.split("/").pop() ?? ""), nombre: a.accountName ?? "" })).filter(a => a.id);
+}

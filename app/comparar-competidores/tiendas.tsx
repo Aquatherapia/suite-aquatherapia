@@ -67,15 +67,15 @@ export default function Tiendas({ ajustes, merchantId, propuestas, enviar }: {
           <h3 className="ct-h">Competidores que propone Google</h3>
           <p className="ct-nota">Sale del informe de Merchant Center «Visibilidad frente a la competencia»: las webs que aparecen con nosotros en Google Shopping en España, en cosmética y cuidado personal (Google no lo da por marca). Hace falta tener la Suite conectada en <a href="/conexion-google">Conexión con Google</a>.</p>
           <div className="ct-fila">
-            <input value={cuenta} onChange={e => setCuenta(e.target.value)} placeholder="Nº de cuenta de Merchant Center" inputMode="numeric" />
-            <button className="regen-btn" disabled={!cuenta.trim() || !!ocupado}
+            <input value={cuenta} onChange={e => setCuenta(e.target.value)} placeholder="Nº de cuenta de Merchant Center (si lo dejas vacío, se busca solo)" inputMode="numeric" />
+            <button className="regen-btn" disabled={!!ocupado}
               onClick={() => hacer("google", { action: "buscar-competidores", merchantId: cuenta })}>
               {ocupado === "google" ? "Preguntando a Google…" : propuestas ? "Volver a buscar" : "Buscar competidores"}
             </button>
           </div>
           {propuestas && (
             <>
-              <p className="ct-nota">Búsqueda del {fecha(propuestas.fecha)} · {propuestas.lista.length} webs. «Coincide» es en qué parte de nuestras búsquedas sale también; «Por encima», en cuántas de esas sale más arriba que nosotros.</p>
+              <p className="ct-nota">Búsqueda del {fecha(propuestas.fecha)}{merchantId ? ` en la cuenta ${merchantId}` : ""} · {propuestas.lista.length} webs. «Coincide» es en qué parte de nuestras búsquedas sale también; «Por encima», en cuántas de esas sale más arriba que nosotros.</p>
               {propuestas.lista.length === 0 && <p className="ct-nota">Google no ha dado competidores (puede que aún no haya datos suficientes en la cuenta).</p>}
               <ul className="ct-lista">
                 {propuestas.lista.map(p => {
