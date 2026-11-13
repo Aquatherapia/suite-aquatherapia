@@ -1914,3 +1914,11 @@ label { color: #3f3f46; font-weight: 500; font-size: 13px; }
   .cp-cab-acciones { flex-wrap: wrap; flex: 1 1 100%; }
   .cp-cab-acciones .vp-chevron { margin-left: auto; }
 }
+
+/* Comparar con la competencia: nosotros resaltados y las 5 tiendas más baratas */
+.cc-tabla .cc-g-top { background: #f1f5f9; color: var(--ink); }
+.cc-tabla th.cc-h-top { background: #334155; color: #fff; }
+.cc-tabla td.cc-nos { background: #eef5fc; }
+.cc-tabla td.cc-nos-fin { box-shadow: inset -2px 0 0 #1b75bb; }
+.cc-tabla td.cc-top { min-width: 92px; }
+.cc-top-tienda { display: block; font-size: 11px; font-weight: 600; white-space: nowrap; margin-bottom: 1px; }
