@@ -331,10 +331,25 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
   const estados = r?.competidores ?? {};
   return (
     <div className="vp-accordion">
-      <div className="vp-accordion-header" onClick={onToggle} role="button" tabIndex={0}>
-        <span className="vp-accordion-marca">
-          {marca.nombre}
-          <span className="cp-revisado">{r ? `Revisada el ${fechaExacta(r.revisadoEn)}` : "Sin revisar todavía"}</span>
+      <div className="vp-accordion-header cp-cab" onClick={onToggle} role="button" tabIndex={0}>
+        <div className="cp-cab-fila">
+          <span className="vp-accordion-marca">
+            {marca.nombre}
+            <span className="cp-revisado">{r ? `Revisada el ${fechaExacta(r.revisadoEn)}` : "Sin revisar todavía"}</span>
+          </span>
+          <div className="cp-cab-acciones">
+            <button className="regen-btn cp-revisar-btn" disabled={ocupado} onClick={e => { e.stopPropagation(); onRevisar(); }} title="Leer los precios de esta marca en todas las webs">
+              {revisando ? "Revisando…" : "Revisar"}
+            </button>
+            <button className="regen-btn" disabled={!conCompetencia.length} title="Descargar el informe de esta marca en PDF"
+              onClick={e => { e.stopPropagation(); descargarPdf(marca.nombre, conCompetencia, estados, descuento, cuponMarca).catch(err => alert("No se pudo crear el PDF: " + err)); }}>PDF</button>
+            <button className="regen-btn" disabled={!conCompetencia.length} title="Descargar el informe de esta marca en Excel"
+              onClick={e => { e.stopPropagation(); descargarExcel(marca.nombre, conCompetencia, estados, descuento, cuponMarca).catch(err => alert("No se pudo crear el Excel: " + err)); }}>Excel</button>
+            <ParaMarca marca={marca.nombre} filas={conCompetencia} descuento={descuento} />
+            <span className="vp-chevron">{expandido ? "▲" : "▼"}</span>
+          </div>
+        </div>
+        <div className="cp-cab-fila cp-cab-datos">
           <label className="cp-dto" title="Descuento autorizado sobre el PVP. Puedes cambiarlo a mano (vacío = el de Boardfy). Es el mismo que en el comparador de Cosméticos24h" onClick={e => e.stopPropagation()}>
             Dto. autorizado
             <input
@@ -349,21 +364,10 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
             %
             {descuento == null && <span className="cp-suave-txt">sin límite</span>}
           </label>
-        </span>
-        <div className="vp-accordion-right">
           {caros > 0 && <span className="vp-pill vp-pill-nuevo" title="Productos que algún competidor vende más barato que nosotros">{caros} más caros</span>}
           {bajoAut > 0 && <span className="vp-pill cp-pill-minimo" title={`La competencia vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento autorizado`}>{bajoAut} más allá de nuestro dto. autorizado</span>}
           {pvpDist > 0 && <span className="vp-pill cp-pill-pvp" title="El PVP sin descuento no coincide con el de algún competidor: tarifa sin actualizar o hay que revisar nuestro precio">{pvpDist} PVP distinto{pvpDist !== 1 ? "s" : ""}</span>}
           {r && <span className="vp-accordion-count">{conCompetencia.length} con competencia · {filas.length} nuestros</span>}
-          <button className="regen-btn cp-revisar-btn" disabled={ocupado} onClick={e => { e.stopPropagation(); onRevisar(); }} title="Leer los precios de esta marca en todas las webs">
-            {revisando ? "Revisando…" : "Revisar"}
-          </button>
-          <button className="regen-btn" disabled={!conCompetencia.length} title="Descargar el informe de esta marca en PDF"
-            onClick={e => { e.stopPropagation(); descargarPdf(marca.nombre, conCompetencia, estados, descuento, cuponMarca).catch(err => alert("No se pudo crear el PDF: " + err)); }}>PDF</button>
-          <button className="regen-btn" disabled={!conCompetencia.length} title="Descargar el informe de esta marca en Excel"
-            onClick={e => { e.stopPropagation(); descargarExcel(marca.nombre, conCompetencia, estados, descuento, cuponMarca).catch(err => alert("No se pudo crear el Excel: " + err)); }}>Excel</button>
-          <ParaMarca marca={marca.nombre} filas={conCompetencia} descuento={descuento} />
-          <span className="vp-chevron">{expandido ? "▲" : "▼"}</span>
         </div>
       </div>
       {expandido && (
