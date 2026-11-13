@@ -267,6 +267,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (body.action === "revisar") {
+    // Si Google ya propuso tiendas y aún no se han añadido solas, se añaden antes de revisar
+    if (config.propuestas?.lista.length && !(config.competidores?.extra ?? []).some(c => c.auto)) {
+      try { await anadirPropuestas(config); await guardarConfig(config); } catch { /* se revisa con las que hay */ }
+    }
     const inicio = Date.now();
     const limite = inicio + 200_000;
     const c24 = await leerC24();

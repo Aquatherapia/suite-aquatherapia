@@ -61,7 +61,7 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
   const dto = descuento != null ? `${String(descuento).replace(".", ",")} %` : "";
   // Por producto, las tiendas que lo venden ordenadas por precio (las 5 más baratas)
   const ranking = (f: FilaComp) => cols.filter(c => f.precios[c.id]).sort((a, b) => f.precios[a.id].precio - f.precios[b.id].precio).slice(0, TOP);
-  const nTop = Math.max(1, ...filas.map(f => ranking(f).length));
+  const nTop = TOP; // siempre 5 columnas, aunque alguna quede vacía
   return (
     <div className="cp-informe-scroll">
       <table className="cp-informe cc-tabla">
@@ -69,7 +69,7 @@ function TablaCompetencia({ filas, estados, descuento, cupon }: { filas: FilaCom
           <tr className="cp-informe-grupos">
             <th colSpan={2}></th>
             <th colSpan={3} className="cp-g-nos">La Tienda de Cosméticos</th>
-            <th colSpan={nTop} className="cc-g-top">Las {nTop} tiendas más baratas</th>
+            <th colSpan={nTop} className="cc-g-top">Las {nTop} tiendas más baratas (aunque sean más caras que nosotros)</th>
             <th colSpan={4} className="cp-g-fin">Comparación</th>
           </tr>
           <tr>
