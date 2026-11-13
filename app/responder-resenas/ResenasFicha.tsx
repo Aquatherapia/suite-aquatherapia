@@ -165,7 +165,7 @@ export default function ResenasFicha({ negocio, setNegocio }: { negocio: Negocio
               <Estrellas n={Math.round(resumen.media ?? 0)} /> media
             </span>
             <span>
-              <b>{resumen.total.toLocaleString("es-ES")}</b>reseñas
+              <b>{resumen.total.toLocaleString("es-ES", { useGrouping: "always" } as Intl.NumberFormatOptions)}</b>reseñas
             </span>
             <span>
               <b>{sinResponder}</b>sin responder{siguiente ? " (de las cargadas)" : ""}
