@@ -5,7 +5,7 @@ import { emparejarPorNombre } from "./emparejar-nombre";
 import { emparejarConIa } from "./emparejar-ia";
 import { motivoSinPareja } from "./motivo";
 import { BASE, COLORES_EXTRA, COMPETIDORES, ponerCompetidores, type AjustesCompetidores, type Competidor, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
-import { competidoresDeGoogle, type Propuesta } from "./merchant";
+import { competidoresDeGoogle, cuentasMerchant, type Propuesta } from "./merchant";
 import { ErrorGoogle } from "../../_google/cliente";
 import { buscarListado, detectarPlataforma, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
 
@@ -157,10 +157,15 @@ export async function POST(req: NextRequest) {
 
   // Competidores que propone Google (Merchant Center): webs que salen con nosotros en Google Shopping
   if (body.action === "buscar-competidores") {
-    const cuenta = String(body.merchantId ?? config.merchantId ?? "").replace(/\D/g, "");
-    if (!cuenta) return NextResponse.json({ error: "Pon el número de cuenta de Merchant Center (arriba a la derecha en merchants.google.com)." });
-    config.merchantId = cuenta;
+    let cuenta = String(body.merchantId || config.merchantId || "").replace(/\D/g, "");
     try {
+      // Sin número: se toma de la cuenta de Google conectada (la de La Tienda si hay varias)
+      if (!cuenta) {
+        const cuentas = await cuentasMerchant();
+        if (!cuentas.length) return NextResponse.json({ error: "La cuenta de Google conectada no tiene acceso a ningún Merchant Center. Conecta con un usuario que lo tenga en «Conexión con Google», o pon el número a mano." });
+        cuenta = (cuentas.find(c => /tienda|cosm/i.test(c.nombre)) ?? cuentas[0]).id;
+      }
+      config.merchantId = cuenta;
       const { propuestas, avisos } = await competidoresDeGoogle(cuenta);
       config.propuestas = { fecha: new Date().toISOString(), lista: propuestas.slice(0, 40), avisos };
     } catch (e) {
