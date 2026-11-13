@@ -46,6 +46,44 @@ function resumen(filas: FilaComp[], calc: CalcFila[], descuento: number | null):
 
 const cabeceraCupon = (c: Competidor, cupon: CuponComp) => c.id === "c24" && cupon ? `PRECIO FINAL (${cupon.codigo ?? "CUPÓN"} -${num(cupon.pct)} %)` : "PRECIO FINAL";
 
+// Hoja «Resumen», con la forma del informe de Boardfy: un producto por fila y una columna por tienda con su precio
+function hojaResumen(wb: ExcelJS.Workbook, filas: FilaComp[], calc: CalcFila[], descuento: number | null) {
+  const ws = wb.addWorksheet("Resumen");
+  ws.views = [{ state: "frozen", xSplit: 2, ySplit: 1 }];
+  // Tiendas de más a menos productos encontrados
+  const tiendas = COMPETIDORES.map(c => ({ c, n: filas.filter(f => f.precios[c.id]).length })).filter(x => x.n > 0).sort((a, b) => b.n - a.n).map(x => x.c);
+  const cab = ["EAN", "NOMBRE", "PVP", descuento != null ? `PVP -${num(descuento)}%` : "PVP CON DTO.", "NUESTRO PRECIO", "TIENDA MÁS BARATA", ...tiendas.map(c => c.nombre)];
+  const r1 = ws.getRow(1);
+  cab.forEach((t, i) => {
+    const c = r1.getCell(i + 1); c.value = t;
+    c.font = { name: "Calibri", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + (i < 6 ? AZUL : hex(tiendas[i - 6].color)) } };
+    c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  });
+  r1.height = 30;
+  ws.getColumn(1).width = 15; ws.getColumn(2).width = 60; ws.getColumn(6).width = 24;
+  for (let i = 3; i <= cab.length; i++) if (i !== 6) ws.getColumn(i).width = 13;
+  filas.forEach((f, i) => {
+    const k = calc[i], row = ws.getRow(2 + i);
+    row.getCell(1).value = f.ean ?? "";
+    row.getCell(2).value = { text: f.nombre, hyperlink: f.url };
+    row.getCell(2).font = { name: "Calibri", size: 10, color: { argb: "FF" + AZUL } };
+    row.getCell(3).value = f.pvp; row.getCell(3).numFmt = EUROS;
+    row.getCell(4).value = k.limite ?? "-"; if (k.limite != null) row.getCell(4).numFmt = EUROS;
+    row.getCell(5).value = f.precio; row.getCell(5).numFmt = EUROS;
+    row.getCell(6).value = !k.mb ? "-" : k.masBarato === "La Tienda de Cosméticos" || k.masBarato === "Igual" ? k.masBarato : COMPETIDORES.find(c => c.id === k.mb!.id)?.nombre ?? k.masBarato;
+    row.getCell(6).font = { name: "Calibri", size: 10, bold: true };
+    tiendas.forEach((c, j) => {
+      const p = f.precios[c.id]; if (!p) return;
+      const cel = row.getCell(7 + j), bajo = k.comp[c.id]?.bajoMinimo;
+      cel.value = p.precio; cel.numFmt = EUROS; // número, para poder ordenar y calcular (los enlaces están en la hoja de detalle)
+      cel.font = { name: "Calibri", size: 10, bold: k.mb?.id === c.id, color: { argb: "FF" + (bajo ? BAJO : TEXTO) } };
+      if (bajo) cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + BAJO_FONDO } };
+    });
+  });
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1 + filas.length, column: cab.length } };
+}
+
 // ── Informe de la marca en Excel ───────────────────────────────────────
 export async function descargarExcel(marca: string, filasIn: FilaComp[], _estados: Record<string, EstadoComp>, descuento: number | null, cupon: CuponComp, fecha = new Date()) {
   const { default: Excel } = await import("exceljs");
@@ -54,7 +92,8 @@ export async function descargarExcel(marca: string, filasIn: FilaComp[], _estado
   const cols = columnasDe(filas, {});
   const wb = new Excel.Workbook();
   wb.creator = "La Tienda de Cosméticos";
-  const ws = wb.addWorksheet(marca.replace(/[\\/?*[\]:]/g, " ").slice(0, 31));
+  hojaResumen(wb, filas, calc, descuento);
+  const ws = wb.addWorksheet(("Detalle " + marca.replace(/[\\/?*[\]:]/g, " ")).slice(0, 31));
   ws.views = [{ showGridLines: false, state: "frozen", xSplit: 2, ySplit: 6 }];
   ws.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
   const fuente = (extra: Partial<ExcelJS.Font> = {}): Partial<ExcelJS.Font> => ({ name: "Calibri", size: 10, color: { argb: "FF" + TEXTO }, ...extra });
