@@ -145,6 +145,9 @@ async function cuponDetectado(d: { pct: number; codigo?: string; directo: boolea
   return { pct: d?.pct ?? null, codigo: d?.codigo, directo: d?.directo, detectadoEn: ahora, desde: d ? (mismo ? antes!.desde ?? ahora : ahora) : undefined, hasta: mismo ? antes!.hasta : undefined, promo };
 }
 
+// Un cupón detectado sin código y sin «en tu carrito» no es un cupón (antes se colaba «Hasta el 50% de descuento» del Black Friday)
+const cuponValido = (c?: Cupon): Cupon | undefined => !c || c.pct == null || c.manual || c.codigo || c.directo ? c : { pct: null };
+
 function configVacia(): Config {
   return { marcas: [], ultimaRevision: null, resultados: [], excluidos: {}, mapeos: {}, verificados: {}, nombres: {}, eanVariantes: {} };
 }
@@ -154,7 +157,7 @@ async function leerConfig(): Promise<Config> {
     const { kv } = await import("@vercel/kv");
     const data = await kv.get<Config>(KV_KEY);
     if (!data) return configVacia();
-    return { ...configVacia(), ...data, excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {}, verificados: data.verificados ?? {}, nombres: data.nombres ?? {}, eanVariantes: data.eanVariantes ?? {} };
+    return { ...configVacia(), ...data, cupon: cuponValido(data.cupon), excluidos: data.excluidos ?? {}, mapeos: data.mapeos ?? {}, verificados: data.verificados ?? {}, nombres: data.nombres ?? {}, eanVariantes: data.eanVariantes ?? {} };
   }
   try {
     const parsed = JSON.parse(await fs.readFile(CONFIG_PATH, "utf-8"));
@@ -167,7 +170,7 @@ async function leerConfig(): Promise<Config> {
       verificados: parsed.verificados ?? {},
       nombres: parsed.nombres ?? {},
       eanVariantes: parsed.eanVariantes ?? {},
-      cupon: parsed.cupon,
+      cupon: cuponValido(parsed.cupon),
     };
   } catch {
     return configVacia();
@@ -229,14 +232,21 @@ async function leerPromoCupon(codigo: string): Promise<PromoCupon | null> {
 async function detectarCupon(): Promise<{ pct: number; codigo?: string; directo: boolean } | null> {
   const html = await fetchTexto("https://cosmeticos24h.com/");
   const texto = html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
-  const m = texto.match(/(\d{1,2}(?:[.,]\d)?)\s*%\s*de\s+descuento[!¡\s]*([A-ZÑ0-9]{4,})?/i);
-  if (!m) return null;
-  const pct = parseFloat(m[1].replace(",", "."));
-  if (!(pct > 0 && pct <= 50)) return null;
-  // «directo en tu carrito»: se aplica solo, sin que el cliente tenga que escribir el código
-  const despues = texto.slice(m.index ?? 0, (m.index ?? 0) + m[0].length + 80);
-  const directo = /directo\s+en\s+(?:tu\s+|el\s+)?carrito|autom[aá]tic/i.test(despues);
-  return { pct, codigo: m[2] && /\d/.test(m[2]) ? m[2] : undefined, directo };
+  // Solo cuenta un cupón de carrito: con su código (OTOÑO5) o que diga que va en el carrito.
+  // «Hasta el 50% de descuento Black Friday» es una campaña con rebajas distintas por marca, no un cupón para todo.
+  for (const m of texto.matchAll(/(\d{1,2}(?:[.,]\d)?)\s*%\s*de\s+descuento[!¡\s]*([A-ZÑ0-9]{4,})?/gi)) {
+    const i = m.index ?? 0;
+    if (/(hasta|hasta\s+el|hasta\s+un)\s*$/i.test(texto.slice(Math.max(0, i - 12), i))) continue;
+    const pct = parseFloat(m[1].replace(",", "."));
+    if (!(pct > 0 && pct <= 50)) continue;
+    const codigo = m[2] && /\d/.test(m[2]) ? m[2] : undefined;
+    // «directo en tu carrito»: se aplica solo, sin que el cliente tenga que escribir el código
+    const despues = texto.slice(i, i + m[0].length + 80);
+    const directo = /directo\s+en\s+(?:tu\s+|el\s+)?carrito|autom[aá]tic/i.test(despues);
+    if (!codigo && !directo && !/carrito|cup[oó]n|c[oó]digo/i.test(despues)) continue;
+    return { pct, codigo, directo };
+  }
+  return null;
 }
 
 // Lee el precio (JSON-LD) de una ficha de la tienda propia
