@@ -1,7 +1,7 @@
 // Competidores que propone Google: el informe «Visibilidad frente a la competencia» de Merchant Center
 // (Merchant API, tabla competitive_visibility_competitor_view). Google lo da por país y categoría de producto,
 // no por marca: se piden las categorías de cosmética y se juntan las webs que salen.
-import { ErrorGoogle, llamarGoogle } from "../../_google/cliente";
+import { ErrorGoogle, leerConexion, llamarGoogle } from "../../_google/cliente";
 
 // Categorías de Google (taxonomía de productos) en las que vendemos
 export const CATEGORIAS: { id: number; nombre: string }[] = [
@@ -49,8 +49,32 @@ async function buscar(cuenta: string, query: string): Promise<Fila[]> {
   return out;
 }
 
-// Webs que compiten con nosotros en Google Shopping (España, últimos 30 días), de más a menos peligrosas
+// Registro único del proyecto de Google Cloud de la Suite en la cuenta de Merchant Center (lo exige la Merchant API).
+// Lo tiene que hacer un usuario administrador de la cuenta. Google tarda hasta 5 minutos en dejar pasar las llamadas.
+async function registrarSuite(cuenta: string) {
+  const email = (await leerConexion())?.email;
+  try {
+    await llamarGoogle("merchant", `https://merchantapi.googleapis.com/accounts/v1/accounts/${cuenta}/developerRegistration:registerGcp`, { method: "POST", body: email ? { developerEmail: email } : {} });
+  } catch (e) {
+    const t = e instanceof Error ? e.message : String(e);
+    if (/ALREADY_REGISTERED|already registered/i.test(t)) return;
+    if (/permiso|PERMISSION|ADMIN/i.test(t)) throw new ErrorGoogle("Para registrar la Suite en Merchant Center, la cuenta de Google conectada tiene que ser administradora de ese Merchant Center. Conecta con un usuario administrador en «Conexión con Google» y vuelve a pulsar.", 403);
+    throw new ErrorGoogle(`No se ha podido registrar la Suite en Merchant Center: ${t}`, 502);
+  }
+}
+
+// Webs que compiten con nosotros en Google Shopping (España, últimos 30 días), de más a menos peligrosas.
+// La primera vez la Merchant API pide registrar la Suite en la cuenta: se registra sola y se pide volver a probar en unos minutos.
 export async function competidoresDeGoogle(cuenta: string): Promise<{ propuestas: Propuesta[]; avisos: string[] }> {
+  try { return await competidoresDeGoogleSinRegistro(cuenta); }
+  catch (e) {
+    if (!(e instanceof Error && /^SIN_REGISTRAR/.test(e.message))) throw e;
+    await registrarSuite(cuenta.replace(/\D/g, ""));
+    throw new ErrorGoogle("Era la primera vez: he registrado la Suite en tu Merchant Center, como pide Google. Tarda unos 5 minutos en activarse; vuelve a pulsar «Buscar competidores» pasado ese rato.", 409);
+  }
+}
+
+async function competidoresDeGoogleSinRegistro(cuenta: string): Promise<{ propuestas: Propuesta[]; avisos: string[] }> {
   const id = cuenta.replace(/\D/g, "");
   if (!id) throw new ErrorGoogle("Falta el número de cuenta de Merchant Center.", 400);
   const porDominio = new Map<string, Propuesta>();
