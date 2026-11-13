@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { BASE, COMPETIDORES, type AjustesCompetidores } from "./competidores";
 
-export type PropuestaGoogle = { dominio: string; web: string; categorias: string[]; rank: number; coincidencia: number; porEncima: number; visibilidad: number };
+export type PropuestaGoogle = { dominio: string; web: string; categorias: string[]; rank: number; coincidencia: number; porEncima: number; visibilidad: number; anadida?: boolean; noLegible?: boolean };
 
 const pct = (n: number) => `${Math.round(n * 100)} %`;
 const dominioDe = (web: string) => { try { return new URL(web).host.toLowerCase().replace(/^www\./, ""); } catch { return ""; } };
@@ -65,7 +65,7 @@ export default function Tiendas({ ajustes, merchantId, propuestas, enviar }: {
           <p className="ct-nota">Se pueden leer solas las tiendas hechas con Shopify, WooCommerce o PrestaShop. Al añadirla, pulsa «Revisar» en cada marca y su listado se busca solo.</p>
 
           <h3 className="ct-h">Competidores que propone Google</h3>
-          <p className="ct-nota">Sale del informe de Merchant Center «Visibilidad frente a la competencia»: las webs que aparecen con nosotros en Google Shopping en España, en cosmética y cuidado personal (Google no lo da por marca). Hace falta tener la Suite conectada en <a href="/conexion-google">Conexión con Google</a>.</p>
+          <p className="ct-nota">Al buscar, las que se pueden leer se añaden solas (hasta 15) y en cada marca la tabla enseña las 5 más baratas. Sale del informe de Merchant Center «Visibilidad frente a la competencia»: las webs que aparecen con nosotros en Google Shopping en España, en cosmética y cuidado personal (Google no lo da por marca). Hace falta tener la Suite conectada en <a href="/conexion-google">Conexión con Google</a>.</p>
           <div className="ct-fila">
             <input value={cuenta} onChange={e => setCuenta(e.target.value)} placeholder="Nº de cuenta de Merchant Center (si lo dejas vacío, se busca solo)" inputMode="numeric" />
             <button className="regen-btn" disabled={!!ocupado}
@@ -79,13 +79,13 @@ export default function Tiendas({ ajustes, merchantId, propuestas, enviar }: {
               {propuestas.lista.length === 0 && <p className="ct-nota">Google no ha dado competidores (puede que aún no haya datos suficientes en la cuenta).</p>}
               <ul className="ct-lista">
                 {propuestas.lista.map(p => {
-                  const esta = yaEstan.has(p.dominio);
+                  const esta = [...yaEstan].some(k => k === p.dominio || k.endsWith(`.${p.dominio}`) || p.dominio.endsWith(`.${k}`));
                   return (
                     <li key={p.dominio}>
                       <span className="ct-dom"><a href={p.web} target="_blank" rel="noreferrer">{p.dominio}</a>
                         <span className="cp-suave-txt"> · {p.categorias.join(", ")}</span></span>
                       <span className="ct-datos">Coincide {pct(p.coincidencia)} · Por encima {pct(p.porEncima)}</span>
-                      {esta ? <span className="ct-ya">Ya está</span> : (
+                      {esta ? <span className="ct-ya">{p.anadida ? "Añadida sola" : "Ya está"}</span> : p.noLegible ? <span className="ct-ya" title="Su web no es Shopify, WooCommerce ni PrestaShop">No se puede leer</span> : (
                         <button className="regen-btn" disabled={!!ocupado}
                           onClick={() => hacer(`p-${p.dominio}`, { action: "anadir-competidor", web: p.web })}>
                           {ocupado === `p-${p.dominio}` ? "Mirando…" : "Añadir"}

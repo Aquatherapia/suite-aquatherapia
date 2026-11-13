@@ -168,6 +168,7 @@ export async function POST(req: NextRequest) {
       config.merchantId = cuenta;
       const { propuestas, avisos } = await competidoresDeGoogle(cuenta);
       config.propuestas = { fecha: new Date().toISOString(), lista: propuestas.slice(0, 40), avisos };
+      await anadirPropuestas(config);
     } catch (e) {
       await guardarConfig(config);
       return NextResponse.json({ error: e instanceof Error ? e.message : String(e), sinConexion: e instanceof ErrorGoogle && e.status === 401 });
@@ -182,7 +183,7 @@ export async function POST(req: NextRequest) {
     try { web = new URL(/^https?:\/\//.test(String(body.web ?? "").trim()) ? String(body.web).trim() : `https://${String(body.web ?? "").trim()}`).origin; }
     catch { return NextResponse.json({ error: "Esa dirección no es válida. Pon algo como https://tienda.com" }); }
     const dominio = dominioDe(web);
-    const ajustes: AjustesCompetidores = { extra: [...(config.competidores?.extra ?? [])], quitados: [...(config.competidores?.quitados ?? [])] };
+    const ajustes: AjustesCompetidores = { extra: [...(config.competidores?.extra ?? [])], quitados: [...(config.competidores?.quitados ?? [])], descartados: (config.competidores?.descartados ?? []).filter(d => d !== dominio) };
     const yaBase = BASE.find(c => dominioDe(c.web) === dominio);
     if (yaBase) {
       ajustes.quitados = ajustes.quitados!.filter(id => id !== yaBase.id);
@@ -205,10 +206,15 @@ export async function POST(req: NextRequest) {
   // Quitar una tienda de la comparación (las de siempre se pueden volver a poner) o volver a ponerla
   if (body.action === "quitar-competidor" || body.action === "activar-competidor") {
     const id = String(body.id ?? "");
-    const ajustes: AjustesCompetidores = { extra: [...(config.competidores?.extra ?? [])], quitados: [...(config.competidores?.quitados ?? [])] };
+    const ajustes: AjustesCompetidores = { extra: [...(config.competidores?.extra ?? [])], quitados: [...(config.competidores?.quitados ?? [])], descartados: config.competidores?.descartados };
     if (body.action === "activar-competidor") ajustes.quitados = ajustes.quitados!.filter(x => x !== id);
     else if (BASE.some(c => c.id === id)) { if (!ajustes.quitados!.includes(id)) ajustes.quitados!.push(id); }
-    else ajustes.extra = ajustes.extra!.filter(c => c.id !== id);
+    else {
+      // Una añadida que se quita no vuelve a añadirse sola con la próxima búsqueda de Google
+      const quitada = ajustes.extra!.find(c => c.id === id);
+      if (quitada) ajustes.descartados = [...new Set([...(config.competidores?.descartados ?? []), dominioDe(quitada.web)])];
+      ajustes.extra = ajustes.extra!.filter(c => c.id !== id);
+    }
     if (!BASE.some(c => c.id === id) && body.action === "quitar-competidor") {
       // Una tienda añadida que se quita: fuera también sus enlaces y precios guardados
       for (const slug of Object.keys(config.enlaces)) { delete config.enlaces[slug]?.[id]; delete config.auto[slug]?.[id]; }
@@ -369,6 +375,35 @@ async function emparejar(comp: string, tienda: string, suyos: SuProducto[], mios
     }))
     .slice(0, 150);
   return { n: usados.size, sinPareja };
+}
+
+// Las webs que propone Google se añaden solas a la comparación, hasta MAX_AUTO, si se pueden leer
+// (Shopify, WooCommerce o PrestaShop). Las que no, se marcan en la propuesta. Las quitadas a mano no vuelven.
+const MAX_AUTO = 15;
+async function anadirPropuestas(config: Config) {
+  const ajustes: AjustesCompetidores = { extra: [...(config.competidores?.extra ?? [])], quitados: [...(config.competidores?.quitados ?? [])], descartados: [...(config.competidores?.descartados ?? [])] };
+  const conocidos = new Set([...BASE, ...ajustes.extra!].map(c => dominioDe(c.web)));
+  const descartados = new Set(ajustes.descartados);
+  const lista = config.propuestas?.lista ?? [];
+  // tienda.pilar-delgado.com y pilar-delgado.com son la misma tienda
+  const mismo = (a: string, b: string) => a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`);
+  const candidatas = lista.filter(p => ![...conocidos].some(k => mismo(k, p.dominio)) && !descartados.has(p.dominio));
+  let auto = ajustes.extra!.filter(c => c.auto).length;
+  const huecos = Math.max(0, MAX_AUTO - auto);
+  const probadas = await Promise.all(candidatas.slice(0, huecos + 10).map(async p => ({ p, tipo: await detectarPlataforma(p.web) })));
+  for (const { p, tipo } of probadas) {
+    if (!tipo) { p.noLegible = true; continue; }
+    if (auto >= MAX_AUTO) break;
+    const nombre = await nombreDeTienda(p.web);
+    const [color, fondo] = COLORES_EXTRA[ajustes.extra!.length % COLORES_EXTRA.length];
+    let id = p.dominio.replace(/[^a-z0-9]+/g, "-");
+    while ([...BASE, ...ajustes.extra!].some(c => c.id === id)) id += "-2";
+    ajustes.extra!.push({ id, nombre, corto: nombre.length > 16 ? p.dominio : nombre, web: p.web, tipo, color, fondo, extra: true, auto: true });
+    p.anadida = true;
+    auto++;
+  }
+  config.competidores = ajustes;
+  ponerCompetidores(ajustes);
 }
 
 // Productos en los que ahora vamos más caros que algún competidor, y en los que ya no, respecto a la revisión anterior

@@ -34,6 +34,25 @@ function Celda({ className, tip, style, children }: { className?: string; tip?: 
   return <td className={(className ?? "") + (tip ? " cp-tip" : "")} data-tip={tip} style={style}>{children}</td>;
 }
 
+// Las tiendas más baratas en una marca: cuánto más baratas (o caras) que nosotros de media, en los productos que comparten
+function MasBaratas({ filas }: { filas: FilaComp[] }) {
+  const lista = COMPETIDORES.map(c => {
+    const difs = filas.filter(f => f.precios[c.id] && f.precio > 0).map(f => f.precios[c.id].precio / f.precio - 1);
+    return { c, n: difs.length, media: difs.length ? difs.reduce((a, b) => a + b, 0) / difs.length : 0 };
+  }).filter(x => x.n > 0).sort((a, b) => a.media - b.media).slice(0, TOP);
+  if (!lista.length) return null;
+  return (
+    <div className="cc-mas-baratas">
+      <span className="cp-suave-txt">Las más baratas en esta marca, de media frente a nosotros:</span>
+      {lista.map(x => (
+        <span key={x.c.id} className="ct-chip" style={{ color: x.c.color, background: x.c.fondo }} title={`${x.n} producto${x.n !== 1 ? "s" : ""} en común`}>
+          {x.c.nombre} {x.media < -0.0005 ? "−" : x.media > 0.0005 ? "+" : ""}{Math.abs(Math.round(x.media * 1000) / 10).toString().replace(".", ",")} %
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // Cuántas tiendas se enseñan por producto: las más baratas, de menor a mayor precio
 const TOP = 5;
 
@@ -363,6 +382,7 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
         <div className="vp-accordion-content">
           <div className="cc-enlaces">
             <div className="cc-nuestros">Nosotros tenemos <b>{r ? `${r.filas.length} productos` : "—"}</b> de {marca.nombre}{r ? ". Cuántos hemos podido enlazar en cada tienda:" : " (pulsa «Revisar»)."}</div>
+            {r && <MasBaratas filas={r.filas} />}
             <table className="cc-tabla-tiendas">
               <thead><tr><th>Tienda</th><th>Sus productos</th><th>Enlazados con los nuestros</th><th>Cómo se enlazan</th><th>Por qué no se enlazan los demás</th><th title="El enlace a la marca en su web: cámbialo si no es el bueno, o déjalo vacío si no la venden">Enlace de la marca</th></tr></thead>
               <tbody>

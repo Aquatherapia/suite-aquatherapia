@@ -21,6 +21,8 @@ export type Propuesta = {
   coincidencia: number;      // de las búsquedas en las que salimos, en cuántas sale también él (0-1)
   porEncima: number;         // de esas, en cuántas sale por encima de nosotros (0-1)
   visibilidad: number;       // su visibilidad respecto a la nuestra (1 = igual)
+  anadida?: boolean;         // se ha añadido sola a la comparación
+  noLegible?: boolean;       // su web no es Shopify, WooCommerce ni PrestaShop: no se puede leer
 };
 
 type Fila = {
