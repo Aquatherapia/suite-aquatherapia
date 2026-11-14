@@ -7,7 +7,7 @@ import { motivoSinPareja } from "./motivo";
 import { BASE, COLORES_EXTRA, COMPETIDORES, ponerCompetidores, type AjustesCompetidores, type Competidor, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
 import { competidoresDeGoogle, cuentasMerchant, type Propuesta } from "./merchant";
 import { ErrorGoogle } from "../../_google/cliente";
-import { buscarListado, detectarPlataforma, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
+import { buscarListado, detectarPlataforma, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, misProductosPorEan, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
 
 // Leer varias webs a la vez cabe de sobra, pero alguna puede ir lenta: Vercel Hobby permite hasta 300 s
 export const maxDuration = 300;
@@ -264,6 +264,28 @@ export async function POST(req: NextRequest) {
     config.manuales = { ...(config.manuales ?? {}), [slug]: { ...(config.manuales?.[slug] ?? {}), [comp]: lista } };
     await guardarConfig(config);
     return respuesta(config);
+  }
+
+  // Excel de Boardfy: nuestros precios por EAN, las fichas de la competencia que la Suite ya conoce y las webs de las tiendas
+  if (body.action === "boardfy") {
+    const eans = new Set<string>((Array.isArray(body.eans) ? body.eans : []).map(normalizarEan).filter((e: string | null): e is string => !!e));
+    let todos: Awaited<ReturnType<typeof misProductosPorEan>>;
+    try { todos = await misProductosPorEan(); }
+    catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }); }
+    const mios = Object.fromEntries(Object.entries(todos).filter(([ean]) => eans.has(ean)));
+    const fichas: Record<string, Record<string, string>> = {}; // por EAN y dominio
+    const poner = (ean: string | null | undefined, url: string) => {
+      const e = normalizarEan(ean), d = dominioDe(url);
+      if (!e || !d || !eans.has(e)) return;
+      (fichas[e] ??= {})[d] ??= url;
+    };
+    for (const r of Object.values(config.resultados)) for (const f of r.filas) for (const p of Object.values(f.precios)) if (p.por === "ean" || p.por === "manual") poner(f.ean, p.url);
+    for (const r of (await leerC24()).resultados ?? []) for (const c of r.comparaciones ?? []) if (c.porEan) poner(c.ean, c.suUrl);
+    const tiendas = [
+      ...COMPETIDORES.map(c => ({ nombre: c.nombre, dominio: dominioDe(c.web), tipo: c.tipo as string })),
+      ...(config.propuestas?.lista ?? []).map(p => ({ nombre: "", dominio: p.dominio, tipo: "" })),
+    ];
+    return NextResponse.json({ mios, fichas, tiendas });
   }
 
   if (body.action === "revisar") {

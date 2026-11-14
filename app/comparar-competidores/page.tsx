@@ -6,6 +6,7 @@ import { COMPETIDORES, claveFila, explicarError, ponerCompetidores, type Ajustes
 import Tiendas, { type PropuestaGoogle } from "./tiendas";
 import { descuentoBoardfy } from "../comparar-precios/boardfy";
 import { aplicarCupon, calcularFila, columnasDe, cuponDeMarca, descuentoDe, ordenar, pctTexto, type CuponComp, type MarcaComp } from "./calculo";
+import { completarBoardfy } from "./boardfy";
 import { descargarExcel, descargarPdf, descargarParaMarca, descargarParaTodas, filasParaMarca } from "./exportar";
 
 type Config = {
@@ -421,6 +422,8 @@ export default function CompararCompetidores() {
   const [error, setError] = useState("");
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [filtro, setFiltro] = useState("");
+  const [boardfy, setBoardfy] = useState(false);
+  const [avisoBoardfy, setAvisoBoardfy] = useState("");
 
   // La lista de tiendas (con las quitadas y añadidas) se pone al día antes de pintar
   const ponerConfig = (d: Config) => { ponerCompetidores(d.competidores); setConfig(d); };
@@ -485,7 +488,25 @@ export default function CompararCompetidores() {
             setError("");
             descargarParaTodas(lista).catch(err => setError(err instanceof Error ? err.message : String(err)));
           }}>Excel para las marcas (todas)</button>
+        <label className="regen-btn cc-subir" title="Sube el Excel de una marca que da Boardfy y descarga el mismo con nuestra columna y cada precio enlazado a la ficha de su tienda">
+          {boardfy ? "Preparando el Excel…" : "Completar Excel de Boardfy"}
+          <input type="file" accept=".xlsx" hidden disabled={boardfy} onChange={async e => {
+            const archivo = e.target.files?.[0];
+            e.target.value = "";
+            if (!archivo) return;
+            setError(""); setAvisoBoardfy(""); setBoardfy(true);
+            try {
+              const r = await completarBoardfy(archivo, async body => {
+                const res = await fetch("/api/comparar-competidores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+                try { return await res.json(); } catch { return { error: `El servidor ha fallado (error ${res.status}). Vuelve a intentarlo en un momento.` }; }
+              });
+              setAvisoBoardfy(`Descargado: ${r.productos} productos, ${r.nuestros} con nuestro precio. ${r.fichas} precios enlazan a su ficha y ${r.busquedas} a la búsqueda del EAN en esa tienda (en cursiva).`);
+            } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+            finally { setBoardfy(false); }
+          }} />
+        </label>
       </div>
+      {avisoBoardfy && <p className="cc-nota">{avisoBoardfy}</p>}
       {error && <div className="error">{error}</div>}
       {config && <Tiendas ajustes={config.competidores} merchantId={config.merchantId} propuestas={config.propuestas} enviar={async b => { setError(""); return enviar(b); }} />}
       {!config && <p className="cc-nota">Cargando…</p>}
