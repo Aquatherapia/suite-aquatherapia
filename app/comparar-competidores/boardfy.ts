@@ -1,10 +1,11 @@
 // Excel de Boardfy completado: se sube el informe de una marca que da Boardfy y se descarga el mismo Excel con
 // nuestra columna (precio de nuestra web, enlazado a nuestra ficha) y cada precio de la competencia enlazado a su ficha.
-// Boardfy no da los enlaces: si la Suite ya conoce la ficha de esa tienda (porque la lee), se enlaza la ficha;
-// si no, se enlaza la búsqueda de ese EAN en esa tienda.
+// Boardfy no da los enlaces: la Suite busca cada EAN en la web de cada tienda y enlaza su ficha cuando es seguro
+// que es ese producto; si la tienda no se deja leer (Notino, Amazon…), se enlaza la búsqueda de ese EAN.
 
 type Mio = { nombre: string; url: string; precio: number; pvp: number };
 type Tienda = { nombre: string; dominio: string; tipo: string };
+type Fichas = { dominio?: string; plataforma?: string | null; enlaces?: Record<string, string>; error?: string };
 type Respuesta = { mios: Record<string, Mio[]>; fichas: Record<string, Record<string, string>>; tiendas: Tienda[]; error?: string };
 
 const AZUL = "FF1270B6", FONDO_NOS = "FFE8F1F9", ROJO = "FFB91C1C", ROJO_FONDO = "FFFDECEC", GRIS = "FF6B7280";
@@ -61,7 +62,7 @@ function numEnlazado(url: string, n: number) {
   return url.length <= 255 ? { formula: `HYPERLINK("${url.replace(/"/g, '""')}",${n})`, result: n } : n;
 }
 
-export async function completarBoardfy(archivo: File, pedir: (body: object) => Promise<Respuesta>): Promise<{ productos: number; nuestros: number; fichas: number; busquedas: number }> {
+export async function completarBoardfy(archivo: File, pedir: (body: object) => Promise<Respuesta & Fichas>, progreso: (t: string) => void = () => {}): Promise<{ productos: number; nuestros: number; fichas: number; busquedas: number }> {
   const { default: Excel } = await import("exceljs");
   const entrada = new Excel.Workbook();
   await entrada.xlsx.load(await archivo.arrayBuffer());
@@ -88,6 +89,23 @@ export async function completarBoardfy(archivo: File, pedir: (body: object) => P
   const r = await pedir({ action: "boardfy", eans: filas.map(f => f.ean) });
   if (r.error) throw new Error(r.error);
   const tiendas = iTiendas.map(i => ({ nombre: cab[i], t: dominioDe(cab[i], r.tiendas) }));
+
+  // Fichas de cada tienda: una petición por tienda, de tres en tres
+  let hechas = 0;
+  const cola = tiendas.map((t, j) => ({ t, eans: filas.filter(f => f.precios[j] != null).map(f => f.ean) })).filter(x => x.eans.length);
+  const total = cola.length;
+  progreso(`Buscando las fichas en las tiendas (0 de ${total})…`);
+  const trabajar = async () => {
+    for (let x = cola.shift(); x; x = cola.shift()) {
+      try {
+        const f = await pedir({ action: "boardfy-fichas", tienda: x.t.nombre, eans: x.eans });
+        if (f.dominio) x.t.t = { nombre: x.t.nombre, tipo: f.plataforma || x.t.t?.tipo || "", dominio: f.dominio };
+        for (const [ean, url] of Object.entries(f.enlaces ?? {})) (r.fichas[ean] ??= {})[f.dominio!] = url;
+      } catch { /* esa tienda se queda con la búsqueda */ }
+      progreso(`Buscando las fichas en las tiendas (${++hechas} de ${total})…`);
+    }
+  };
+  await Promise.all([trabajar(), trabajar(), trabajar()]);
 
   // El Excel de salida: las columnas de Boardfy con la nuestra detrás del PVP con descuento
   const wb = new Excel.Workbook();
