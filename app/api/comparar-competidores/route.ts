@@ -7,7 +7,7 @@ import { motivoSinPareja } from "./motivo";
 import { BASE, COLORES_EXTRA, COMPETIDORES, ponerCompetidores, type AjustesCompetidores, type Competidor, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
 import { competidoresDeGoogle, cuentasMerchant, type Propuesta } from "./merchant";
 import { ErrorGoogle } from "../../_google/cliente";
-import { buscarListado, detectarPlataforma, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, misProductosPorEan, normalizarEan, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
+import { buscarListado, detectarPlataforma, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, misProductosPorEan, normalizarEan, webDeTienda, fichaPorEan, enLotes, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
 
 // Leer varias webs a la vez cabe de sobra, pero alguna puede ir lenta: Vercel Hobby permite hasta 300 s
 export const maxDuration = 300;
@@ -286,6 +286,29 @@ export async function POST(req: NextRequest) {
       ...(config.propuestas?.lista ?? []).map(p => ({ nombre: "", dominio: p.dominio, tipo: "" })),
     ];
     return NextResponse.json({ mios, fichas, tiendas });
+  }
+
+  // Excel de Boardfy: las fichas de una tienda para esos EAN (se busca cada EAN en su web)
+  if (body.action === "boardfy-fichas") {
+    const conocidas = [
+      ...COMPETIDORES.map(c => ({ nombre: c.nombre, dominio: dominioDe(c.web) })),
+      ...(config.propuestas?.lista ?? []).map(p => ({ nombre: "", dominio: p.dominio })),
+    ];
+    const web = await webDeTienda(String(body.tienda ?? ""), conocidas);
+    if (!web) return NextResponse.json({});
+    const enlaces: Record<string, string> = {};
+    if (web.plataforma) {
+      const plataforma = web.plataforma;
+      const fin = Date.now() + 240_000;
+      const eans: string[] = (Array.isArray(body.eans) ? body.eans : []).map(normalizarEan).filter((e: string | null): e is string => !!e);
+      // De dos en dos para no saturar su web (algunas cortan si se les pide mucho seguido)
+      await enLotes(eans, 2, async ean => {
+        if (Date.now() > fin) return;
+        const u = await fichaPorEan(`https://${web.dominio}`, plataforma, ean);
+        if (u) enlaces[ean] = u;
+      });
+    }
+    return NextResponse.json({ dominio: web.dominio, plataforma: web.plataforma, enlaces });
   }
 
   if (body.action === "revisar") {

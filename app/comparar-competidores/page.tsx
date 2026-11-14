@@ -499,8 +499,8 @@ export default function CompararCompetidores() {
               const r = await completarBoardfy(archivo, async body => {
                 const res = await fetch("/api/comparar-competidores", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
                 try { return await res.json(); } catch { return { error: `El servidor ha fallado (error ${res.status}). Vuelve a intentarlo en un momento.` }; }
-              });
-              setAvisoBoardfy(`Descargado: ${r.productos} productos, ${r.nuestros} con nuestro precio. ${r.fichas} precios enlazan a su ficha y ${r.busquedas} a la búsqueda del EAN en esa tienda (en cursiva).`);
+              }, t => setAvisoBoardfy(t));
+              setAvisoBoardfy(`Descargado: ${r.productos} productos, ${r.nuestros} con nuestro precio. ${r.fichas} precios enlazan a su ficha y ${r.busquedas} a la búsqueda del EAN (en cursiva: tiendas que no se dejan leer).`);
             } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
             finally { setBoardfy(false); }
           }} />

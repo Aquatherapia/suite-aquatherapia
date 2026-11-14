@@ -440,3 +440,69 @@ export async function misProductosPorEan(): Promise<Record<string, { nombre: str
   }
   return out;
 }
+
+// ── Fichas de la competencia por EAN (para el Excel de Boardfy) ────────
+// Se busca el EAN en la propia tienda y se da la ficha solo si es seguro que es ese producto:
+// en PrestaShop, si la ficha lleva el EAN; en Shopify y WooCommerce, si la búsqueda da un solo producto.
+const espera = (ms: number) => new Promise(r => setTimeout(r, ms));
+async function html(url: string): Promise<{ ok: boolean; status: number; texto: string; url: string }> {
+  for (let i = 0; i < 2; i++) {
+    try {
+      const r = await pedir(url, undefined, 20_000);
+      if (r.status === 429 && i === 0) { await espera(2500); continue; } // demasiadas peticiones seguidas: se espera y se repite
+      return { ok: r.ok, status: r.status, texto: r.ok ? await r.text() : "", url: r.url };
+    } catch { return { ok: false, status: 0, texto: "", url }; }
+  }
+  return { ok: false, status: 429, texto: "", url };
+}
+
+export async function fichaPorEan(base: string, plataforma: Plataforma, ean: string): Promise<string | null> {
+  const host = new URL(base).host;
+  if (plataforma === "shopify") {
+    const r = await html(`${base}/search?q=${ean}&type=product`);
+    const asas = [...new Set([...r.texto.matchAll(/\/products\/([a-z0-9%_-]+)/gi)].map(m => m[1].toLowerCase()))];
+    return asas.length === 1 ? `${base}/products/${asas[0]}` : null;
+  }
+  if (plataforma === "woo") {
+    try {
+      const r = await pedir(`${base}/wp-json/wc/store/v1/products?search=${ean}&per_page=3`, { headers: { Accept: "application/json" } }, 20_000);
+      const lista = r.ok ? await r.json() as { permalink?: string }[] : [];
+      return Array.isArray(lista) && lista.length === 1 && lista[0].permalink ? lista[0].permalink : null;
+    } catch { return null; }
+  }
+  // PrestaShop: búsqueda del EAN y, de los productos que salen, el primero cuya ficha lleve ese EAN
+  let r = await html(`${base}/busqueda?controller=search&s=${ean}`);
+  if (!r.ok) r = await html(`${base}/index.php?controller=search&s=${ean}`);
+  if (!r.ok) return null;
+  const enlaces = [...new Set([...r.texto.matchAll(/href="(https?:\/\/[^"#?]+\/\d+[^"#?\/]*\.html)/gi)].map(m => m[1]).filter(u => { try { return new URL(u).host === host; } catch { return false; } }))];
+  for (const u of enlaces.slice(0, 3)) {
+    const f = await html(u);
+    if (f.ok && f.texto.includes(ean)) return u;
+  }
+  return null;
+}
+
+// La web de una tienda a partir de su nombre («Perfumeria Marti» → perfumeriamarti.com) y de qué está hecha
+export async function webDeTienda(nombre: string, conocidas: { nombre: string; dominio: string }[]): Promise<{ dominio: string; plataforma: Plataforma | null } | null> {
+  const limpio = nombre.toLowerCase().replace(/\s*-\s*seller\s*$/i, "").trim();
+  const k = soloLetras(limpio).replace(/(sl|sa|slu)$/, "");
+  const sinTld = (d: string) => soloLetras(d.replace(/^www\./, "").replace(/\.[a-z]+$/, ""));
+  let candidatos: string[];
+  const comoWeb = limpio.match(/^[a-z0-9.-]+\.(es|com|eu|net|org|shop|store)$/)?.[0];
+  if (comoWeb) candidatos = [comoWeb];
+  else {
+    const c = conocidas.find(t => t.nombre && soloLetras(t.nombre) === k) ?? conocidas.find(t => { const d = sinTld(t.dominio); return d.length >= 4 && (d === k || d.includes(k) || k.includes(d)); });
+    candidatos = c ? [c.dominio] : k.length >= 4 ? [`${k}.com`, `${k}.es`] : [];
+  }
+  for (const d of candidatos) {
+    for (const base of [`https://${d}`, `https://www.${d.replace(/^www\./, "")}`]) {
+      try {
+        const r = await pedir(base, undefined, 12_000);
+        if (r.status >= 500 || r.status === 404) continue;
+        const dominio = new URL(r.url).host;
+        return { dominio, plataforma: r.ok ? await detectarPlataforma(`https://${dominio}`) : null };
+      } catch { /* no existe o no responde */ }
+    }
+  }
+  return null;
+}
