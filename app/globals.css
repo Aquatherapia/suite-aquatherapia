@@ -1676,6 +1676,7 @@ button:disabled {
 .cc-barra-sup { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .cc-barra-sup .cc-filtro { flex: 1; min-width: 200px; }
 .cc-barra-sup .regen-btn { width: auto; }
+.cc-barra-sup .cc-subir { display: inline-flex; align-items: center; cursor: pointer; }
 .cc-t-como { font-size: 12px; color: #374151; white-space: nowrap; }
 .cc-t-como b { color: #111827; }
 .cc-enlazar-btn { display: inline; width: auto; margin: 0 0 0 8px; padding: 1px 8px; font-size: 11px; border: 1px solid #c7ccd4; border-radius: 4px; background: #fff; color: #1b75bb; cursor: pointer; }

@@ -415,3 +415,28 @@ function decodificar(t: string): string {
   return t.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
     .replace(/&amp;/g, "&").replace(/&quot;/g, "\"").replace(/&#039;|&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
 }
+
+// Todos los productos del feed de nuestra web por EAN (para el Excel de Boardfy, que no va por marcas)
+// (un EAN puede salir en varias filas, p. ej. el formato normal y el recambio: van todas)
+export async function misProductosPorEan(): Promise<Record<string, { nombre: string; url: string; precio: number; pvp: number }[]>> {
+  const res = await pedir(FEED, undefined, 60_000);
+  if (!res.ok) throw new Error(`No se pudo leer el feed de nuestra web (HTTP ${res.status})`);
+  const lineas = (await res.text()).split(/\r?\n/);
+  const cab = lineas[0].split("\t").map(c => c.trim().toLowerCase());
+  const col = (k: string) => cab.indexOf(k);
+  const [iLink, iGtin, iTitulo, iPvp, iOferta] = [col("link"), col("gtin"), col("title"), col("price"), col("sale_price")];
+  if ([iLink, iGtin, iPvp].some(i => i < 0)) throw new Error("El feed de nuestra web no tiene el formato esperado");
+  const out: Record<string, { nombre: string; url: string; precio: number; pvp: number }[]> = {};
+  for (const linea of lineas.slice(1)) {
+    const c = linea.split("\t");
+    const ean = normalizarEan(c[iGtin]);
+    const url = c[iLink]?.trim();
+    if (!ean || !url) continue;
+    const pvp = parseFloat((c[iPvp] ?? "").replace(",", "."));
+    const oferta = iOferta >= 0 ? parseFloat((c[iOferta] ?? "").replace(",", ".")) : NaN;
+    const precio = Number.isFinite(oferta) && oferta > 0 ? oferta : pvp;
+    if (!Number.isFinite(precio) || precio <= 0) continue;
+    (out[ean] ??= []).push({ nombre: (c[iTitulo] ?? "").trim(), url, precio, pvp: Number.isFinite(pvp) && pvp > 0 ? pvp : precio });
+  }
+  return out;
+}
