@@ -269,8 +269,14 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
   bajar(doc.output("blob"), `${limpio(marca)}_COMPETENCIA_${fechaArchivo(fecha)}_informe.pdf`);
 }
 
+const VERDE_MARCA = "15803D"; // PVP de la web oficial de la marca
+
 // ── «Para la marca» ────────────────────────────────────────────────────
-export type FilaParaMarca = { ean: string; producto: string; tienda: string; color: string; url: string; pvp: number; minimo: number; suPrecio: number; dtoSobrePvp: number; porDebajo: number };
+export type FilaParaMarca = {
+  ean: string; producto: string; tienda: string; color: string; url: string; pvp: number; minimo: number; suPrecio: number; dtoSobrePvp: number; porDebajo: number;
+  miUrl: string;                                  // nuestra ficha
+  marca?: { url: string; precio: number };        // el producto en la web oficial de la marca, si la tiene
+};
 
 // Cada precio de la competencia por debajo de nuestro PVP con el dto. autorizado (sin dto. autorizado, por debajo del PVP)
 export function filasParaMarca(filas: FilaComp[], descuento: number): FilaParaMarca[] {
@@ -278,78 +284,209 @@ export function filasParaMarca(filas: FilaComp[], descuento: number): FilaParaMa
   for (const f of filas) {
     const pvp = f.pvp || f.precio;
     const minimo = Math.round(pvp * (1 - descuento / 100) * 100) / 100;
-    // La web oficial de la marca no entra: el informe es para la marca
+    // La web oficial de la marca no entra como tienda (el informe es para la marca), pero se enlaza en cada fila
+    const oficial = COMPETIDORES.filter(c => c.marca).map(c => f.precios[c.id]).find(Boolean);
     for (const c of COMPETIDORES.filter(c => !c.marca)) {
       const p = f.precios[c.id];
       if (!p || p.precio >= minimo - 0.005) continue;
-      out.push({ ean: f.ean ?? "", producto: f.nombre, tienda: c.nombre, color: c.color, url: p.url, pvp, minimo, suPrecio: p.precio, dtoSobrePvp: pvp > 0 ? 1 - p.precio / pvp : 0, porDebajo: Math.round((minimo - p.precio) * 100) / 100 });
+      out.push({ ean: f.ean ?? "", producto: f.nombre, tienda: c.nombre, color: c.color, url: p.url, pvp, minimo, suPrecio: p.precio, dtoSobrePvp: pvp > 0 ? 1 - p.precio / pvp : 0, porDebajo: Math.round((minimo - p.precio) * 100) / 100,
+        miUrl: f.url, marca: oficial ? { url: oficial.url, precio: oficial.precio } : undefined });
     }
   }
   return out.sort((a, b) => b.dtoSobrePvp - a.dtoSobrePvp);
 }
 
-export async function descargarParaMarca(marca: string, filas: FilaComp[], descuento: number, formato: "pdf" | "excel", fecha = new Date()) {
-  const lista = filasParaMarca(filas, descuento);
+// Tabla del informe «Para la marca», como el PDF interno: una fila por producto con algún precio por debajo,
+// y por bloques: la web oficial de la marca (solo su PVP), nosotros y las tiendas que venden por debajo
+type TablaParaMarca = {
+  productos: { f: FilaComp; pvp: number; minimo: number; peor: { c: Competidor; precio: number } }[];
+  oficial?: Competidor;
+  comps: Competidor[];
+};
+function tablaParaMarca(filas: FilaComp[], descuento: number): TablaParaMarca {
+  const tiendas = COMPETIDORES.filter(c => !c.marca);
+  const productos: TablaParaMarca["productos"] = [];
+  for (const f of filas) {
+    const pvp = f.pvp || f.precio;
+    const minimo = Math.round(pvp * (1 - descuento / 100) * 100) / 100;
+    const bajo = tiendas.filter(c => f.precios[c.id] && f.precios[c.id].precio < minimo - 0.005);
+    if (!bajo.length) continue;
+    const c = bajo.reduce((a, b) => (f.precios[b.id].precio < f.precios[a.id].precio ? b : a));
+    productos.push({ f, pvp, minimo, peor: { c, precio: f.precios[c.id].precio } });
+  }
+  productos.sort((a, b) => (1 - b.peor.precio / b.pvp) - (1 - a.peor.precio / a.pvp));
+  const oficial = COMPETIDORES.find(c => c.marca && productos.some(x => x.f.precios[c.id]));
+  const comps = tiendas.filter(c => productos.some(x => x.f.precios[c.id] && x.f.precios[c.id].precio < x.minimo - 0.005));
+  return { productos, oficial, comps };
+}
+
+// Hoja de Excel del informe «Para la marca» (también una por marca en el Excel de todas)
+function hojaParaMarca(ws: ExcelJS.Worksheet, marca: string, t: TablaParaMarca, descuento: number, fecha: Date) {
+  ws.views = [{ showGridLines: false, state: "frozen", xSplit: 2, ySplit: 5 }];
   const que = descuento > 0 ? `nuestro PVP con el descuento autorizado (-${num(descuento)} %)` : "el PVP";
+  const nNos = descuento > 0 ? 3 : 2;
+  const nOf = t.oficial ? 1 : 0;
+  const total = 2 + nOf + nNos + t.comps.length * 2 + 2;
+  ws.mergeCells(1, 1, 1, total); ws.getCell("A1").value = `${marca} · precios de la competencia por debajo de ${descuento > 0 ? "lo autorizado" : "PVP"}`; ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
+  ws.mergeCells(2, 1, 2, total); ws.getCell("A2").value = `Tiendas online que venden por debajo de ${que} · ${fechaCorta(fecha)} · Pulsa un precio o un producto para abrir su ficha`; ws.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF" + SUAVE } };
+  const relleno = (c: ExcelJS.Cell, color: string) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + hex(color) } }; };
+  // Fila 4: bloques; fila 5: columnas
+  const grupos: { titulo: string; n: number; color: string; fondo: string }[] = [
+    { titulo: "", n: 2, color: AZUL, fondo: "FFFFFF" },
+    ...(t.oficial ? [{ titulo: `${marca.toUpperCase()} · WEB OFICIAL`, n: 1, color: VERDE_MARCA, fondo: "E6F4EA" }] : []),
+    { titulo: "LA TIENDA DE COSMÉTICOS", n: nNos, color: AZUL, fondo: FONDO_NOS },
+    ...t.comps.map(c => ({ titulo: c.nombre.toUpperCase(), n: 2, color: c.color, fondo: c.fondo })),
+    { titulo: "COMPARACIÓN", n: 2, color: "374151", fondo: "F3F4F6" },
+  ];
+  let col = 1;
+  const cab: { t: string; color: string }[] = [];
+  for (const g of grupos) {
+    if (g.n > 1) ws.mergeCells(4, col, 4, col + g.n - 1);
+    const c = ws.getCell(4, col);
+    c.value = g.titulo; c.font = { name: "Calibri", size: 9, bold: true, color: { argb: "FF" + hex(g.color) } }; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    relleno(c, g.fondo);
+    col += g.n;
+  }
+  cab.push({ t: "EAN", color: AZUL }, { t: "PRODUCTO", color: AZUL });
+  if (t.oficial) cab.push({ t: "PVP", color: VERDE_MARCA });
+  cab.push({ t: "PVP", color: AZUL }, ...(descuento > 0 ? [{ t: `PVP -${num(descuento)} %`, color: AZUL }] : []), { t: "PRECIO FINAL", color: AZUL });
+  for (const c of t.comps) cab.push({ t: "SU PRECIO", color: c.color }, { t: "DTO. SOBRE PVP", color: c.color });
+  cab.push({ t: "MÁS BARATO", color: "374151" }, { t: "POR DEBAJO", color: "374151" });
+  const fc = ws.getRow(5);
+  cab.forEach((x, i) => { const c = fc.getCell(i + 1); c.value = x.t; c.font = { name: "Calibri", size: 9, bold: true, color: { argb: "FFFFFFFF" } }; relleno(c, x.color); c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
+  ws.getRow(4).height = 22; fc.height = 28;
+  [15, 50, ...(t.oficial ? [12] : []), 11, ...(descuento > 0 ? [12] : []), 12, ...t.comps.flatMap(() => [12, 10]), 18, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+
+  t.productos.forEach((x, i) => {
+    const row = ws.getRow(6 + i);
+    const { f } = x;
+    const ofi = t.oficial ? f.precios[t.oficial.id] : undefined;
+    const valores: ExcelJS.CellValue[] = [f.ean ?? "", { text: f.nombre, hyperlink: f.url }];
+    if (t.oficial) valores.push(ofi ? ofi.precio : "-");
+    valores.push(x.pvp, ...(descuento > 0 ? [x.minimo] : []), { text: eur(f.precio), hyperlink: f.url });
+    for (const c of t.comps) {
+      const p = f.precios[c.id];
+      valores.push(p ? { text: eur(p.precio), hyperlink: p.url } : "-", p && x.pvp > 0 ? -(1 - p.precio / x.pvp) : "-");
+    }
+    valores.push(x.peor.c.nombre, -Math.round((x.minimo - x.peor.precio) * 100) / 100);
+    row.values = valores;
+    const iOf = t.oficial ? 3 : 0, iNos = 3 + nOf, iComp = iNos + nNos, iFin = iComp + t.comps.length * 2;
+    row.eachCell({ includeEmpty: true }, (c, n) => {
+      let color = TEXTO, bold = false, fondo: string | null = i % 2 ? CEBRA : null;
+      if (n === 1) color = SUAVE;
+      if (n === 2) color = AZUL;
+      if (n === iOf) { color = VERDE_MARCA; bold = true; }
+      if (n >= iNos && n < iComp) { color = AZUL; bold = n === iComp - 1; }
+      if (n >= iComp && n < iFin) {
+        const comp = t.comps[Math.floor((n - iComp) / 2)];
+        const p = f.precios[comp.id];
+        color = comp.color; bold = (n - iComp) % 2 === 0;
+        if (p && p.precio < x.minimo - 0.005) { fondo = BAJO_FONDO; if ((n - iComp) % 2 === 0) color = BAJO; }
+        if (!p) color = "C4C9D0";
+      }
+      if (n === iFin) { color = x.peor.c.color; bold = true; }
+      if (n === iFin + 1) { color = BAJO; bold = true; }
+      c.font = { name: "Calibri", size: 10, color: { argb: "FF" + hex(color) }, bold, underline: typeof c.value === "object" && c.value != null };
+      if (fondo) relleno(c, fondo);
+      if (typeof c.value === "number") c.numFmt = (n >= iComp && n < iFin && (n - iComp) % 2 === 1) ? PORC : EUROS;
+      c.alignment = { vertical: "middle", horizontal: n <= 2 || n === iFin ? "left" : "right", wrapText: n === 2 };
+      c.border = { bottom: { style: "thin", color: { argb: "FF" + LINEA } } };
+    });
+  });
+}
+
+export async function descargarParaMarca(marca: string, filas: FilaComp[], descuento: number, formato: "pdf" | "excel", fecha = new Date()) {
+  const t = tablaParaMarca(filas, descuento);
   const titulo = `${marca} · precios de la competencia por debajo de ${descuento > 0 ? "lo autorizado" : "PVP"}`;
-  const sub = `Tiendas online que venden por debajo de ${que} · ${fechaCorta(fecha)}`;
+  const que = descuento > 0 ? `nuestro PVP con el descuento autorizado (-${num(descuento)} %)` : "el PVP";
   const nombre = `${limpio(marca)}_COMPETENCIA_bajo_${descuento > 0 ? "dto_autorizado" : "PVP"}_${fechaArchivo(fecha)}`;
-  const titulos = ["EAN", "PRODUCTO", "TIENDA", "PVP", descuento > 0 ? `PVP -${num(descuento)} %` : "MÍNIMO", "SU PRECIO", "DTO. SOBRE PVP", "POR DEBAJO"];
 
   if (formato === "excel") {
     const { default: Excel } = await import("exceljs");
     const wb = new Excel.Workbook();
-    const ws = wb.addWorksheet(marca.replace(/[\\/?*[\]:]/g, " ").slice(0, 31));
-    ws.views = [{ showGridLines: false }];
-    ws.mergeCells("A1:H1"); ws.getCell("A1").value = titulo; ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
-    ws.mergeCells("A2:H2"); ws.getCell("A2").value = sub; ws.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF" + SUAVE } };
-    const cab = ws.getRow(4);
-    titulos.forEach((t, i) => { const c = cab.getCell(i + 1); c.value = t; c.font = { name: "Calibri", size: 9, bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + AZUL } }; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
-    cab.height = 28;
-    [15, 50, 18, 11, 12, 14, 12, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
-    lista.forEach((x, i) => {
-      const row = ws.getRow(5 + i);
-      row.values = [x.ean, x.producto, x.tienda, x.pvp, x.minimo, { text: eur(x.suPrecio), hyperlink: x.url }, x.dtoSobrePvp, x.porDebajo];
-      row.eachCell((c, n) => {
-        c.font = { name: "Calibri", size: 10, color: { argb: "FF" + (n === 3 || n === 6 ? hex(x.color) : n === 8 ? BAJO : TEXTO) }, bold: n >= 6 };
-        if (n === 4 || n === 5 || n === 8) c.numFmt = EUROS;
-        if (n === 7) c.numFmt = PORC;
-        c.alignment = { vertical: "middle", horizontal: n <= 3 ? "left" : "right", wrapText: n === 2 };
-        c.border = { bottom: { style: "thin", color: { argb: "FF" + LINEA } } };
-      });
-    });
+    hojaParaMarca(wb.addWorksheet(marca.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Marca"), marca, t, descuento, fecha);
     bajar(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX }), `${nombre}.xlsx`);
     return;
   }
+
   const { jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...rgb(AZUL)); doc.text(titulo, 10, 15);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...rgb(SUAVE)); doc.text(sub, 10, 21);
+  const M = 8;
+  doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...rgb(AZUL)); doc.text(titulo, M, 14);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...rgb(SUAVE));
+  doc.text(`Tiendas online que venden por debajo de ${que} · ${fechaCorta(fecha)} · Pulsa un precio o un producto para abrir su ficha`, M, 19.5);
+  const nNos = descuento > 0 ? 3 : 2, nOf = t.oficial ? 1 : 0;
+  const iNos = 2 + nOf, iComp = iNos + nNos, iFin = iComp + t.comps.length * 2;
+  const cabC = (txt: string, color: string) => ({ content: txt, styles: { fillColor: rgb(color) } });
+  const cuerpo = t.productos.map(x => {
+    const { f } = x;
+    const ofi = t.oficial ? f.precios[t.oficial.id] : undefined;
+    return [
+      f.ean ?? "", f.nombre,
+      ...(t.oficial ? [ofi ? eur(ofi.precio) : "-"] : []),
+      eur(x.pvp), ...(descuento > 0 ? [eur(x.minimo)] : []), eur(f.precio),
+      ...t.comps.flatMap(c => { const p = f.precios[c.id]; return p ? [eur(p.precio), x.pvp > 0 ? `-${pctTexto(1 - p.precio / x.pvp)}` : "-"] : ["-", "-"]; }),
+      x.peor.c.corto, eur(-Math.round((x.minimo - x.peor.precio) * 100) / 100),
+    ];
+  });
+  const ancho = Math.max(10, Math.min(15, 120 / Math.max(t.comps.length * 2, 1)));
+  const columnStyles: Record<number, object> = {
+    0: { cellWidth: 19, halign: "left", textColor: rgb(SUAVE) }, 1: { cellWidth: 58, halign: "left", textColor: rgb(AZUL) },
+    [iFin]: { cellWidth: 20, halign: "left", fontStyle: "bold" }, [iFin + 1]: { cellWidth: 15, textColor: rgb(BAJO), fontStyle: "bold" },
+  };
+  if (t.oficial) columnStyles[2] = { cellWidth: 15, textColor: rgb(VERDE_MARCA), fontStyle: "bold" };
+  for (let k = iNos; k < iComp; k++) columnStyles[k] = { cellWidth: 14, textColor: rgb(AZUL), fontStyle: k === iComp - 1 ? "bold" : "normal" };
+  t.comps.forEach((c, j) => { columnStyles[iComp + j * 2] = { cellWidth: ancho, textColor: rgb(c.color), fontStyle: "bold" }; columnStyles[iComp + j * 2 + 1] = { cellWidth: ancho, textColor: rgb(c.color) }; });
   autoTable(doc, {
-    startY: 26, margin: { left: 10, right: 10 }, theme: "plain",
-    styles: { font: "helvetica", fontSize: 8, textColor: rgb(TEXTO), halign: "right", valign: "middle", cellPadding: 1.6 },
-    headStyles: { fillColor: rgb(AZUL), textColor: [255, 255, 255], fontStyle: "bold", halign: "center", fontSize: 7.5 },
-    head: [titulos],
-    body: lista.map(x => [x.ean, x.producto, x.tienda, eur(x.pvp), eur(x.minimo), eur(x.suPrecio), `-${pctTexto(x.dtoSobrePvp)}`, eur(x.porDebajo)]),
-    columnStyles: { 0: { cellWidth: 26, halign: "left", textColor: rgb(SUAVE) }, 1: { halign: "left" }, 2: { cellWidth: 30, halign: "left", fontStyle: "bold" }, 3: { cellWidth: 20 }, 4: { cellWidth: 22 }, 5: { cellWidth: 22, fontStyle: "bold" }, 6: { cellWidth: 22 }, 7: { cellWidth: 22, textColor: rgb(BAJO), fontStyle: "bold" } },
+    startY: 24, margin: { left: M, right: M }, theme: "plain",
+    styles: { font: "helvetica", fontSize: 6.8, textColor: rgb(TEXTO), cellPadding: { top: 1.5, bottom: 1.5, left: 1, right: 1 }, valign: "middle", halign: "right", lineColor: rgb(LINEA) },
+    headStyles: { fontStyle: "bold", fontSize: 6, textColor: [255, 255, 255], halign: "center", valign: "middle" },
+    head: [
+      [
+        { content: "", colSpan: 2, styles: { fillColor: [255, 255, 255] } },
+        ...(t.oficial ? [{ content: `${marca.toUpperCase()}\nWEB OFICIAL`, colSpan: 1, styles: { fillColor: rgb("E6F4EA"), textColor: rgb(VERDE_MARCA) } }] : []),
+        { content: "LA TIENDA DE COSMÉTICOS", colSpan: nNos, styles: { fillColor: rgb(FONDO_NOS), textColor: rgb(AZUL) } },
+        ...t.comps.map(c => ({ content: c.nombre.toUpperCase(), colSpan: 2, styles: { fillColor: rgb(c.fondo), textColor: rgb(c.color) } })),
+        { content: "COMPARACIÓN", colSpan: 2, styles: { fillColor: [243, 244, 246], textColor: [55, 65, 81] } },
+      ],
+      [
+        cabC("EAN", AZUL), cabC("PRODUCTO", AZUL),
+        ...(t.oficial ? [cabC("PVP", VERDE_MARCA)] : []),
+        cabC("PVP", AZUL), ...(descuento > 0 ? [cabC(`PVP -${num(descuento)} %`, AZUL)] : []), cabC("PRECIO FINAL", AZUL),
+        ...t.comps.flatMap(c => [cabC("SU PRECIO", c.color), cabC("DTO. S/ PVP", c.color)]),
+        cabC("MÁS BARATO", "374151"), cabC("POR DEBAJO", "374151"),
+      ],
+    ],
+    body: cuerpo, columnStyles,
     didParseCell: d => {
       if (d.section !== "body") return;
-      const x = lista[d.row.index];
-      d.cell.styles.fillColor = d.row.index % 2 ? rgb(CEBRA) : [255, 255, 255];
-      d.cell.styles.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
-      d.cell.styles.lineColor = rgb(LINEA);
-      if (x && (d.column.index === 2 || d.column.index === 5)) d.cell.styles.textColor = rgb(x.color);
+      const x = t.productos[d.row.index], c = d.column.index;
+      if (!x) return;
+      const s = d.cell.styles;
+      s.fillColor = d.row.index % 2 ? rgb(CEBRA) : [255, 255, 255];
+      s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
+      if (c >= iComp && c < iFin) {
+        const comp = t.comps[Math.floor((c - iComp) / 2)], p = x.f.precios[comp.id];
+        if (!p) { s.textColor = [196, 201, 208]; return; }
+        if (p.precio < x.minimo - 0.005) { s.fillColor = rgb(BAJO_FONDO); if ((c - iComp) % 2 === 0) s.textColor = rgb(BAJO); }
+      }
+      if (c === iFin) s.textColor = rgb(x.peor.c.color);
     },
     didDrawCell: d => {
-      if (d.section === "body" && d.column.index === 5 && lista[d.row.index]) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: lista[d.row.index].url });
+      if (d.section !== "body") return;
+      const x = t.productos[d.row.index], c = d.column.index;
+      if (!x) return;
+      if (c === 1 || c === iComp - 1) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: x.f.url });
+      if (c >= iComp && c < iFin && (c - iComp) % 2 === 0) {
+        const p = x.f.precios[t.comps[(c - iComp) / 2].id];
+        if (p) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: p.url });
+      }
     },
   });
   bajar(doc.output("blob"), `${nombre}.pdf`);
 }
 
-// «Para las marcas»: un solo Excel con todas las marcas en las que la competencia vende por debajo de lo autorizado
-// (o del PVP si la marca no tiene descuento): una hoja de resumen y una hoja por marca.
 export async function descargarParaTodas(marcas: { nombre: string; filas: FilaComp[]; descuento: number }[], fecha = new Date()) {
   const conProblemas = marcas.map(m => ({ ...m, lista: filasParaMarca(m.filas, m.descuento) })).filter(m => m.lista.length > 0)
     .sort((a, b) => b.lista.length - a.lista.length || a.nombre.localeCompare(b.nombre));
@@ -390,27 +527,8 @@ export async function descargarParaTodas(marcas: { nombre: string; filas: FilaCo
     });
   });
 
-  // Una hoja por marca
-  conProblemas.forEach((m, k) => {
-    const ws = wb.addWorksheet(hojas[k]);
-    ws.views = [{ showGridLines: false }];
-    const que = m.descuento > 0 ? `nuestro PVP con el descuento autorizado (-${num(m.descuento)} %)` : "el PVP";
-    ws.mergeCells("A1:H1"); ws.getCell("A1").value = `${m.nombre} · precios de la competencia por debajo de ${m.descuento > 0 ? "lo autorizado" : "PVP"}`; ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
-    ws.mergeCells("A2:H2"); ws.getCell("A2").value = `Tiendas online que venden por debajo de ${que} · ${fechaCorta(fecha)}`; ws.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF" + SUAVE } };
-    cabecera(ws, 4, ["EAN", "PRODUCTO", "TIENDA", "PVP", m.descuento > 0 ? `PVP -${num(m.descuento)} %` : "MÍNIMO", "SU PRECIO", "DTO. SOBRE PVP", "POR DEBAJO"]);
-    [15, 50, 18, 11, 12, 14, 12, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
-    m.lista.forEach((x, i) => {
-      const row = ws.getRow(5 + i);
-      row.values = [x.ean, x.producto, x.tienda, x.pvp, x.minimo, { text: eur(x.suPrecio), hyperlink: x.url }, x.dtoSobrePvp, x.porDebajo];
-      row.eachCell((c, n) => {
-        c.font = { name: "Calibri", size: 10, color: { argb: "FF" + (n === 3 || n === 6 ? hex(x.color) : n === 8 ? BAJO : TEXTO) }, bold: n >= 6 };
-        if (n === 4 || n === 5 || n === 8) c.numFmt = EUROS;
-        if (n === 7) c.numFmt = PORC;
-        c.alignment = { vertical: "middle", horizontal: n <= 3 ? "left" : "right", wrapText: n === 2 };
-        c.border = { bottom: { style: "thin", color: { argb: "FF" + LINEA } } };
-      });
-    });
-  });
+  // Una hoja por marca, como el informe «Para la marca»
+  conProblemas.forEach((m, k) => hojaParaMarca(wb.addWorksheet(hojas[k]), m.nombre, tablaParaMarca(m.filas, m.descuento), m.descuento, fecha));
   bajar(new Blob([await wb.xlsx.writeBuffer()], { type: XLSX }), `COMPETENCIA_marcas_bajo_dto_autorizado_${fechaArchivo(fecha)}.xlsx`);
   return conProblemas.length;
 }
