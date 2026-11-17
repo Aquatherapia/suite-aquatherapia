@@ -342,9 +342,10 @@ function ParaMarca({ marca, filas, descuento }: { marca: string; filas: FilaComp
   );
 }
 
-function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, onToggle, onRevisar, onEnlace, onEmparejar, onDescuento }: {
+function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, onToggle, onRevisar, onEnlace, onEmparejar, onDescuento, onWebOficial }: {
   marca: MarcaComp; r?: ResultadoComp; enlaces: Record<string, string>; cupon: CuponComp; revisando: boolean; ocupado: boolean;
   expandido: boolean; onToggle: () => void; onRevisar: () => void; onEnlace: (comp: string, url: string) => void; onDescuento: (valor: string) => void;
+  onWebOficial: (web: string) => void;
   onEmparejar: (comp: string, accion: "emparejar" | "desemparejar", suUrl: string, suTitulo: string, mio: string) => void;
 }) {
   const nombreFila = (f: FilaComp) => f.formato && !f.nombre.includes(f.formato) ? `${f.nombre} (${f.formato})` : f.nombre;
@@ -359,6 +360,8 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
   const pvpDist = calc.filter(k => k.pvpDistintos > 0).length;
   const orden = ordenar(todos ? filas : conCompetencia);
   const estados = r?.competidores ?? {};
+  const oficial = COMPETIDORES.find(c => c.marca && vendeLaMarca(c, marca.nombre));
+  const fija = oficial && !oficial.extra; // la de Eberlin viene puesta y no se cambia desde aquí
   return (
     <div className="vp-accordion">
       <div className="vp-accordion-header cp-cab" onClick={onToggle} role="button" tabIndex={0}>
@@ -393,6 +396,19 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
             />
             %
             {descuento == null && <span className="cp-suave-txt">sin límite</span>}
+          </label>
+          <label className="cp-dto cp-web-oficial" title="La tienda online oficial de la marca (Shopify o WooCommerce): sus precios salen en su propia columna y el informe «Para la marca» compara todo con ellos. Vacía si no tiene" onClick={e => e.stopPropagation()}>
+            Web oficial
+            {fija ? <a href={oficial.web} target="_blank" rel="noreferrer">{oficial.web.replace(/^https?:\/\/(www\.)?/, "")}</a> : (
+              <input
+                key={`${marca.slug}-${oficial?.web ?? "x"}`}
+                className="cp-web-input"
+                defaultValue={oficial?.web.replace(/^https?:\/\//, "") ?? ""}
+                placeholder="marca.com"
+                onBlur={e => { if (e.target.value.trim() !== (oficial?.web.replace(/^https?:\/\//, "") ?? "")) onWebOficial(e.target.value.trim()); }}
+                onKeyDown={e => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+              />
+            )}
           </label>
           {caros > 0 && <span className="vp-pill vp-pill-nuevo" title="Productos que algún competidor vende más barato que nosotros">{caros} más caros</span>}
           {bajoAut > 0 && <span className="vp-pill cp-pill-minimo" title={`La competencia vende por debajo de nuestro PVP −${descuento} %: no podemos igualarlos sin pasar el descuento autorizado`}>{bajoAut} más allá de nuestro dto. autorizado</span>}
@@ -490,7 +506,7 @@ export default function CompararCompetidores() {
     <div className="wrap cp-wrap">
       <Link href="/" className="volver-link">← Herramientas IA</Link>
       <h1>Comparar precios con la competencia</h1>
-      <p className="subtitle">Nuestros precios frente a los de {COMPETIDORES.map(c => c.nombre).join(", ")}, marca a marca y en una sola tabla. En rojo, quien vende más barato que nosotros.</p>
+      <p className="subtitle">Nuestros precios frente a los de {COMPETIDORES.filter(c => !c.marca).map(c => c.nombre).join(", ")} y la web oficial de cada marca que la tiene, marca a marca y en una sola tabla. En rojo, quien vende más barato que nosotros.</p>
 
       <div className="vp-notif-bar" style={{ background: "var(--card-bg, #f7f7f8)" }}>
         <span>Están todas las marcas de nuestra web. Pulsa <strong>«Revisar»</strong> en cada una: el listado de la marca en cada web se busca solo (puedes cambiarlo o marcar que no la venden) y los productos se emparejan por EAN o, si su web no lo publica, por nombre y formato o, si el nombre está en otro idioma, con IA (marcados con IA✦).</span>
@@ -537,6 +553,7 @@ export default function CompararCompetidores() {
           expandido={expandidos.has(m.slug)} onToggle={() => toggle(m.slug)}
           onRevisar={() => revisar(m.slug)} onEnlace={(comp, url) => enviar({ action: "enlace", slug: m.slug, comp, url })}
           onEmparejar={(comp, accion, suUrl, suTitulo, mio) => { setError(""); enviar({ action: accion, slug: m.slug, comp, suUrl, suTitulo, mio }); }}
+          onWebOficial={web => { setError(""); enviar({ action: "web-oficial", slug: m.slug, nombre: m.nombre, web }); }}
           onDescuento={valor => {
             const v = valor.trim().replace(",", ".").replace("%", "");
             if (v && !Number.isFinite(Number(v))) { setError("El descuento tiene que ser un número"); return; }

@@ -23,7 +23,7 @@ export const BASE: Competidor[] = [
 ];
 
 // Una web oficial solo cuenta en su marca; las demás tiendas, en todas
-const letras = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+export const letras = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 export const vendeLaMarca = (c: Competidor, marca: string) => !c.marca || letras(marca).includes(c.marca);
 
 // Colores para las tiendas que se añaden desde la app, por orden

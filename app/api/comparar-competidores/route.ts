@@ -4,7 +4,7 @@ import path from "path";
 import { emparejarPorNombre } from "./emparejar-nombre";
 import { emparejarConIa } from "./emparejar-ia";
 import { motivoSinPareja } from "./motivo";
-import { BASE, COLORES_EXTRA, COMPETIDORES, ponerCompetidores, vendeLaMarca, type AjustesCompetidores, type Competidor, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
+import { BASE, COLORES_EXTRA, COMPETIDORES, letras, ponerCompetidores, vendeLaMarca, type AjustesCompetidores, type Competidor, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
 import { competidoresDeGoogle, cuentasMerchant, type Propuesta } from "./merchant";
 import { ErrorGoogle } from "../../_google/cliente";
 import { buscarListado, detectarPlataforma, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, misProductosPorEan, normalizarEan, webDeTienda, fichaPorEan, enLotes, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
@@ -196,6 +196,41 @@ export async function POST(req: NextRequest) {
       while ([...BASE, ...ajustes.extra!].some(c => c.id === id)) id += "-2";
       const nuevo: Competidor = { id, nombre, corto: nombre.length > 16 ? dominio : nombre, web, tipo, color, fondo, extra: true };
       ajustes.extra!.push(nuevo);
+    }
+    config.competidores = ajustes;
+    ponerCompetidores(ajustes);
+    await guardarConfig(config);
+    return respuesta(config);
+  }
+
+  // Mirar con qué está hecha cada web de una lista (para buscar las webs oficiales de las marcas)
+  if (body.action === "probar-webs") {
+    const webs: string[] = (Array.isArray(body.webs) ? body.webs as unknown[] : []).map(String).slice(0, 200);
+    const out: Record<string, string | null> = {};
+    await enLotes(webs, 12, async w => { try { out[w] = await detectarPlataforma(w); } catch { out[w] = null; } });
+    return NextResponse.json({ webs: out });
+  }
+
+  // Web oficial de una marca (como la de Eberlin): su tienda entera, solo en esa marca y en su propia columna.
+  // Vacía, se quita. Solo Shopify o WooCommerce, que dejan leer el catálogo entero.
+  if (body.action === "web-oficial") {
+    const slug = String(body.slug ?? ""), nombre = String(body.nombre ?? "").trim();
+    const texto = String(body.web ?? "").trim();
+    if (!slug || !nombre) return NextResponse.json({ error: "Falta la marca" });
+    const id = `oficial-${slug}`;
+    const ajustes: AjustesCompetidores = { extra: (config.competidores?.extra ?? []).filter(c => c.id !== id), quitados: [...(config.competidores?.quitados ?? [])], descartados: config.competidores?.descartados };
+    // Fuera lo de la anterior (enlaces y precios guardados)
+    delete config.enlaces[slug]?.[id]; delete config.auto[slug]?.[id];
+    const r = config.resultados[slug];
+    if (r) { delete r.competidores[id]; for (const f of r.filas) delete f.precios[id]; }
+    if (texto) {
+      let web: string;
+      try { web = new URL(/^https?:\/\//.test(texto) ? texto : `https://${texto}`).origin; }
+      catch { return NextResponse.json({ error: "Esa dirección no es válida. Pon algo como https://marca.com" }); }
+      if (BASE.some(c => c.marca && vendeLaMarca(c, nombre))) return NextResponse.json({ error: `${nombre} ya tiene su web oficial puesta` });
+      const tipo = await detectarPlataforma(web);
+      if (tipo !== "shopify" && tipo !== "woo") return NextResponse.json({ error: `No puedo leer los precios de ${dominioDe(web)}: su tienda no es Shopify ni WooCommerce (o no vende online).` });
+      ajustes.extra!.push({ id, nombre: `${nombre} (web oficial)`, corto: `${nombre} oficial`, web, tipo, color: "#15803d", fondo: "#e6f4ea", extra: true, marca: letras(nombre) });
     }
     config.competidores = ajustes;
     ponerCompetidores(ajustes);
