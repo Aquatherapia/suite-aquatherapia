@@ -327,13 +327,16 @@ function tablaParaMarca(filas: FilaComp[], descuento: number): TablaParaMarca {
   for (const f of filas) {
     const pvp = f.pvp || f.precio;
     const minimo = Math.round(pvp * (1 - descuento / 100) * 100) / 100;
-    const bajo = tiendas.filter(c => f.precios[c.id] && f.precios[c.id].precio < minimo - 0.005);
+    // Con web oficial de la marca, el producto entra si alguna tienda vende por debajo del precio de la marca;
+    // si la marca no lo tiene, por debajo de nuestro PVP con el dto. autorizado
+    const ofi = COMPETIDORES.filter(o => o.marca).map(o => f.precios[o.id]).find(Boolean);
+    const ref = ofi ? ofi.precio : minimo;
+    const bajo = tiendas.filter(c => f.precios[c.id] && f.precios[c.id].precio < ref - 0.005);
     if (!bajo.length) continue;
     const c = bajo.reduce((a, b) => (f.precios[b.id].precio < f.precios[a.id].precio ? b : a));
-    const ofi = COMPETIDORES.filter(o => o.marca).map(o => f.precios[o.id]).find(Boolean);
-    productos.push({ f, pvp, base: ofi ? ofi.precio : pvp, minimo, peor: { c, precio: f.precios[c.id].precio } });
+    productos.push({ f, pvp, base: ofi ? ofi.precio : pvp, minimo: ref, peor: { c, precio: f.precios[c.id].precio } });
   }
-  productos.sort((a, b) => (1 - b.peor.precio / b.pvp) - (1 - a.peor.precio / a.pvp));
+  productos.sort((a, b) => (1 - b.peor.precio / b.base) - (1 - a.peor.precio / a.base));
   const oficial = COMPETIDORES.find(c => c.marca && productos.some(x => x.f.precios[c.id]));
   const comps = tiendas.filter(c => productos.some(x => x.f.precios[c.id] && x.f.precios[c.id].precio < x.minimo - 0.005));
   return { productos, oficial, comps };
