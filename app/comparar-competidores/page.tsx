@@ -485,11 +485,33 @@ export default function CompararCompetidores() {
 
   async function revisar(slug: string) {
     setRevisando(slug); setError("");
+    // Si la respuesta se pierde por el camino (la conexión se corta o el navegador deja la petición colgada),
+    // la revisión sigue guardándose en el servidor: se mira cada 10 s y, en cuanto aparece, se pinta sin tener que recargar
+    const antes = config?.resultados[slug]?.revisadoEn;
+    let hecho = false;
+    const vigilar = setInterval(async () => {
+      try {
+        const d: Config = await fetch("/api/comparar-competidores", { cache: "no-store" }).then(r => r.json());
+        const en = d.resultados?.[slug]?.revisadoEn;
+        if (!hecho && en && en !== antes) {
+          hecho = true; clearInterval(vigilar);
+          ponerConfig(d); setExpandidos(prev => new Set(prev).add(slug)); setRevisando(null);
+        }
+      } catch { /* se vuelve a mirar en 10 s */ }
+    }, 10_000);
     try {
-      if (await enviar({ action: "revisar", slug })) setExpandidos(prev => new Set(prev).add(slug));
+      // Nunca más de 5 min y medio esperando (el servidor corta a los 5)
+      const r = await Promise.race([
+        enviar({ action: "revisar", slug }),
+        new Promise<"tarde">(res => setTimeout(() => res("tarde"), 330_000)),
+      ]);
+      if (hecho) return;
+      if (r === "tarde") setError("La revisión está tardando demasiado. Vuelve a pulsar «Revisar».");
+      else if (r) setExpandidos(prev => new Set(prev).add(slug));
     } catch (e) {
-      setError(explicarError(e instanceof Error ? e.message : String(e)));
+      if (!hecho) setError(explicarError(e instanceof Error ? e.message : String(e)));
     } finally {
+      hecho = true; clearInterval(vigilar);
       setRevisando(null);
     }
   }
