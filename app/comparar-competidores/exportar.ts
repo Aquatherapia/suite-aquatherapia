@@ -269,8 +269,14 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
   bajar(doc.output("blob"), `${limpio(marca)}_COMPETENCIA_${fechaArchivo(fecha)}_informe.pdf`);
 }
 
+const VERDE_MARCA = "15803D"; // PVP de la web oficial de la marca
+
 // ── «Para la marca» ────────────────────────────────────────────────────
-export type FilaParaMarca = { ean: string; producto: string; tienda: string; color: string; url: string; pvp: number; minimo: number; suPrecio: number; dtoSobrePvp: number; porDebajo: number };
+export type FilaParaMarca = {
+  ean: string; producto: string; tienda: string; color: string; url: string; pvp: number; minimo: number; suPrecio: number; dtoSobrePvp: number; porDebajo: number;
+  miUrl: string;                                  // nuestra ficha
+  marca?: { url: string; precio: number };        // el producto en la web oficial de la marca, si la tiene
+};
 
 // Cada precio de la competencia por debajo de nuestro PVP con el dto. autorizado (sin dto. autorizado, por debajo del PVP)
 export function filasParaMarca(filas: FilaComp[], descuento: number): FilaParaMarca[] {
@@ -278,11 +284,13 @@ export function filasParaMarca(filas: FilaComp[], descuento: number): FilaParaMa
   for (const f of filas) {
     const pvp = f.pvp || f.precio;
     const minimo = Math.round(pvp * (1 - descuento / 100) * 100) / 100;
-    // La web oficial de la marca no entra: el informe es para la marca
+    // La web oficial de la marca no entra como tienda (el informe es para la marca), pero se enlaza en cada fila
+    const oficial = COMPETIDORES.filter(c => c.marca).map(c => f.precios[c.id]).find(Boolean);
     for (const c of COMPETIDORES.filter(c => !c.marca)) {
       const p = f.precios[c.id];
       if (!p || p.precio >= minimo - 0.005) continue;
-      out.push({ ean: f.ean ?? "", producto: f.nombre, tienda: c.nombre, color: c.color, url: p.url, pvp, minimo, suPrecio: p.precio, dtoSobrePvp: pvp > 0 ? 1 - p.precio / pvp : 0, porDebajo: Math.round((minimo - p.precio) * 100) / 100 });
+      out.push({ ean: f.ean ?? "", producto: f.nombre, tienda: c.nombre, color: c.color, url: p.url, pvp, minimo, suPrecio: p.precio, dtoSobrePvp: pvp > 0 ? 1 - p.precio / pvp : 0, porDebajo: Math.round((minimo - p.precio) * 100) / 100,
+        miUrl: f.url, marca: oficial ? { url: oficial.url, precio: oficial.precio } : undefined });
     }
   }
   return out.sort((a, b) => b.dtoSobrePvp - a.dtoSobrePvp);
@@ -294,27 +302,42 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
   const titulo = `${marca} · precios de la competencia por debajo de ${descuento > 0 ? "lo autorizado" : "PVP"}`;
   const sub = `Tiendas online que venden por debajo de ${que} · ${fechaCorta(fecha)}`;
   const nombre = `${limpio(marca)}_COMPETENCIA_bajo_${descuento > 0 ? "dto_autorizado" : "PVP"}_${fechaArchivo(fecha)}`;
-  const titulos = ["EAN", "PRODUCTO", "TIENDA", "PVP", descuento > 0 ? `PVP -${num(descuento)} %` : "MÍNIMO", "SU PRECIO", "DTO. SOBRE PVP", "POR DEBAJO"];
+  const conMarca = lista.some(x => x.marca);
+  const titulos = ["EAN", "PRODUCTO", "TIENDA", "PVP", descuento > 0 ? `PVP -${num(descuento)} %` : "MÍNIMO", "SU PRECIO", "DTO. SOBRE PVP", "POR DEBAJO", ...(conMarca ? [`PVP ${marca.toUpperCase()} (WEB OFICIAL)`] : []), "ENLACES"];
+  const nCol = titulos.length;
+  const letra = String.fromCharCode(64 + nCol);
+  // Enlaces de cada fila: la tienda y nuestra ficha (de la web oficial de la marca solo va su PVP)
+  const enlaces = (x: FilaParaMarca) => [
+    { texto: `Ver en ${x.tienda}`, url: x.url },
+    { texto: "Ver en La Tienda de Cosméticos", url: x.miUrl },
+  ];
 
   if (formato === "excel") {
     const { default: Excel } = await import("exceljs");
     const wb = new Excel.Workbook();
     const ws = wb.addWorksheet(marca.replace(/[\\/?*[\]:]/g, " ").slice(0, 31));
     ws.views = [{ showGridLines: false }];
-    ws.mergeCells("A1:H1"); ws.getCell("A1").value = titulo; ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
-    ws.mergeCells("A2:H2"); ws.getCell("A2").value = sub; ws.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF" + SUAVE } };
+    ws.mergeCells(`A1:${letra}1`); ws.getCell("A1").value = titulo; ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
+    ws.mergeCells(`A2:${letra}2`); ws.getCell("A2").value = sub; ws.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF" + SUAVE } };
     const cab = ws.getRow(4);
     titulos.forEach((t, i) => { const c = cab.getCell(i + 1); c.value = t; c.font = { name: "Calibri", size: 9, bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + AZUL } }; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
     cab.height = 28;
-    [15, 50, 18, 11, 12, 14, 12, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    [15, 50, 18, 11, 12, 14, 12, 12, ...(conMarca ? [16] : []), 26, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    // Los enlaces van en dos columnas bajo la misma cabecera «ENLACES»
+    ws.mergeCells(4, nCol, 4, nCol + 1);
     lista.forEach((x, i) => {
       const row = ws.getRow(5 + i);
-      row.values = [x.ean, x.producto, x.tienda, x.pvp, x.minimo, { text: eur(x.suPrecio), hyperlink: x.url }, x.dtoSobrePvp, x.porDebajo];
+      const ver = (texto: string, url?: string) => url ? { text: texto, hyperlink: url } : "-";
+      row.values = [x.ean, x.producto, x.tienda, x.pvp, x.minimo, { text: eur(x.suPrecio), hyperlink: x.url }, x.dtoSobrePvp, x.porDebajo,
+        ...(conMarca ? [x.marca ? x.marca.precio : "-"] : []),
+        ...enlaces(x).map(e => ver(e.texto, e.url))];
       row.eachCell((c, n) => {
-        c.font = { name: "Calibri", size: 10, color: { argb: "FF" + (n === 3 || n === 6 ? hex(x.color) : n === 8 ? BAJO : TEXTO) }, bold: n >= 6 };
-        if (n === 4 || n === 5 || n === 8) c.numFmt = EUROS;
+        const esEnlace = n >= nCol;
+        const esPvpMarca = conMarca && n === 9;
+        c.font = { name: "Calibri", size: 10, color: { argb: "FF" + (esEnlace ? AZUL : esPvpMarca ? VERDE_MARCA : n === 3 || n === 6 ? hex(x.color) : n === 8 ? BAJO : TEXTO) }, bold: n >= 6 && n <= 9, underline: esEnlace && typeof c.value === "object" };
+        if (n === 4 || n === 5 || n === 8 || esPvpMarca) c.numFmt = EUROS;
         if (n === 7) c.numFmt = PORC;
-        c.alignment = { vertical: "middle", horizontal: n <= 3 ? "left" : "right", wrapText: n === 2 };
+        c.alignment = { vertical: "middle", horizontal: n <= 3 || esEnlace ? "left" : "right", wrapText: n === 2 };
         c.border = { bottom: { style: "thin", color: { argb: "FF" + LINEA } } };
       });
     });
@@ -331,8 +354,10 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
     styles: { font: "helvetica", fontSize: 8, textColor: rgb(TEXTO), halign: "right", valign: "middle", cellPadding: 1.6 },
     headStyles: { fillColor: rgb(AZUL), textColor: [255, 255, 255], fontStyle: "bold", halign: "center", fontSize: 7.5 },
     head: [titulos],
-    body: lista.map(x => [x.ean, x.producto, x.tienda, eur(x.pvp), eur(x.minimo), eur(x.suPrecio), `-${pctTexto(x.dtoSobrePvp)}`, eur(x.porDebajo)]),
-    columnStyles: { 0: { cellWidth: 26, halign: "left", textColor: rgb(SUAVE) }, 1: { halign: "left" }, 2: { cellWidth: 30, halign: "left", fontStyle: "bold" }, 3: { cellWidth: 20 }, 4: { cellWidth: 22 }, 5: { cellWidth: 22, fontStyle: "bold" }, 6: { cellWidth: 22 }, 7: { cellWidth: 22, textColor: rgb(BAJO), fontStyle: "bold" } },
+    body: lista.map(x => [x.ean, x.producto, x.tienda, eur(x.pvp), eur(x.minimo), eur(x.suPrecio), `-${pctTexto(x.dtoSobrePvp)}`, eur(x.porDebajo),
+      ...(conMarca ? [x.marca ? eur(x.marca.precio) : "-"] : []), enlaces(x).map(e => e.texto).join("\n")]),
+    columnStyles: { 0: { cellWidth: 24, halign: "left", textColor: rgb(SUAVE) }, 1: { halign: "left" }, 2: { cellWidth: 26, halign: "left", fontStyle: "bold" }, 3: { cellWidth: 17 }, 4: { cellWidth: 17 }, 5: { cellWidth: 19, fontStyle: "bold" }, 6: { cellWidth: 17 }, 7: { cellWidth: 18, textColor: rgb(BAJO), fontStyle: "bold" },
+      ...(conMarca ? { 8: { cellWidth: 22, fontStyle: "bold" } } : {}), [nCol - 1]: { cellWidth: 40, halign: "left", textColor: rgb(AZUL), fontSize: 7 } },
     didParseCell: d => {
       if (d.section !== "body") return;
       const x = lista[d.row.index];
@@ -340,9 +365,18 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
       d.cell.styles.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
       d.cell.styles.lineColor = rgb(LINEA);
       if (x && (d.column.index === 2 || d.column.index === 5)) d.cell.styles.textColor = rgb(x.color);
+      if (x && conMarca && d.column.index === 8 && x.marca) d.cell.styles.textColor = rgb(VERDE_MARCA);
     },
     didDrawCell: d => {
-      if (d.section === "body" && d.column.index === 5 && lista[d.row.index]) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: lista[d.row.index].url });
+      const x = lista[d.row.index];
+      if (d.section !== "body" || !x) return;
+      if (d.column.index === 5) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: x.url });
+      // Columna de enlaces: una línea por enlace, cada una con su zona para pulsar
+      if (d.column.index === nCol - 1) {
+        const lineas = enlaces(x);
+        const alto = (d.cell.height - d.cell.padding("vertical")) / lineas.length;
+        lineas.forEach((e, i) => doc.link(d.cell.x, d.cell.y + d.cell.padding("top") + i * alto, d.cell.width, alto, { url: e.url }));
+      }
     },
   });
   bajar(doc.output("blob"), `${nombre}.pdf`);
@@ -397,16 +431,22 @@ export async function descargarParaTodas(marcas: { nombre: string; filas: FilaCo
     const que = m.descuento > 0 ? `nuestro PVP con el descuento autorizado (-${num(m.descuento)} %)` : "el PVP";
     ws.mergeCells("A1:H1"); ws.getCell("A1").value = `${m.nombre} · precios de la competencia por debajo de ${m.descuento > 0 ? "lo autorizado" : "PVP"}`; ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
     ws.mergeCells("A2:H2"); ws.getCell("A2").value = `Tiendas online que venden por debajo de ${que} · ${fechaCorta(fecha)}`; ws.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF" + SUAVE } };
-    cabecera(ws, 4, ["EAN", "PRODUCTO", "TIENDA", "PVP", m.descuento > 0 ? `PVP -${num(m.descuento)} %` : "MÍNIMO", "SU PRECIO", "DTO. SOBRE PVP", "POR DEBAJO"]);
-    [15, 50, 18, 11, 12, 14, 12, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    const conMarca = m.lista.some(x => x.marca);
+    const nCol = conMarca ? 10 : 9;
+    cabecera(ws, 4, ["EAN", "PRODUCTO", "TIENDA", "PVP", m.descuento > 0 ? `PVP -${num(m.descuento)} %` : "MÍNIMO", "SU PRECIO", "DTO. SOBRE PVP", "POR DEBAJO", ...(conMarca ? [`PVP ${m.nombre.toUpperCase()} (WEB OFICIAL)`] : []), "ENLACES", ""]);
+    ws.mergeCells(4, nCol, 4, nCol + 1);
+    [15, 50, 18, 11, 12, 14, 12, 12, ...(conMarca ? [16] : []), 26, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
     m.lista.forEach((x, i) => {
       const row = ws.getRow(5 + i);
-      row.values = [x.ean, x.producto, x.tienda, x.pvp, x.minimo, { text: eur(x.suPrecio), hyperlink: x.url }, x.dtoSobrePvp, x.porDebajo];
+      row.values = [x.ean, x.producto, x.tienda, x.pvp, x.minimo, { text: eur(x.suPrecio), hyperlink: x.url }, x.dtoSobrePvp, x.porDebajo,
+        ...(conMarca ? [x.marca ? x.marca.precio : "-"] : []),
+        { text: `Ver en ${x.tienda}`, hyperlink: x.url }, { text: "Ver en La Tienda de Cosméticos", hyperlink: x.miUrl }];
       row.eachCell((c, n) => {
-        c.font = { name: "Calibri", size: 10, color: { argb: "FF" + (n === 3 || n === 6 ? hex(x.color) : n === 8 ? BAJO : TEXTO) }, bold: n >= 6 };
-        if (n === 4 || n === 5 || n === 8) c.numFmt = EUROS;
+        const esEnlace = n >= nCol, esPvpMarca = conMarca && n === 9;
+        c.font = { name: "Calibri", size: 10, color: { argb: "FF" + (esEnlace ? AZUL : esPvpMarca ? VERDE_MARCA : n === 3 || n === 6 ? hex(x.color) : n === 8 ? BAJO : TEXTO) }, bold: n >= 6 && n <= 9, underline: esEnlace };
+        if (n === 4 || n === 5 || n === 8 || esPvpMarca) c.numFmt = EUROS;
         if (n === 7) c.numFmt = PORC;
-        c.alignment = { vertical: "middle", horizontal: n <= 3 ? "left" : "right", wrapText: n === 2 };
+        c.alignment = { vertical: "middle", horizontal: n <= 3 || esEnlace ? "left" : "right", wrapText: n === 2 };
         c.border = { bottom: { style: "thin", color: { argb: "FF" + LINEA } } };
       });
     });
