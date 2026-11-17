@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, ordenFecha, recortarStock, recortarVentas, lineasParaHistorico, textoMarca, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
+
+// Pedido mínimo a una marca: productos que tiene que juntar para salir en la lista
+const MIN_PRODUCTOS_MARCA = 5;
 import { Segmentos } from "../_google/ui";
 
 type Archivo<T> = { nombre: string; filas: T } | null;
@@ -53,7 +56,6 @@ export default function PedidosMarcasPage() {
   const [stock, setStock] = useState<Archivo<string[][]>>(null);
   const [error, setError] = useState("");
   const [stockMax, setStockMax] = usePref("stock-max", 1);
-  const [descatalogados, setDescatalogados] = useState(false);
   const [soloSinEnviar, setSoloSinEnviar] = useState(true);
   const [sinEnviarDesde, setSinEnviarDesde] = useState("");
   const [buscar, setBuscar] = useState("");
@@ -192,11 +194,11 @@ export default function PedidosMarcasPage() {
   const resultado = useMemo(() => {
     if (!ventas || !stock) return null;
     try { return cruzar(ventas.filas, stock.filas, {
-      stockMax, incluirDescatalogados: descatalogados, soloSinEnviar, sinEnviarDesde, seguidos, diasCobertura: cobertura,
+      stockMax, incluirDescatalogados: false, soloSinEnviar, sinEnviarDesde, seguidos, diasCobertura: cobertura,
       historico: usarHist && hist && hist.pedidos ? hist : undefined,
     }); }
     catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
-  }, [ventas, stock, stockMax, descatalogados, soloSinEnviar, sinEnviarDesde, seguidos, cobertura, usarHist, hist]);
+  }, [ventas, stock, stockMax, soloSinEnviar, sinEnviarDesde, seguidos, cobertura, usarHist, hist]);
 
   const marcas: MarcaPedido[] = useMemo(() => (!resultado || "error" in resultado ? [] : resultado.marcas), [resultado]);
 
@@ -233,6 +235,10 @@ export default function PedidosMarcasPage() {
     const q = buscar.trim().toLowerCase();
     return q ? marcasPend.filter(m => m.marca.includes(q)) : marcasPend;
   }, [marcasPend, buscar]);
+  // Pedido mínimo: una marca sale para pedir cuando junta al menos 5 productos; las demás esperan en una lista aparte
+  const listas = marcasVista.filter(m => m.total >= MIN_PRODUCTOS_MARCA);
+  const pocas = marcasVista.filter(m => m.total < MIN_PRODUCTOS_MARCA);
+  const nListas = marcasPend.filter(m => m.total >= MIN_PRODUCTOS_MARCA).length;
   const aPedido = (f: FilaPedido) => ({ id: f.id, producto: f.producto, propiedad: f.propiedad, ean: f.ean, compras: f.compras.map(c => c.id), stock: f.stock, ventas: f.ventas, pedir: f.pedir });
 
   async function copiarTexto(id: string, texto: string) {
@@ -242,6 +248,88 @@ export default function PedidosMarcasPage() {
 
   const r = resultado && !("error" in resultado) ? resultado : null;
   const lineas = marcasPend.reduce((n, m) => n + m.total, 0);
+
+  const tarjeta = (m: MarcaPedido) => (
+              <section key={m.marca} className="pm-marca">
+                <div className="pm-cab">
+                  <h2>{m.marca}</h2>
+                  <span className="rf-suave">{m.total} producto{m.total !== 1 ? "s" : ""}</span>
+                  {(() => {
+                    const texto = textoMarca(m, estados, conCantidad);
+                    const sinPedir = m.grupos.flatMap(g => g.filas).filter(f => !estados[f.id]);
+                    return <>
+                      {sinPedir.length > 0 && pedidos && (
+                        <button className="regen-btn" disabled={guardando} title="Apunta el pedido a esta marca para seguirlo hasta que llegue"
+                          onClick={() => enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(aPedido) })}>
+                          Marcar como pedido
+                        </button>
+                      )}
+                      <button className="copy-btn" disabled={!texto} onClick={() => copiarTexto(m.marca, texto)}>
+                        {copiado === m.marca ? "Copiado ✓" : texto ? "Copiar" : "Todo pedido"}
+                      </button>
+                      {texto && (contactos[m.marca]?.email || contactos[m.marca]?.whatsapp) ? (() => {
+                        const c = contactos[m.marca];
+                        const marcar = () => { if (sinPedir.length) enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(aPedido) }); };
+                        const asunto = `Pedido La Tienda de Cosméticos ${new Date().toLocaleDateString("es-ES")}`;
+                        return <>
+                          {c.email && <a className="copy-btn pm-enviar" href={`mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`} onClick={marcar}>Email</a>}
+                          {c.whatsapp && <a className="copy-btn pm-enviar" href={`https://wa.me/${c.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`} target="_blank" rel="noreferrer" onClick={marcar}>WhatsApp</a>}
+                        </>;
+                      })() : null}
+                      {pedidos && <button className="regen-btn" onClick={() => setEditando(editando === m.marca ? "" : m.marca)} title="Email y WhatsApp de la marca">
+                        {contactos[m.marca] ? "✎" : "+ contacto"}
+                      </button>}
+                    </>;
+                  })()}
+                </div>
+                {editando === m.marca && (
+                  <form className="pm-contacto" onSubmit={e => {
+                    e.preventDefault();
+                    const d = new FormData(e.currentTarget);
+                    enviar({ accion: "contacto", marca: m.marca, email: d.get("email"), whatsapp: d.get("whatsapp") });
+                    setEditando("");
+                  }}>
+                    <input name="email" type="email" placeholder="Email de pedidos de la marca" defaultValue={contactos[m.marca]?.email ?? ""} />
+                    <input name="whatsapp" type="tel" placeholder="WhatsApp (con prefijo, p. ej. 34600111222)" defaultValue={contactos[m.marca]?.whatsapp ?? ""} />
+                    <button type="submit" className="vp-revisar-btn" disabled={guardando}>Guardar</button>
+                  </form>
+                )}
+                {m.grupos.map(g => (
+                  <div key={g.stock} className="pm-grupo">
+                    <h3 className={g.stock < 0 ? "neg" : ""}>stock {g.stock}</h3>
+                    <ul>
+                      {g.filas.map(f => (
+                        <li key={`${f.ean}|${f.producto}|${f.propiedad}`} className={estados[f.id] ? `pm-li-${estados[f.id]}` : ""}>
+                          <span className="pm-prod">{f.producto}</span>
+                          <span className="pm-dato">{f.propiedad}</span>
+                          <span className="pm-dato pm-ean">{f.ean}</span>
+                          <span className="pm-ventas">−ventas <b>{f.ventas}</b> · pedir <b className="pm-pedir">{f.pedir}</b></span>
+                          {f.compras.length > 0 && (
+                            <span className="pm-compras">
+                              Compra{f.compras.length > 1 ? "s" : ""} del cliente:{" "}
+                              {f.compras.map((c, i) => (
+                                <span key={i} className={c.pagada ? "" : "pm-compra-sinpagar"}>{i > 0 ? ", " : ""}{fechaCorta(c.fecha)}{c.pagada ? "" : " (sin pagar)"}</span>
+                              ))}
+                            </span>
+                          )}
+                          {f.sinPagar > 0 && <span className="pm-sinpagar">{AVISO_SIN_PAGAR} ({f.sinPagar} ud{f.sinPagar !== 1 ? "s" : ""}.)</span>}
+                          {enPedido[f.id] && (
+                            <span className={`pm-tag pm-estado-${enPedido[f.id].estado}`}>
+                              {enPedido[f.id].estado === "esperando" ? "Pedido" : ESTADOS_PEDIDO[enPedido[f.id].estado].titulo} el {diaHora(enPedido[f.id].fecha)}
+                            </span>
+                          )}
+                          {enPedido[f.id]?.estado === "esperando" && nuevas(f).length > 0 && (
+                            <span className="pm-tag pm-nuevas">
+                              {nuevas(f).length === 1 ? "1 compra nueva" : `${nuevas(f).length} compras nuevas`} después del pedido: hay que pedir{nuevas(f).length === 1 ? "la" : "las"}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </section>
+  );
 
   return (
     <div className="wrap rf pm">
@@ -257,7 +345,7 @@ export default function PedidosMarcasPage() {
 
       <Segmentos
         opciones={[
-          { valor: "pedir" as const, nombre: `Para pedir${r ? ` (${marcasPend.length})` : ""}` },
+          { valor: "pedir" as const, nombre: `Para pedir${r ? ` (${nListas})` : ""}` },
           { valor: "recibir" as const, nombre: `Sin recibir${pedidos ? ` (${Object.keys(pedidos).length})` : ""}` },
           { valor: "historico" as const, nombre: "Histórico de ventas" },
         ]}
@@ -359,7 +447,7 @@ export default function PedidosMarcasPage() {
       {r && (
         <>
           <div className="mp-cifras">
-            <div><b>{miles(marcasPend.length)}</b><span>marcas con algo que pedir</span></div>
+            <div><b>{miles(nListas)}</b><span>marcas para pedir (con {MIN_PRODUCTOS_MARCA} productos o más)</span></div>
             <div><b>{miles(lineas)}</b><span>productos en la lista</span></div>
             <div><b>{miles(r.pedidosPendientes)}</b><span>pedidos sin enviar{r.pendDesde ? ` (el primero, del ${r.pendDesde.slice(0, 16)})` : ""}</span></div>
           </div>
@@ -387,10 +475,6 @@ export default function PedidosMarcasPage() {
                 <input type="date" className="pm-fecha" value={r.sinEnviarDesde} onChange={e => setSinEnviarDesde(e.target.value)} />
               </label>
             )}
-            <label className="rf-check">
-              <input type="checkbox" checked={descatalogados} onChange={e => setDescatalogados(e.target.checked)} />
-              Incluir descatalogados{r.descatalogados > 0 && !descatalogados ? ` (${r.descatalogados})` : ""}
-            </label>
             <select className="rc-select" value={cobertura} onChange={e => setCobertura(Number(e.target.value))} aria-label="Días de venta que cubre el pedido">
               {[7, 14, 21, 30, 45].map(d => <option key={d} value={d}>Pedir para {d} días</option>)}
             </select>
@@ -399,8 +483,8 @@ export default function PedidosMarcasPage() {
               Cantidad al copiar
             </label>
             <input type="search" placeholder="Buscar marca…" value={buscar} onChange={e => setBuscar(e.target.value)} />
-            <button className="vp-revisar-btn pm-todo" disabled={!marcasVista.length}
-              onClick={() => copiarTexto("*", marcasVista.map(m => textoMarca(m, estados, conCantidad)).filter(Boolean).join("\n\n"))}>
+            <button className="vp-revisar-btn pm-todo" disabled={!listas.length}
+              onClick={() => copiarTexto("*", listas.map(m => textoMarca(m, estados, conCantidad)).filter(Boolean).join("\n\n"))}>
               {copiado === "*" ? "Copiado ✓" : "Copiar todas"}
             </button>
           </div>
@@ -408,88 +492,16 @@ export default function PedidosMarcasPage() {
           {marcasPend.length === 0 && <p className="rf-suave">{r.marcas.length ? "Todo lo que hay que pedir ya está pedido: lo tienes en «Sin recibir»." : soloSinEnviar ? "En los pedidos sin enviar no hay nada que esté sin stock." : "No hay nada vendido en este periodo que esté sin stock."}</p>}
 
           <div className="pm-marcas">
-            {marcasVista.map(m => (
-              <section key={m.marca} className="pm-marca">
-                <div className="pm-cab">
-                  <h2>{m.marca}</h2>
-                  <span className="rf-suave">{m.total} producto{m.total !== 1 ? "s" : ""}</span>
-                  {(() => {
-                    const texto = textoMarca(m, estados, conCantidad);
-                    const sinPedir = m.grupos.flatMap(g => g.filas).filter(f => !estados[f.id]);
-                    return <>
-                      {sinPedir.length > 0 && pedidos && (
-                        <button className="regen-btn" disabled={guardando} title="Apunta el pedido a esta marca para seguirlo hasta que llegue"
-                          onClick={() => enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(aPedido) })}>
-                          Marcar como pedido
-                        </button>
-                      )}
-                      <button className="copy-btn" disabled={!texto} onClick={() => copiarTexto(m.marca, texto)}>
-                        {copiado === m.marca ? "Copiado ✓" : texto ? "Copiar" : "Todo pedido"}
-                      </button>
-                      {texto && (contactos[m.marca]?.email || contactos[m.marca]?.whatsapp) ? (() => {
-                        const c = contactos[m.marca];
-                        const marcar = () => { if (sinPedir.length) enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(aPedido) }); };
-                        const asunto = `Pedido La Tienda de Cosméticos ${new Date().toLocaleDateString("es-ES")}`;
-                        return <>
-                          {c.email && <a className="copy-btn pm-enviar" href={`mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`} onClick={marcar}>Email</a>}
-                          {c.whatsapp && <a className="copy-btn pm-enviar" href={`https://wa.me/${c.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`} target="_blank" rel="noreferrer" onClick={marcar}>WhatsApp</a>}
-                        </>;
-                      })() : null}
-                      {pedidos && <button className="regen-btn" onClick={() => setEditando(editando === m.marca ? "" : m.marca)} title="Email y WhatsApp de la marca">
-                        {contactos[m.marca] ? "✎" : "+ contacto"}
-                      </button>}
-                    </>;
-                  })()}
-                </div>
-                {editando === m.marca && (
-                  <form className="pm-contacto" onSubmit={e => {
-                    e.preventDefault();
-                    const d = new FormData(e.currentTarget);
-                    enviar({ accion: "contacto", marca: m.marca, email: d.get("email"), whatsapp: d.get("whatsapp") });
-                    setEditando("");
-                  }}>
-                    <input name="email" type="email" placeholder="Email de pedidos de la marca" defaultValue={contactos[m.marca]?.email ?? ""} />
-                    <input name="whatsapp" type="tel" placeholder="WhatsApp (con prefijo, p. ej. 34600111222)" defaultValue={contactos[m.marca]?.whatsapp ?? ""} />
-                    <button type="submit" className="vp-revisar-btn" disabled={guardando}>Guardar</button>
-                  </form>
-                )}
-                {m.grupos.map(g => (
-                  <div key={g.stock} className="pm-grupo">
-                    <h3 className={g.stock < 0 ? "neg" : ""}>stock {g.stock}</h3>
-                    <ul>
-                      {g.filas.map(f => (
-                        <li key={`${f.ean}|${f.producto}|${f.propiedad}`} className={estados[f.id] ? `pm-li-${estados[f.id]}` : ""}>
-                          <span className="pm-prod">{f.producto}</span>
-                          <span className="pm-dato">{f.propiedad}</span>
-                          <span className="pm-dato pm-ean">{f.ean}</span>
-                          <span className="pm-ventas">−ventas <b>{f.ventas}</b> · pedir <b className="pm-pedir">{f.pedir}</b></span>
-                          {f.compras.length > 0 && (
-                            <span className="pm-compras">
-                              Compra{f.compras.length > 1 ? "s" : ""} del cliente:{" "}
-                              {f.compras.map((c, i) => (
-                                <span key={i} className={c.pagada ? "" : "pm-compra-sinpagar"}>{i > 0 ? ", " : ""}{fechaCorta(c.fecha)}{c.pagada ? "" : " (sin pagar)"}</span>
-                              ))}
-                            </span>
-                          )}
-                          {f.sinPagar > 0 && <span className="pm-sinpagar">{AVISO_SIN_PAGAR} ({f.sinPagar} ud{f.sinPagar !== 1 ? "s" : ""}.)</span>}
-                          {enPedido[f.id] && (
-                            <span className={`pm-tag pm-estado-${enPedido[f.id].estado}`}>
-                              {enPedido[f.id].estado === "esperando" ? "Pedido" : ESTADOS_PEDIDO[enPedido[f.id].estado].titulo} el {diaHora(enPedido[f.id].fecha)}
-                            </span>
-                          )}
-                          {enPedido[f.id]?.estado === "esperando" && nuevas(f).length > 0 && (
-                            <span className="pm-tag pm-nuevas">
-                              {nuevas(f).length === 1 ? "1 compra nueva" : `${nuevas(f).length} compras nuevas`} después del pedido: hay que pedir{nuevas(f).length === 1 ? "la" : "las"}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </section>
-            ))}
+            {listas.map(tarjeta)}
           </div>
+
+          {pocas.length > 0 && (
+            <details className="pm-aviso pm-pocas">
+              <summary>Marcas que aún no llegan al pedido mínimo de {MIN_PRODUCTOS_MARCA} productos ({pocas.length})</summary>
+              <p className="rf-suave">Se quedan aquí hasta que junten {MIN_PRODUCTOS_MARCA} productos que pedir. Si alguna corre prisa, puedes pedirla igual desde aquí.</p>
+              <div className="pm-marcas">{pocas.map(tarjeta)}</div>
+            </details>
+          )}
 
           {r.caducados.length > 0 && (
             <details className="pm-aviso">
@@ -523,6 +535,8 @@ export default function PedidosMarcasPage() {
             Si el pedido llega mal o no es el correcto, sus productos vuelven a salir al copiar con la nota. Al ponerlo como «Recibido» se quita; si con lo recibido el stock sigue sin cubrir los pedidos, el producto volverá a salir para pedir.
             {" "}Si un producto tiene pedidos sin enviar y sin pagar, sale con «{AVISO_SIN_PAGAR}»: su stock negativo puede deberse a una compra que no se ha completado.
             {r.sinControl > 0 && <> {r.sinControl} vendidos no tienen control de stock y no salen.</>}
+            {" "}No salen los descatalogados{r.descatalogados > 0 ? ` (${r.descatalogados})` : ""} ni los que tienen una sola venta y aún les queda stock{r.unaVenta > 0 ? ` (${r.unaVenta})` : ""}.
+            {" "}Una marca sale para pedir cuando junta {MIN_PRODUCTOS_MARCA} productos o más (pedido mínimo); las demás esperan en la lista plegada.
             {" "}«Pedir» = lo que falta para cubrir el stock negativo más la venta media de {cobertura} días ({r.diasPeriodo} días de ventas), y como mínimo 1.
             {" "}Al mandar el pedido por email o WhatsApp desde aquí, se marca como pedido solo.
             {" "}Los pedidos sin pagar de más de {DIAS_SIN_PAGAR} días se dan por anulados: no cuentan como venta. Las ventas son unidades.
