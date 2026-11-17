@@ -2003,4 +2003,4 @@ label { color: #3f3f46; font-weight: 500; font-size: 13px; }
 .pm-ped-datos { display: flex !important; margin-top: 2px; gap: 10px; font-size: 13px; white-space: nowrap; color: var(--muted); }
 .pm-ped-datos b { color: var(--ink); }
 .pm-ped-datos .neg { color: #b42318; font-weight: 600; }
-.pm-relleno { background: #ecfdf3; color: #067647; }
+.pm-relleno-titulo { margin: 14px 0 0; padding: 6px 10px; border-radius: 8px; background: #ecfdf3; color: #067647; font-weight: 600; font-size: 13.5px; }
