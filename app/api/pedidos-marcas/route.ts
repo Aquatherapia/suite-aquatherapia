@@ -8,7 +8,8 @@ const ESTADOS = ["esperando", "mal", "incorrecto"];
 const CONTACTOS = "pedidos-marcas-contactos";
 type Contacto = { email: string; whatsapp: string };
 
-type Producto = { id: string; producto: string; propiedad: string; ean: string };
+// compras: IDs de las compras de clientes que cubre este pedido (las que lleguen después vuelven a salir)
+type Producto = { id: string; producto: string; propiedad: string; ean: string; compras?: string[] };
 export type Pedido = { marca: string; fecha: string; estado: string; productos: Producto[] };
 
 async function kv() {
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
     if (b.accion === "crear") {
       const productos: Producto[] = (Array.isArray(b.productos) ? b.productos : []).slice(0, 500).map((p: Partial<Producto>) => ({
         id: txt(p.id, 300), producto: txt(p.producto, 300), propiedad: txt(p.propiedad, 120), ean: txt(p.ean, 40),
+        compras: Array.isArray(p.compras) ? p.compras.slice(0, 200).map(c => txt(c, 40)).filter(Boolean) : undefined,
       })).filter((p: Producto) => p.id);
       if (!b.marca || !productos.length) return NextResponse.json({ error: "Faltan la marca o los productos" }, { status: 400 });
       const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
