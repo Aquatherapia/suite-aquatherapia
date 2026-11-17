@@ -22,6 +22,7 @@ export const ICONOS = {
   reclamaciones: ic(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></>),
   datos: ic(<><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>),
   enlace: ic(<><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></>),
+  pedido: ic(<><path d="M6 6h15l-1.5 9h-12z" /><path d="M6 6L5 3H2" /><circle cx="9" cy="20" r="1.5" /><circle cx="18" cy="20" r="1.5" /></>),
   menu: ic(<><path d="M4 7h16M4 12h16M4 17h16" /></>),
   cerrar: ic(<><path d="M6 6l12 12M18 6L6 18" /></>),
 };
@@ -35,6 +36,12 @@ export const GRUPOS: { titulo: string; herramientas: Herramienta[] }[] = [
       { href: "/revisar-fichas", icono: "revisar", corto: "Revisar fichas", nombre: "Revisar fichas de nuestra web", desc: "Fichas con problemas: precio, EAN, descripción, meta y desactivadas que siguen en Google." },
       { href: "/ficha-producto", icono: "ficha", corto: "Fichas de producto", nombre: "Generador de fichas de producto", desc: "La IA redacta la ficha completa con el formato de la tienda: título, descripción, beneficios y SEO." },
       { href: "/ficha-pack", icono: "pack", corto: "Fichas de packs", nombre: "Generador de fichas de packs", desc: "Fichas de packs y sets, enlazando los productos que contienen." },
+    ],
+  },
+  {
+    titulo: "Compras",
+    herramientas: [
+      { href: "/pedidos-marcas", icono: "pedido", corto: "Pedidos a marcas", nombre: "Pedidos a las marcas", desc: "Con las ventas y el stock de la tienda, lo que hay que pedir a cada marca, listo para copiar." },
     ],
   },
   {
