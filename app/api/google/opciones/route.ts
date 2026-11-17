@@ -2,7 +2,7 @@ import { llamarGoogle, respuestaError, leerConexion } from "../../../_google/cli
 
 export const dynamic = "force-dynamic";
 
-type Cuenta = { name: string; accountName?: string };
+type Cuenta = { name: string; accountName?: string; type?: string };
 type Ubicacion = { name: string; title?: string; storefrontAddress?: { locality?: string; addressLines?: string[] } };
 
 // Lista lo que la cuenta conectada puede ver: fichas, propiedades de Search Console y de GA4
@@ -13,30 +13,47 @@ export async function GET() {
     return respuestaError(e);
   }
 
+  // Fichas, con diagnóstico por cuenta: si la lista sale vacía, se ve qué cuentas ve la Suite y qué devolvió cada una
+  type Diag = { nombre: string; tipo: string; fichas: number; error?: string };
+  const cuentasDiag: Diag[] = [];
+  let errorCuentas = "";
   const fichas = (async () => {
-    const { accounts = [] } = await llamarGoogle<{ accounts?: Cuenta[] }>(
-      "ficha",
-      "https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=20"
-    );
     const lista: { id: string; nombre: string; cuenta: string }[] = [];
+    let accounts: Cuenta[] = [];
+    try {
+      accounts = (await llamarGoogle<{ accounts?: Cuenta[] }>(
+        "ficha",
+        "https://mybusinessaccountmanagement.googleapis.com/v1/accounts?pageSize=20"
+      )).accounts ?? [];
+    } catch (e) {
+      errorCuentas = e instanceof Error ? e.message : "Error";
+      throw e;
+    }
     for (const cuenta of accounts) {
-      let pageToken = "";
-      do {
-        const url = new URL(`https://mybusinessbusinessinformation.googleapis.com/v1/${cuenta.name}/locations`);
-        url.searchParams.set("readMask", "name,title,storefrontAddress");
-        url.searchParams.set("pageSize", "100");
-        if (pageToken) url.searchParams.set("pageToken", pageToken);
-        const r = await llamarGoogle<{ locations?: Ubicacion[]; nextPageToken?: string }>("ficha", url.toString());
-        for (const l of r.locations ?? []) {
-          const ciudad = l.storefrontAddress?.locality;
-          lista.push({
-            id: `${cuenta.name}/${l.name}`,
-            nombre: `${l.title ?? l.name}${ciudad ? ` · ${ciudad}` : ""}`,
-            cuenta: cuenta.accountName ?? cuenta.name,
-          });
-        }
-        pageToken = r.nextPageToken ?? "";
-      } while (pageToken);
+      const d: Diag = { nombre: cuenta.accountName ?? cuenta.name, tipo: cuenta.type ?? "", fichas: 0 };
+      cuentasDiag.push(d);
+      try {
+        let pageToken = "";
+        do {
+          const url = new URL(`https://mybusinessbusinessinformation.googleapis.com/v1/${cuenta.name}/locations`);
+          url.searchParams.set("readMask", "name,title,storefrontAddress");
+          url.searchParams.set("pageSize", "100");
+          if (pageToken) url.searchParams.set("pageToken", pageToken);
+          const r = await llamarGoogle<{ locations?: Ubicacion[]; nextPageToken?: string }>("ficha", url.toString());
+          for (const l of r.locations ?? []) {
+            const ciudad = l.storefrontAddress?.locality;
+            d.fichas++;
+            lista.push({
+              id: `${cuenta.name}/${l.name}`,
+              nombre: `${l.title ?? l.name}${ciudad ? ` · ${ciudad}` : ""}`,
+              cuenta: d.nombre,
+            });
+          }
+          pageToken = r.nextPageToken ?? "";
+        } while (pageToken);
+      } catch (e) {
+        d.error = e instanceof Error ? e.message : "Error";
+      }
     }
     return lista;
   })();
@@ -61,5 +78,11 @@ export async function GET() {
   const [f, s, p] = await Promise.allSettled([fichas, sitios, propiedades]);
   const res = <T,>(r: PromiseSettledResult<T>) =>
     r.status === "fulfilled" ? { lista: r.value } : { error: r.reason instanceof Error ? r.reason.message : "Error" };
-  return Response.json({ fichas: res(f), sitios: res(s), propiedades: res(p) });
+  // El número del proyecto de Google Cloud va al principio del ID de cliente: sirve para comprobar que es el aprobado
+  const proyecto = process.env.GOOGLE_CLIENT_ID?.match(/^(\d+)-/)?.[1] ?? null;
+  return Response.json({
+    fichas: { ...res(f), diagnostico: { proyecto, cuentas: cuentasDiag, errorCuentas: errorCuentas || undefined } },
+    sitios: res(s),
+    propiedades: res(p),
+  });
 }
