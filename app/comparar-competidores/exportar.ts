@@ -209,13 +209,13 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
     if (oficial && of) { const d = difTexto(precio, of.precio); return d === "=" ? "=" + marcaNombre : `${eur(precio)}${marcaNombre}\n${d}`; }
     return eur(precio) + marcaNombre + (!oficial && dto > 0.0005 ? `\n-${pctTexto(dto)}` : "");
   };
-  // Con web oficial, el PVP (nuestro y de cada tienda) también se compara con el PVP de la marca: «=» o la diferencia
+  // Con web oficial, el PVP de cada tienda (el nuestro no: de nosotros solo el precio final) también se compara con el PVP de la marca: «=» o la diferencia
   const pvpMarca = (f: FilaComp, pvp: number) => { const of = ofiDe.get(f); if (!of) return null; const d = difTexto(pvp, of.pvp); return d === "=" ? "=" : `${eur(pvp)}\n${d}`; };
   const pvpDistinto = (f: FilaComp, pvp: number) => { const of = ofiDe.get(f); return !!of && Math.abs(pvp - of.pvp) > 0.005; };
   const avisosPdf = (f: FilaComp, k: CalcFila) => {
     if (!oficial) return avisos(f, k);
     if (!ofiDe.get(f)) return [];
-    const distintos = [...(pvpDistinto(f, f.pvp) ? ["nosotros"] : []), ...cols.filter(c => k.comp[c.id] && pvpDistinto(f, k.comp[c.id].suPvp)).map(c => c.corto)];
+    const distintos = [...cols.filter(c => k.comp[c.id] && pvpDistinto(f, k.comp[c.id].suPvp)).map(c => c.corto)];
     return distintos.length ? [`PVP distinto al de ${marca}: ${distintos.join(", ")}`] : [];
   };
   const cuerpo = filas.map((f, i) => {
@@ -224,7 +224,7 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
       f.ean ?? "",
       [f.nombre, ...avisosPdf(f, k).map(a => a.toUpperCase())].join("\n"),
       ...(oficial ? [of ? eur(of.precio) : "-"] : []),
-      oficial ? pvpMarca(f, f.pvp) ?? eur(f.pvp) : eur(f.pvp) + (k.revisarPrecio.length ? "\n(revisar precio)" : ""),
+      eur(f.pvp) + (!oficial && k.revisarPrecio.length ? "\n(revisar precio)" : ""), // en nuestro caso solo se compara el precio final
       k.limite != null ? eur(k.limite) : "-",
       conMarca(f, f.precio, k.miDto),
       ...cols.flatMap(c => {
@@ -273,7 +273,7 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
       s.fillColor = i % 2 ? rgb(CEBRA) : [255, 255, 255];
       s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
       if (c === 1 && avisosPdf(f, k).length) s.textColor = rgb(TEXTO);
-      if (c === 2 + o && (oficial ? pvpDistinto(f, f.pvp) : k.revisarPrecio.length)) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
+      if (c === 2 + o && !oficial && k.revisarPrecio.length) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
       if (c === 4 + o && k.bajoMinimoMio) { s.fillColor = rgb(PASADO_FONDO); s.textColor = rgb(PASADO); }
       if (c >= 5 + o && c < fin) {
         const comp = cols[Math.floor((c - 5 - o) / 2)], kc = k.comp[comp.id];
