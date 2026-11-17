@@ -195,8 +195,8 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
   doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...rgb(AZUL));
   doc.text(`Comparativa de precios con la competencia · ${marca}`, M, 14);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...rgb(SUAVE));
-  doc.text(`La Tienda de Cosméticos frente a ${cols.map(c => c.nombre).join(", ")} · ${fechaCorta(fecha)}` + (cupon ? ` · Cosméticos24h con su cupón de carrito del ${num(cupon.pct)} %` : "") + " · ~ = emparejado por nombre", M, 19.5);
-  if (oficial) { doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(...rgb(VERDE_MARCA)); doc.text(avisoMarca(marca), M, 25); doc.setFontSize(8.5); }
+  doc.text(`La Tienda de Cosméticos frente a ${cols.map(c => c.nombre).join(", ")} · ${fechaCorta(fecha)}` + (cupon ? ` · Cosméticos24h con su cupón de carrito del ${num(cupon.pct)} %` : "") + " · ~ = emparejado por nombre" + (oficial ? "" : " · Los precios están enlazados a las fichas de producto"), M, 19.5);
+  if (oficial) { doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(...rgb(VERDE_MARCA)); doc.text(avisoMarca(marca) + " · Los precios están enlazados a las fichas de producto", M, 25); doc.setFontSize(8.5); }
   doc.setFont("helvetica", "bold"); doc.setTextColor(...rgb(TEXTO));
   doc.text(resumen(filas, calc, descuento).replace(/−/g, "-"), M, oficial ? 30 : 25);
 
@@ -213,10 +213,8 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
   const pvpMarca = (f: FilaComp, pvp: number) => { const of = ofiDe.get(f); if (!of) return null; const d = difTexto(pvp, of.pvp); return d === "=" ? "=" : `${eur(pvp)}\n${d}`; };
   const pvpDistinto = (f: FilaComp, pvp: number) => { const of = ofiDe.get(f); return !!of && Math.abs(pvp - of.pvp) > 0.005; };
   const avisosPdf = (f: FilaComp, k: CalcFila) => {
-    if (!oficial) return avisos(f, k);
-    if (!ofiDe.get(f)) return [];
-    const distintos = [...cols.filter(c => k.comp[c.id] && pvpDistinto(f, k.comp[c.id].suPvp)).map(c => c.corto)];
-    return distintos.length ? [`PVP distinto al de ${marca}: ${distintos.join(", ")}`] : [];
+    // Con web oficial, sin avisos de PVP: la diferencia ya sale en cada celda
+    return oficial ? [] : avisos(f, k);
   };
   const cuerpo = filas.map((f, i) => {
     const k = calc[i], of = ofiDe.get(f);
@@ -291,7 +289,7 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
       if (d.section !== "body") return;
       const f = filas[d.row.index];
       if (!f) return;
-      if (d.column.index === 1) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.url });
+      if (d.column.index === 1 || d.column.index === 2 + o) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.url });
       const c = d.column.index;
       if (oficial && c === 2) { const of = ofiDe.get(f); if (of) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: of.url }); }
       if (c >= 5 + o && c < fin && (c - 5 - o) % 2 === 1) {
