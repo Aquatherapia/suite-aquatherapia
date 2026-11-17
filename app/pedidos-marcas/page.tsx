@@ -236,10 +236,13 @@ export default function PedidosMarcasPage() {
         if (total >= MIN_PRODUCTOS_MARCA) break;
         if (ya.has(f.id) || enPedido[f.id]?.estado === "esperando") continue;
         ya.add(f.id);
-        const g = grupos.find(x => x.relleno && x.stock === f.stock);
-        if (g) g.filas.push(f); else grupos.push({ stock: f.stock, filas: [f], relleno: true });
+        // Lo de stock 1 es un pedido normal: va con el resto de stock 1. Solo lo de stock 2 o más lleva el título del mínimo
+        const relleno = f.stock >= 2;
+        const g = grupos.find(x => !!x.relleno === relleno && x.stock === f.stock);
+        if (g) g.filas.push(f); else grupos.push(relleno ? { stock: f.stock, filas: [f], relleno } : { stock: f.stock, filas: [f] });
         total++;
       }
+      grupos.sort((a, b) => Number(!!a.relleno) - Number(!!b.relleno) || a.stock - b.stock);
     }
     return { ...m, grupos, total };
   }).filter(m => m.total > 0),
