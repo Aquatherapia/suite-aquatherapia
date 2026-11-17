@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { cruzar, leerCsv, textoMarca, type MarcaPedido } from "./calculo";
+import { AVISO_SIN_PAGAR, cruzar, leerCsv, textoMarca, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
 
 type Archivo<T> = { nombre: string; filas: T } | null;
@@ -156,6 +156,7 @@ export default function PedidosMarcasPage() {
                           <span className="pm-dato">{f.propiedad}</span>
                           <span className="pm-dato pm-ean">{f.ean}</span>
                           <span className="pm-ventas">−ventas <b>{f.ventas}</b></span>
+                          {f.sinPagar > 0 && <span className="pm-sinpagar">{AVISO_SIN_PAGAR} ({f.sinPagar} ud{f.sinPagar !== 1 ? "s" : ""}.)</span>}
                         </li>
                       ))}
                     </ul>
@@ -166,20 +167,22 @@ export default function PedidosMarcasPage() {
           </div>
 
           {r.sinCruzar.length > 0 && (
-            <div className="pm-aviso">
-              <h3>Vendidos que no encuentro en el stock ({r.sinCruzar.length})</h3>
-              <p className="rf-suave">Ni por EAN ni por nombre y formato. Suelen ser productos nuevos o con el EAN cambiado: revísalos a mano.</p>
+            <details className="pm-aviso">
+              <summary>Vendidos que no encuentro en el stock ({r.sinCruzar.length})</summary>
+              <p className="rf-suave">Ni por EAN ni por nombre y formato. Suelen ser productos que ya no están en el catálogo o con el EAN cambiado: si alguno sigue a la venta, revísalo a mano.</p>
               <ul>
                 {r.sinCruzar.map(s => (
                   <li key={`${s.ean}|${s.producto}|${s.propiedad}`}>{s.marca} · {s.producto} · {s.propiedad} · {s.ean || "sin EAN"} · ventas {s.ventas}</li>
                 ))}
               </ul>
-            </div>
+            </details>
           )}
 
           <p className="rf-suave mp-nota">
             Entran los productos que se han vendido en el periodo del informe y tienen ahora un stock igual o menor que el elegido (STOCK ACTUAL del control de stocks).
             Se cruzan por EAN; los que no tienen EAN (packs, kits), por nombre y formato. Los de stock 0 que no se han vendido no salen.
+            {r.enPacks > 0 && <> Los packs Dúo y Trío de un mismo producto cuentan como 2 y 3 unidades de ese producto ({miles(r.enPacks)} uds. en total).</>}
+            {" "}Si un producto tiene pedidos sin enviar y sin pagar, sale con «{AVISO_SIN_PAGAR}»: su stock negativo puede deberse a una compra que no se ha completado.
             {r.sinControl > 0 && <> {r.sinControl} vendidos no tienen control de stock y no salen.</>}
             {" "}Las ventas son unidades e incluyen los pedidos pendientes de pago o envío.
           </p>

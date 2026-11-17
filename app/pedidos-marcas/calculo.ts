@@ -1,12 +1,12 @@
 // Cruce de ventas (informe COMPRAS_….xls) y stock (control_stocks-….csv) para el pedido a cada marca.
 
-export type FilaPedido = { producto: string; propiedad: string; ean: string; stock: number; ventas: number };
+export type FilaPedido = { producto: string; propiedad: string; ean: string; stock: number; ventas: number; sinPagar: number };
 export type MarcaPedido = { marca: string; grupos: { stock: number; filas: FilaPedido[] }[]; total: number };
 export type Resultado = {
   marcas: MarcaPedido[];
   desde: string; hasta: string; pedidos: number; lineasVenta: number; unidades: number;
   sinCruzar: { marca: string; producto: string; propiedad: string; ean: string; ventas: number }[];
-  sinControl: number; descatalogados: number; anulados: number;
+  sinControl: number; descatalogados: number; anulados: number; enPacks: number;
 };
 export type Opciones = { stockMax: number; incluirDescatalogados: boolean };
 
@@ -77,7 +77,7 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   const iv = ventasFilas.findIndex(f => f.some(c => sinTildes(limpiar(c)) === "ean") && f.some(c => sinTildes(limpiar(c)) === "cantidad"));
   if (iv < 0) throw new Error("El archivo de ventas no tiene las columnas EAN y Cantidad. Sube el «COMPRAS_….xls» de la tienda.");
   const cv = indices(ventasFilas[iv], {
-    id: ["ID"], fecha: ["Fecha"], estado: ["Estado"], marca: ["Marca"], producto: ["Producto"], propiedad: ["Propiedad"], ean: ["EAN"], cantidad: ["Cantidad"],
+    id: ["ID"], fecha: ["Fecha"], estado: ["Estado"], pagado: ["Pagado"], marca: ["Marca"], producto: ["Producto"], propiedad: ["Propiedad"], ean: ["EAN"], cantidad: ["Cantidad"],
   }, "ventas");
 
   // Stock
@@ -87,21 +87,24 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     marca: ["MARCA"], producto: ["PRODUCTO"], propiedad: ["PROPIEDAD"], ean: ["EAN"], stock: ["STOCK ACTUAL"], descatalogado: ["DESCATALOGADO"],
   }, "stock");
 
-  type Prod = { marca: string; producto: string; propiedad: string; ean: string; stock: number | null; descatalogado: boolean; ventas: number };
+  type Prod = { marca: string; producto: string; propiedad: string; ean: string; stock: number | null; descatalogado: boolean; ventas: number; sinPagar: number };
   const porEan = new Map<string, Prod[]>();
   const porNombre = new Map<string, Prod>();
+  const porSoloNombre = new Map<string, Prod[]>();
   for (const f of stockFilas.slice(is + 1)) {
     const p: Prod = {
       marca: limpiar(f[cs.marca]), producto: limpiar(f[cs.producto]), propiedad: limpiar(f[cs.propiedad]), ean: limpiarEan(f[cs.ean]),
-      stock: entero(f[cs.stock]), descatalogado: /^s[ií]/i.test(limpiar(f[cs.descatalogado])), ventas: 0,
+      stock: entero(f[cs.stock]), descatalogado: /^s[ií]/i.test(limpiar(f[cs.descatalogado])), ventas: 0, sinPagar: 0,
     };
     if (!p.producto) continue;
     if (eanValido(p.ean)) porEan.set(p.ean, [...(porEan.get(p.ean) ?? []), p]);
     porNombre.set(clave(p.producto, p.propiedad), p);
+    const n = clave(p.producto, "");
+    porSoloNombre.set(n, [...(porSoloNombre.get(n) ?? []), p]);
   }
 
   const pedidos = new Set<string>();
-  let desde = "", hasta = "", lineasVenta = 0, unidades = 0, anulados = 0;
+  let desde = "", hasta = "", lineasVenta = 0, unidades = 0, anulados = 0, enPacks = 0;
   const sinCruzar = new Map<string, Resultado["sinCruzar"][number]>();
   for (const f of ventasFilas.slice(iv + 1)) {
     const marca = limpiar(f[cv.marca]);
@@ -122,10 +125,27 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
 
     // Por EAN; si el EAN se repite en el stock, el que coincide en formato; sin EAN, por nombre y formato
     let p: Prod | undefined;
+    let factor = 1;
     const candidatos = eanValido(ean) ? porEan.get(ean) : undefined;
     if (candidatos) p = candidatos.length === 1 ? candidatos[0] : candidatos.find(c => c.propiedad.toLowerCase() === propiedad.toLowerCase()) ?? candidatos[0];
     else p = porNombre.get(clave(producto, propiedad));
-    if (p) p.ventas += cant;
+    // Packs Dúo/Trío del mismo producto: la tienda les pone el EAN del producto con «-1», «-2»… (o ninguno)
+    // y gastan stock del producto suelto, así que cuentan 2 o 3 unidades
+    if (!p) {
+      const m = ean.match(/^(.+)-(\d)$/);
+      const pack = sinTildes(propiedad).match(/\b(duo|trio)\b/);
+      const base = m ? porEan.get(m[1]) : undefined;
+      const mismoNombre = porSoloNombre.get(clave(producto, ""));
+      const cand = base?.length === 1 ? base[0] : !m && pack && mismoNombre?.length === 1 ? mismoNombre[0] : undefined;
+      if (cand && (m || pack)) {
+        p = cand;
+        factor = pack ? (pack[1] === "duo" ? 2 : 3) : Number(m![2]) + 1;
+        enPacks += cant * factor;
+      }
+    }
+    // Sin pagar: pedido sin enviar y con «Pagado» en No
+    const sinPagar = /^no/i.test(limpiar(f[cv.pagado])) && !/enviad/i.test(limpiar(f[cv.estado]));
+    if (p) { p.ventas += cant * factor; if (sinPagar) p.sinPagar += cant * factor; }
     else {
       const k = `${ean}|${clave(producto, propiedad)}`;
       const s = sinCruzar.get(k) ?? { marca, producto, propiedad, ean, ventas: 0 };
@@ -145,7 +165,7 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     if (p.descatalogado && !op.incluirDescatalogados) { descatalogados++; continue; }
     const marca = p.marca.toLowerCase() || "sin marca";
     const g = porMarca.get(marca) ?? new Map<number, FilaPedido[]>();
-    g.set(p.stock, [...(g.get(p.stock) ?? []), { producto: p.producto, propiedad: p.propiedad, ean: p.ean, stock: p.stock, ventas: p.ventas }]);
+    g.set(p.stock, [...(g.get(p.stock) ?? []), { producto: p.producto, propiedad: p.propiedad, ean: p.ean, stock: p.stock, ventas: p.ventas, sinPagar: p.sinPagar }]);
     porMarca.set(marca, g);
   }
 
@@ -159,9 +179,11 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   return {
     marcas, desde, hasta, pedidos: pedidos.size, lineasVenta, unidades,
     sinCruzar: [...sinCruzar.values()].sort((a, b) => a.marca.localeCompare(b.marca, "es") || b.ventas - a.ventas),
-    sinControl, descatalogados, anulados,
+    sinControl, descatalogados, anulados, enPacks,
   };
 }
+
+export const AVISO_SIN_PAGAR = "*Compra sin finalizar, o no realizado el pago";
 
 /** Texto para copiar, con el mismo formato que el que se manda a cada marca (columnas separadas por tabuladores). */
 export function textoMarca(m: MarcaPedido): string {
@@ -169,7 +191,7 @@ export function textoMarca(m: MarcaPedido): string {
   m.grupos.forEach((g, i) => {
     if (i > 0) l.push("\t\t\t\t\t");
     l.push(`\tstock ${g.stock}\t\t\t\t`);
-    for (const f of g.filas) l.push(`•  ${f.producto}\t${f.propiedad}\t${f.ean}\t-ventas\t${f.ventas}`);
+    for (const f of g.filas) l.push(`•  ${f.producto}\t${f.propiedad}\t${f.ean}\t-ventas\t${f.ventas}${f.sinPagar > 0 ? `\t${AVISO_SIN_PAGAR}` : ""}`);
   });
   return l.join("\n");
 }
