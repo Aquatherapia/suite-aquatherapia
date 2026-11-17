@@ -44,11 +44,14 @@ async function copiar(texto: string) {
   }
 }
 
+// «17/11/2026 07:21:56» → «17/11 07:21»
+const fechaCorta = (s: string) => { const m = s.match(/^(\d{1,2})\/(\d{1,2})\/\d{4}(?:\s+(\d{1,2}:\d{2}))?/); return m ? `${m[1].padStart(2, "0")}/${m[2].padStart(2, "0")}${m[3] ? " " + m[3] : ""}` : s; };
+
 export default function PedidosMarcasPage() {
   const [ventas, setVentas] = useState<Archivo<string[][]>>(null);
   const [stock, setStock] = useState<Archivo<string[][]>>(null);
   const [error, setError] = useState("");
-  const [stockMax, setStockMax] = useState(0);
+  const [stockMax, setStockMax] = usePref("stock-max", 1);
   const [descatalogados, setDescatalogados] = useState(false);
   const [soloSinEnviar, setSoloSinEnviar] = useState(true);
   const [sinEnviarDesde, setSinEnviarDesde] = useState("");
@@ -367,6 +370,14 @@ export default function PedidosMarcasPage() {
                           <span className="pm-dato">{f.propiedad}</span>
                           <span className="pm-dato pm-ean">{f.ean}</span>
                           <span className="pm-ventas">−ventas <b>{f.ventas}</b> · pedir <b className="pm-pedir">{f.pedir}</b></span>
+                          {f.compras.length > 0 && (
+                            <span className="pm-compras">
+                              Compra{f.compras.length > 1 ? "s" : ""} del cliente:{" "}
+                              {f.compras.map((c, i) => (
+                                <span key={i} className={c.pagada ? "" : "pm-compra-sinpagar"}>{i > 0 ? ", " : ""}{fechaCorta(c.fecha)}{c.pagada ? "" : " (sin pagar)"}</span>
+                              ))}
+                            </span>
+                          )}
                           {f.sinPagar > 0 && <span className="pm-sinpagar">{AVISO_SIN_PAGAR} ({f.sinPagar} ud{f.sinPagar !== 1 ? "s" : ""}.)</span>}
                           {enPedido[f.id] && (
                             <span className={`pm-tag pm-estado-${enPedido[f.id].estado}`}>
