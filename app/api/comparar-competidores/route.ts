@@ -4,7 +4,7 @@ import path from "path";
 import { emparejarPorNombre } from "./emparejar-nombre";
 import { emparejarConIa } from "./emparejar-ia";
 import { motivoSinPareja } from "./motivo";
-import { BASE, COLORES_EXTRA, COMPETIDORES, ponerCompetidores, type AjustesCompetidores, type Competidor, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
+import { BASE, COLORES_EXTRA, COMPETIDORES, ponerCompetidores, vendeLaMarca, type AjustesCompetidores, type Competidor, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
 import { competidoresDeGoogle, cuentasMerchant, type Propuesta } from "./merchant";
 import { ErrorGoogle } from "../../_google/cliente";
 import { buscarListado, detectarPlataforma, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, misProductosPorEan, normalizarEan, webDeTienda, fichaPorEan, enLotes, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
@@ -333,8 +333,8 @@ export async function POST(req: NextRequest) {
     const auto = { ...(config.auto[marca.slug] ?? {}) };
     const estados: Record<string, EstadoComp> = {};
 
-    // Todas las tiendas (también Cosméticos24h, de su web): se leen todas a la vez
-    await Promise.all(COMPETIDORES.map(async comp => {
+    // Todas las tiendas (también Cosméticos24h, de su web): se leen todas a la vez. Las webs oficiales, solo en su marca
+    await Promise.all(COMPETIDORES.filter(comp => vendeLaMarca(comp, marca.nombre)).map(async comp => {
       try {
         // Sin enlace todavía (o no se encontró sola): se busca el listado de la marca en su web
         if (enlaces[comp.id] === undefined || (enlaces[comp.id] === "" && auto[comp.id] !== false)) {

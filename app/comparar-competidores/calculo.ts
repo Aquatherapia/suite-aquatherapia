@@ -48,6 +48,7 @@ export type CalcFila = {
   revisarPrecio: string[];   // competidores con el PVP más alto que el nuestro
   pvpDistintos: number;
   mb: { id: string; precio: number } | null; // el competidor más barato
+  empatados: string[];       // ids de las tiendas con el precio más barato (varias si empatan)
   masBarato: string;         // nombre del más barato: nosotros si somos más baratos que todos, «Igual» si empatamos con el más barato
   diferencia: number | null; // su precio menos el nuestro (negativo = alguien vende más barato)
   bajoAutorizado: number | null; // cuánto queda el más barato por debajo de nuestro límite (negativo)
@@ -78,6 +79,8 @@ export function calcularFila(f: FilaComp, descuento: number | null): CalcFila {
     };
     if (!mb || p.precio < mb.precio) mb = { id: c.id, precio: p.precio };
   }
+  // Si varias tiendas tienen el mismo precio más barato, salen todas (en el orden de la lista de tiendas)
+  const empatados = mb ? COMPETIDORES.filter(c => f.precios[c.id] && Math.abs(f.precios[c.id].precio - mb!.precio) <= 0.005).map(c => c.id) : [];
   const diferencia = mb ? Math.round((mb.precio - f.precio) * 100) / 100 : null;
   const ganamos = diferencia == null || diferencia >= -0.005;
   const dtoIgualar = mb && pvp > 0 ? 1 - mb.precio / pvp : 0;
@@ -89,8 +92,8 @@ export function calcularFila(f: FilaComp, descuento: number | null): CalcFila {
   return {
     limite, miDto: pvp > 0 ? 1 - f.precio / pvp : 0,
     bajoMinimoMio: limite != null && f.precio < limite - 0.005,
-    comp, revisarPrecio, pvpDistintos, mb,
-    masBarato: !mb ? "—" : Math.abs(diferencia!) <= 0.005 ? "Igual" : ganamos ? "La Tienda de Cosméticos" : COMPETIDORES.find(c => c.id === mb!.id)!.corto,
+    comp, revisarPrecio, pvpDistintos, mb, empatados,
+    masBarato: !mb ? "—" : Math.abs(diferencia!) <= 0.005 ? "Igual" : ganamos ? "La Tienda de Cosméticos" : empatados.map(id => COMPETIDORES.find(c => c.id === id)!.corto).join(" · "),
     diferencia,
     bajoAutorizado: mb && limite != null && mb.precio < limite - 0.005 ? Math.round((mb.precio - limite) * 100) / 100 : null,
     igualar,

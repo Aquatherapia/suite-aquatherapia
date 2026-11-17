@@ -140,6 +140,8 @@ type ProductoWoo = {
 };
 
 async function leerWoo(c: Competidor, enlace: string, limite: number, marca: string): Promise<SuProducto[]> {
+  // Web oficial de una marca: todo lo que vende es de la marca, se lee entero
+  if (c.marca) return leerWooProductos(c, await pedirTodosWoo(c, ""), limite);
   // La categoría y sus subcategorías (algunas tiendas ponen los productos solo en las de cada línea),
   // por su número: algunas tiendas no filtran por el nombre que sale en la URL
   const slug = ultimoTramo(enlace);
@@ -150,17 +152,7 @@ async function leerWoo(c: Competidor, enlace: string, limite: number, marca: str
     cambia = false;
     for (const x of cats) if (x.parent && ids.has(x.parent) && !ids.has(x.id)) { ids.add(x.id); cambia = true; }
   }
-  const pedirTodos = async (filtro: string) => {
-    const out: ProductoWoo[] = [];
-    for (let pagina = 1; pagina <= 10; pagina++) {
-      const res = await pedir(`${c.web}/wp-json/wc/store/v1/products?${filtro}&per_page=100&page=${pagina}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const lote = await res.json() as ProductoWoo[];
-      out.push(...lote);
-      if (lote.length < 100) break;
-    }
-    return out;
-  };
+  const pedirTodos = (filtro: string) => pedirTodosWoo(c, filtro);
   // Enlace sin categoría (/marca/x de una tienda añadida): directamente por el buscador
   const soloBuscar = !raiz && /\/marca\//.test(enlace);
   let productos = soloBuscar ? [] : await pedirTodos(`category=${encodeURIComponent(ids.size ? [...ids].join(",") : slug)}`);
@@ -169,9 +161,26 @@ async function leerWoo(c: Competidor, enlace: string, limite: number, marca: str
     const clave = soloLetras(marca);
     productos = (await pedirTodos(`search=${encodeURIComponent(marca)}`)).filter(p => soloLetras(decodificar(p.name)).includes(clave));
   }
-  // Solo lo que se puede comprar: fuera los productos que su web no deja comprar o que están agotados
-  const sePuede = (p: ProductoWoo) => p.is_purchasable !== false && p.is_in_stock !== false;
-  productos = productos.filter(sePuede);
+  return leerWooProductos(c, productos, limite);
+}
+
+async function pedirTodosWoo(c: Competidor, filtro: string): Promise<ProductoWoo[]> {
+  const out: ProductoWoo[] = [];
+  for (let pagina = 1; pagina <= 10; pagina++) {
+    const res = await pedir(`${c.web}/wp-json/wc/store/v1/products?${filtro ? `${filtro}&` : ""}per_page=100&page=${pagina}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const lote = await res.json() as ProductoWoo[];
+    out.push(...lote);
+    if (lote.length < 100) break;
+  }
+  return out;
+}
+
+// Solo lo que se puede comprar: fuera los productos que su web no deja comprar o que están agotados
+const sePuede = (p: ProductoWoo) => p.is_purchasable !== false && p.is_in_stock !== false;
+
+async function leerWooProductos(c: Competidor, todos: ProductoWoo[], limite: number): Promise<SuProducto[]> {
+  const productos = todos.filter(sePuede);
   return enLotes(productos, 6, async p => {
     const d = p.prices.currency_minor_unit ?? 2;
     const base: Variante = { titulo: "", precio: precioWoo(p.prices.price, d), pvp: precioWoo(p.prices.regular_price, d) || undefined, ean: eanDeSku(p.sku) };
@@ -315,6 +324,8 @@ export async function leerCompetidor(c: Competidor, enlace: string, limite: numb
 // Devuelve la URL del listado, o null si no se encuentra (puede que no venda la marca).
 export async function buscarListado(c: Competidor, marca: { nombre: string; slug: string }): Promise<string | null> {
   const clave = soloLetras(marca.nombre);
+  // Web oficial de una marca: su tienda entera, y solo para esa marca
+  if (c.marca) return clave.includes(c.marca) ? `${c.web}/` : null;
   try {
     if (c.tipo === "c24" || c.tipo === "shopify") {
       // La colección suele llamarse como la marca en minúsculas y con guiones («germaine-de-capuccini»)

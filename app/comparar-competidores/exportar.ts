@@ -71,7 +71,7 @@ function hojaResumen(wb: ExcelJS.Workbook, filas: FilaComp[], calc: CalcFila[], 
     row.getCell(3).value = f.pvp; row.getCell(3).numFmt = EUROS;
     row.getCell(4).value = k.limite ?? "-"; if (k.limite != null) row.getCell(4).numFmt = EUROS;
     row.getCell(5).value = f.precio; row.getCell(5).numFmt = EUROS;
-    row.getCell(6).value = !k.mb ? "-" : k.masBarato === "La Tienda de Cosméticos" || k.masBarato === "Igual" ? k.masBarato : COMPETIDORES.find(c => c.id === k.mb!.id)?.nombre ?? k.masBarato;
+    row.getCell(6).value = !k.mb ? "-" : k.masBarato === "La Tienda de Cosméticos" || k.masBarato === "Igual" ? k.masBarato : k.empatados.map(id => COMPETIDORES.find(c => c.id === id)?.nombre ?? id).join(" · ");
     row.getCell(6).font = { name: "Calibri", size: 10, bold: true };
     tiendas.forEach((c, j) => {
       const p = f.precios[c.id]; if (!p) return;
@@ -159,7 +159,7 @@ export async function descargarExcel(marca: string, filasIn: FilaComp[], _estado
         { bold: true, color: { argb: "FF" + (kc.bajoMinimo ? BAJO : hex(c.color)) } }, kc.bajoMinimo ? BAJO_FONDO : undefined);
       pc.alignment = { vertical: "middle", horizontal: "right" };
     });
-    const mbColor = !k.mb || k.masBarato === "Igual" ? SUAVE : k.diferencia != null && k.diferencia < -0.005 ? hex(COMPETIDORES.find(c => c.id === k.mb!.id)!.color) : AZUL;
+    const mbColor = !k.mb || k.masBarato === "Igual" ? SUAVE : k.diferencia != null && k.diferencia < -0.005 ? k.empatados.length > 1 ? TEXTO : hex(COMPETIDORES.find(c => c.id === k.mb!.id)!.color) : AZUL;
     celda(fin, k.masBarato, undefined, { bold: true, color: { argb: "FF" + mbColor } });
     celda(fin + 1, k.diferencia ?? "-", k.diferencia != null ? EUROS_SIGNO : undefined, { bold: true, color: { argb: "FF" + (k.diferencia == null ? SUAVE : k.diferencia < -0.005 ? ROJO : k.diferencia > 0.005 ? VERDE : TEXTO) } });
     celda(fin + 2, k.bajoAutorizado ?? "-", k.bajoAutorizado != null ? EUROS : undefined, { bold: k.bajoAutorizado != null, color: { argb: "FF" + (k.bajoAutorizado != null ? BAJO : SUAVE) } }, k.bajoAutorizado != null ? BAJO_FONDO : undefined);
@@ -249,7 +249,7 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
         if ((c - 5) % 2 === 0 && (kc.pvpSinActualizar || kc.pvpMasAlto)) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
         if ((c - 5) % 2 === 1 && kc.bajoMinimo) { s.fillColor = rgb(BAJO_FONDO); s.textColor = rgb(BAJO); }
       }
-      if (c === fin) s.textColor = !k.mb || k.masBarato === "Igual" ? rgb(SUAVE) : k.diferencia != null && k.diferencia < -0.005 ? rgb(COMPETIDORES.find(x => x.id === k.mb!.id)!.color) : rgb(AZUL);
+      if (c === fin) s.textColor = !k.mb || k.masBarato === "Igual" ? rgb(SUAVE) : k.diferencia != null && k.diferencia < -0.005 ? k.empatados.length > 1 ? rgb(TEXTO) : rgb(COMPETIDORES.find(x => x.id === k.mb!.id)!.color) : rgb(AZUL);
       if (c === fin + 1) s.textColor = k.diferencia == null ? rgb(SUAVE) : k.diferencia < -0.005 ? rgb(ROJO) : k.diferencia > 0.005 ? rgb(VERDE) : rgb(TEXTO);
       if (c === fin + 2 && k.bajoAutorizado != null) { s.fillColor = rgb(BAJO_FONDO); s.textColor = rgb(BAJO); s.fontStyle = "bold"; }
       if (c === fin + 3) { s.textColor = k.igualar.startsWith("No") ? rgb(ROJO) : rgb(VERDE); s.fontStyle = k.igualar.startsWith("No") ? "bold" : "normal"; }
@@ -278,7 +278,8 @@ export function filasParaMarca(filas: FilaComp[], descuento: number): FilaParaMa
   for (const f of filas) {
     const pvp = f.pvp || f.precio;
     const minimo = Math.round(pvp * (1 - descuento / 100) * 100) / 100;
-    for (const c of COMPETIDORES) {
+    // La web oficial de la marca no entra: el informe es para la marca
+    for (const c of COMPETIDORES.filter(c => !c.marca)) {
       const p = f.precios[c.id];
       if (!p || p.precio >= minimo - 0.005) continue;
       out.push({ ean: f.ean ?? "", producto: f.nombre, tienda: c.nombre, color: c.color, url: p.url, pvp, minimo, suPrecio: p.precio, dtoSobrePvp: pvp > 0 ? 1 - p.precio / pvp : 0, porDebajo: Math.round((minimo - p.precio) * 100) / 100 });

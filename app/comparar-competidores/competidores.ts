@@ -5,7 +5,10 @@
 //   rosi: Estética Rosi (web propia: listado HTML de la marca)
 //   shopify: cualquier otra tienda Shopify añadida desde la app (se lee igual que Cosméticos24h)
 export type TipoCompetidor = "c24" | "woo" | "presta" | "rosi" | "shopify";
-export type Competidor = { id: string; nombre: string; corto: string; web: string; tipo: TipoCompetidor; color: string; fondo: string; extra?: boolean; auto?: boolean /* añadida sola desde Google */ };
+export type Competidor = {
+  id: string; nombre: string; corto: string; web: string; tipo: TipoCompetidor; color: string; fondo: string; extra?: boolean; auto?: boolean /* añadida sola desde Google */;
+  marca?: string; // web oficial de una marca: solo vende esa marca (su nombre en minúsculas y sin espacios, p. ej. «eberlin»)
+};
 
 // Las tiendas de siempre. Desde la app se pueden quitar (y volver a poner) y añadir otras.
 export const BASE: Competidor[] = [
@@ -15,7 +18,13 @@ export const BASE: Competidor[] = [
   { id: "rosi", nombre: "Estética Rosi", corto: "Estética Rosi", web: "https://www.esteticarosi.com", tipo: "rosi", color: "#7c3aed", fondo: "#f1ebfd" },
   { id: "chancosa", nombre: "Mar Chancosa", corto: "Mar Chancosa", web: "https://marchancosa.com", tipo: "woo", color: "#92400e", fondo: "#f6eee6" },
   { id: "pilar", nombre: "Pilar Delgado", corto: "Pilar Delgado", web: "https://tienda.pilar-delgado.com", tipo: "presta", color: "#475569", fondo: "#eceff3" },
+  // Webs oficiales de las marcas: solo se comparan en su marca, en su propia columna («Web oficial»)
+  { id: "eberlin-oficial", nombre: "Eberlin (web oficial)", corto: "Eberlin oficial", web: "https://eberlinbiocosmetics.com", tipo: "woo", color: "#15803d", fondo: "#e6f4ea", marca: "eberlin" },
 ];
+
+// Una web oficial solo cuenta en su marca; las demás tiendas, en todas
+const letras = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+export const vendeLaMarca = (c: Competidor, marca: string) => !c.marca || letras(marca).includes(c.marca);
 
 // Colores para las tiendas que se añaden desde la app, por orden
 export const COLORES_EXTRA: [string, string][] = [
