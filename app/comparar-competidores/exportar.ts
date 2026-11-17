@@ -271,12 +271,12 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
 
 const VERDE_MARCA = "15803D"; // PVP de la web oficial de la marca
 
-// Diferencia de un precio con el PVP de referencia, en % y € en el mismo texto: «-40 % · -25,78 €»
+// Diferencia de un precio con el PVP de referencia, en la misma celda: el % arriba y los € debajo («-40 %» / «-25,78 €»)
 const difTexto = (precio: number, base: number) => {
   const d = Math.round((precio - base) * 100) / 100;
   const s = d > 0 ? "+" : d < 0 ? "-" : "";
   const pct = pctTexto(base > 0 ? Math.abs(d) / base : 0);
-  return `${pct === "0 %" ? "" : s}${pct} · ${s}${eur(Math.abs(d))}`;
+  return `${pct === "0 %" ? "" : s}${pct}\n${s}${eur(Math.abs(d))}`;
 };
 
 // ── «Para la marca» ────────────────────────────────────────────────────
@@ -334,7 +334,8 @@ function tablaParaMarca(filas: FilaComp[], descuento: number): TablaParaMarca {
 function hojaParaMarca(ws: ExcelJS.Worksheet, marca: string, t: TablaParaMarca, descuento: number, fecha: Date) {
   ws.views = [{ showGridLines: false, state: "frozen", xSplit: 2, ySplit: 5 }];
   const que = descuento > 0 ? `nuestro PVP con el descuento autorizado (-${num(descuento)} %)` : "el PVP";
-  const nNos = descuento > 0 ? 3 : 2;
+  const nDif = t.oficial ? 1 : 0; // nuestra diferencia con el PVP de la marca
+  const nNos = (descuento > 0 ? 3 : 2) + nDif;
   const nOf = t.oficial ? 1 : 0;
   const total = 2 + nOf + nNos + t.comps.length * 2 + 2;
   ws.mergeCells(1, 1, 1, total); ws.getCell("A1").value = `${marca} · precios de la competencia por debajo de ${descuento > 0 ? "lo autorizado" : "PVP"}`; ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
@@ -359,14 +360,14 @@ function hojaParaMarca(ws: ExcelJS.Worksheet, marca: string, t: TablaParaMarca, 
   }
   cab.push({ t: "EAN", color: AZUL }, { t: "PRODUCTO", color: AZUL });
   if (t.oficial) cab.push({ t: "PVP", color: VERDE_MARCA });
-  cab.push({ t: "PVP", color: AZUL }, ...(descuento > 0 ? [{ t: `PVP -${num(descuento)} %`, color: AZUL }] : []), { t: "PRECIO FINAL", color: AZUL });
+  cab.push({ t: "PVP", color: AZUL }, ...(descuento > 0 ? [{ t: `PVP -${num(descuento)} %`, color: AZUL }] : []), { t: "PRECIO FINAL", color: AZUL }, ...(t.oficial ? [{ t: `DIF. CON PVP ${marca.toUpperCase()}`, color: AZUL }] : []));
   const tDif = t.oficial ? `DIF. CON PVP ${marca.toUpperCase()}` : "DIF. CON PVP";
   for (const c of t.comps) cab.push({ t: "SU PRECIO", color: c.color }, { t: tDif, color: c.color });
   cab.push({ t: "MÁS BARATO", color: "374151" }, { t: "POR DEBAJO", color: "374151" });
   const fc = ws.getRow(5);
   cab.forEach((x, i) => { const c = fc.getCell(i + 1); c.value = x.t; c.font = { name: "Calibri", size: 9, bold: true, color: { argb: "FFFFFFFF" } }; relleno(c, x.color); c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; });
   ws.getRow(4).height = 22; fc.height = 28;
-  [15, 50, ...(t.oficial ? [12] : []), 11, ...(descuento > 0 ? [12] : []), 12, ...t.comps.flatMap(() => [12, 18]), 18, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  [15, 50, ...(t.oficial ? [12] : []), 11, ...(descuento > 0 ? [12] : []), 12, ...(t.oficial ? [18] : []), ...t.comps.flatMap(() => [12, 18]), 18, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
   t.productos.forEach((x, i) => {
     const row = ws.getRow(6 + i);
@@ -374,25 +375,25 @@ function hojaParaMarca(ws: ExcelJS.Worksheet, marca: string, t: TablaParaMarca, 
     const ofi = t.oficial ? f.precios[t.oficial.id] : undefined;
     const valores: ExcelJS.CellValue[] = [f.ean ?? "", { text: f.nombre, hyperlink: f.url }];
     if (t.oficial) valores.push(ofi ? { text: eur(ofi.precio), hyperlink: ofi.url } : "-");
-    valores.push(x.pvp, ...(descuento > 0 ? [x.minimo] : []), { text: eur(f.precio), hyperlink: f.url });
+    valores.push(x.pvp, ...(descuento > 0 ? [x.minimo] : []), { text: eur(f.precio), hyperlink: f.url }, ...(t.oficial ? [difTexto(f.precio, x.base)] : []));
     for (const c of t.comps) {
       const p = f.precios[c.id];
       valores.push(p ? { text: eur(p.precio), hyperlink: p.url } : "-", p ? difTexto(p.precio, x.base) : "-");
     }
-    valores.push(x.peor.c.nombre, -Math.round((x.minimo - x.peor.precio) * 100) / 100);
+    valores.push(x.peor.c.nombre, -Math.round((x.base - x.peor.precio) * 100) / 100);
     row.values = valores;
+    row.height = 28; // la diferencia va en dos líneas (% y €)
     const iOf = t.oficial ? 3 : 0, iNos = 3 + nOf, iComp = iNos + nNos, iFin = iComp + t.comps.length * 2;
     row.eachCell({ includeEmpty: true }, (c, n) => {
       let color = TEXTO, bold = false, fondo: string | null = i % 2 ? CEBRA : null;
       if (n === 1) color = SUAVE;
       if (n === 2) color = AZUL;
       if (n === iOf) { color = VERDE_MARCA; bold = true; }
-      if (n >= iNos && n < iComp) { color = AZUL; bold = n === iComp - 1; }
+      if (n >= iNos && n < iComp) { color = AZUL; bold = n === iComp - 1 - nDif; }
       if (n >= iComp && n < iFin) {
         const comp = t.comps[Math.floor((n - iComp) / 2)];
         const p = f.precios[comp.id];
         color = comp.color; bold = (n - iComp) % 2 === 0;
-        if (p && p.precio < x.minimo - 0.005) { fondo = BAJO_FONDO; if ((n - iComp) % 2 === 0) color = BAJO; }
         if (!p) color = "C4C9D0";
       }
       if (n === iFin) { color = x.peor.c.color; bold = true; }
@@ -400,7 +401,7 @@ function hojaParaMarca(ws: ExcelJS.Worksheet, marca: string, t: TablaParaMarca, 
       c.font = { name: "Calibri", size: 10, color: { argb: "FF" + hex(color) }, bold, underline: typeof c.value === "object" && c.value != null };
       if (fondo) relleno(c, fondo);
       if (typeof c.value === "number") c.numFmt = EUROS;
-      c.alignment = { vertical: "middle", horizontal: n <= 2 || n === iFin ? "left" : "right", wrapText: n === 2 };
+      c.alignment = { vertical: "middle", horizontal: n <= 2 || n === iFin ? "left" : "right", wrapText: n === 2 || typeof c.value === "string" && c.value.includes("\n") };
       c.border = { bottom: { style: "thin", color: { argb: "FF" + LINEA } } };
     });
   });
@@ -427,7 +428,7 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
   doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...rgb(AZUL)); doc.text(titulo, M, 14);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...rgb(SUAVE));
   doc.text(`Tiendas online que venden por debajo ${que.startsWith("el ") ? "del " + que.slice(3) : "de " + que} · ${fechaCorta(fecha)} · Pulsa un precio o un producto para abrir su ficha`, M, 19.5);
-  const nNos = descuento > 0 ? 3 : 2, nOf = t.oficial ? 1 : 0;
+  const nOf = t.oficial ? 1 : 0, nNos = (descuento > 0 ? 3 : 2) + nOf; // con web oficial, también nuestra diferencia con su PVP
   const iNos = 2 + nOf, iComp = iNos + nNos, iFin = iComp + t.comps.length * 2;
   const cabC = (txt: string, color: string) => ({ content: txt, styles: { fillColor: rgb(color) } });
   const cuerpo = t.productos.map(x => {
@@ -436,9 +437,9 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
     return [
       f.ean ?? "", f.nombre,
       ...(t.oficial ? [ofi ? eur(ofi.precio) : "-"] : []),
-      eur(x.pvp), ...(descuento > 0 ? [eur(x.minimo)] : []), eur(f.precio),
+      eur(x.pvp), ...(descuento > 0 ? [eur(x.minimo)] : []), eur(f.precio), ...(t.oficial ? [difTexto(f.precio, x.base)] : []),
       ...t.comps.flatMap(c => { const p = f.precios[c.id]; return p ? [eur(p.precio), difTexto(p.precio, x.base)] : ["-", "-"]; }),
-      x.peor.c.corto, eur(-Math.round((x.minimo - x.peor.precio) * 100) / 100),
+      x.peor.c.corto, eur(-Math.round((x.base - x.peor.precio) * 100) / 100),
     ];
   });
   // Lo que queda del ancho de la página se reparte entre las tiendas: su precio y, algo más ancha, la diferencia
@@ -449,7 +450,7 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
     [iFin]: { cellWidth: 20, halign: "left", fontStyle: "bold" }, [iFin + 1]: { cellWidth: 15, textColor: rgb(BAJO), fontStyle: "bold" },
   };
   if (t.oficial) columnStyles[2] = { cellWidth: 15, textColor: rgb(VERDE_MARCA), fontStyle: "bold" };
-  for (let k = iNos; k < iComp; k++) columnStyles[k] = { cellWidth: 14, textColor: rgb(AZUL), fontStyle: k === iComp - 1 ? "bold" : "normal" };
+  for (let k = iNos; k < iComp; k++) columnStyles[k] = { cellWidth: 14, textColor: rgb(AZUL), fontStyle: k === iComp - 1 - nOf ? "bold" : "normal" };
   t.comps.forEach((c, j) => { columnStyles[iComp + j * 2] = { cellWidth: ancho, textColor: rgb(c.color), fontStyle: "bold" }; columnStyles[iComp + j * 2 + 1] = { cellWidth: ancho * 1.6, textColor: rgb(c.color) }; });
   autoTable(doc, {
     startY: 24, margin: { left: M, right: M }, theme: "plain",
@@ -466,7 +467,7 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
       [
         cabC("EAN", AZUL), cabC("PRODUCTO", AZUL),
         ...(t.oficial ? [cabC("PVP", VERDE_MARCA)] : []),
-        cabC("PVP", AZUL), ...(descuento > 0 ? [cabC(`PVP -${num(descuento)} %`, AZUL)] : []), cabC("PRECIO FINAL", AZUL),
+        cabC("PVP", AZUL), ...(descuento > 0 ? [cabC(`PVP -${num(descuento)} %`, AZUL)] : []), cabC("PRECIO FINAL", AZUL), ...(t.oficial ? [cabC(`DIF. CON PVP\n${marca.toUpperCase()}`, AZUL)] : []),
         ...t.comps.flatMap(c => [cabC("SU PRECIO", c.color), cabC(t.oficial ? `DIF. CON PVP\n${marca.toUpperCase()}` : "DIF. CON PVP", c.color)]),
         cabC("MÁS BARATO", "374151"), cabC("POR DEBAJO", "374151"),
       ],
@@ -482,7 +483,6 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
       if (c >= iComp && c < iFin) {
         const comp = t.comps[Math.floor((c - iComp) / 2)], p = x.f.precios[comp.id];
         if (!p) { s.textColor = [196, 201, 208]; return; }
-        if (p.precio < x.minimo - 0.005) { s.fillColor = rgb(BAJO_FONDO); if ((c - iComp) % 2 === 0) s.textColor = rgb(BAJO); }
       }
       if (c === iFin) s.textColor = rgb(x.peor.c.color);
     },
@@ -490,7 +490,7 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
       if (d.section !== "body") return;
       const x = t.productos[d.row.index], c = d.column.index;
       if (!x) return;
-      if (c === 1 || c === iComp - 1) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: x.f.url });
+      if (c === 1 || c === iComp - 1 - nOf) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: x.f.url });
       if (t.oficial && c === 2) { const o = x.f.precios[t.oficial.id]; if (o) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: o.url }); }
       if (c >= iComp && c < iFin && (c - iComp) % 2 === 0) {
         const p = x.f.precios[t.comps[(c - iComp) / 2].id];
