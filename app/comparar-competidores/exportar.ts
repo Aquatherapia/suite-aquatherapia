@@ -271,7 +271,7 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
 
 const VERDE_MARCA = "15803D"; // PVP de la web oficial de la marca
 
-// Celda de diferencia con signo «+»: ese precio está por encima del de la marca y se resalta
+// Celda de diferencia con signo «+»: ese precio está por encima del de la marca y va en negrita
 const porEncima = (v: unknown) => typeof v === "string" && v.includes("\n+");
 
 // Diferencia de un precio con el PVP de referencia, en la misma celda: el % arriba y los € debajo («-40 %» / «-25,78 €»); «=» si es el mismo
@@ -407,7 +407,7 @@ function hojaParaMarca(ws: ExcelJS.Worksheet, marca: string, t: TablaParaMarca, 
       }
       if (n === iFin) { color = x.peor.c.color; bold = true; }
       if (n === iFin + 1) { color = BAJO; bold = true; }
-      if (porEncima(c.value)) { color = AMBAR; bold = true; fondo = AMBAR_FONDO; } // más caro que la marca
+      if (porEncima(c.value)) bold = true; // más caro que la marca: en negrita
       c.font = { name: "Calibri", size: 10, color: { argb: "FF" + hex(color) }, bold, underline: typeof c.value === "object" && c.value != null };
       if (fondo) relleno(c, fondo);
       if (typeof c.value === "number") c.numFmt = EUROS;
@@ -495,7 +495,7 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
         if (!p) { s.textColor = [196, 201, 208]; return; }
       }
       if (c === iFin) s.textColor = rgb(x.peor.c.color);
-      if (porEncima(d.cell.raw)) { s.textColor = rgb(AMBAR); s.fillColor = rgb(AMBAR_FONDO); s.fontStyle = "bold"; }
+      if (porEncima(d.cell.raw)) s.fontStyle = "bold";
     },
     didDrawCell: d => {
       if (d.section !== "body") return;
