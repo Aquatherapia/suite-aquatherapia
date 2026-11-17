@@ -34,6 +34,8 @@ export default function PedidosMarcasPage() {
   const [error, setError] = useState("");
   const [stockMax, setStockMax] = useState(0);
   const [descatalogados, setDescatalogados] = useState(false);
+  const [soloSinEnviar, setSoloSinEnviar] = useState(true);
+  const [sinEnviarDesde, setSinEnviarDesde] = useState("");
   const [buscar, setBuscar] = useState("");
   const [copiado, setCopiado] = useState("");
   const [encima, setEncima] = useState(false);
@@ -58,9 +60,9 @@ export default function PedidosMarcasPage() {
 
   const resultado = useMemo(() => {
     if (!ventas || !stock) return null;
-    try { return cruzar(ventas.filas, stock.filas, { stockMax, incluirDescatalogados: descatalogados }); }
+    try { return cruzar(ventas.filas, stock.filas, { stockMax, incluirDescatalogados: descatalogados, soloSinEnviar, sinEnviarDesde }); }
     catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
-  }, [ventas, stock, stockMax, descatalogados]);
+  }, [ventas, stock, stockMax, descatalogados, soloSinEnviar, sinEnviarDesde]);
 
   const marcas: MarcaPedido[] = useMemo(() => {
     if (!resultado || "error" in resultado) return [];
@@ -112,10 +114,13 @@ export default function PedidosMarcasPage() {
           <div className="mp-cifras">
             <div><b>{miles(r.marcas.length)}</b><span>marcas con algo que pedir</span></div>
             <div><b>{miles(lineas)}</b><span>productos en la lista</span></div>
-            <div><b>{miles(r.unidades)}</b><span>unidades vendidas en {miles(r.pedidos)} pedidos</span></div>
+            <div><b>{miles(r.pedidosPendientes)}</b><span>pedidos sin enviar{r.pendDesde ? ` (el primero, del ${r.pendDesde.slice(0, 16)})` : ""}</span></div>
           </div>
           <p className="rf-suave pm-periodo">
-            Ventas del <b>{r.desde || "—"}</b> al <b>{r.hasta || "—"}</b> (lo que traiga el informe: si quieres otro periodo, cambia las fechas al descargarlo).
+            {soloSinEnviar
+              ? <>Salen los productos de los pedidos que aún no se han enviado. El número de «-ventas» es lo vendido del <b>{r.desde || "—"}</b> al <b>{r.hasta || "—"}</b> ({miles(r.unidades)} uds. en {miles(r.pedidos)} pedidos): cuanto más largo el informe, más real.
+                {r.antiguosSinEnviar > 0 && <> Hay {miles(r.antiguosSinEnviar)} pedidos sin enviar de antes del {r.sinEnviarDesde.split("-").reverse().join("/")} que no entran (suelen ser compras atascadas): cambia la fecha si quieres incluirlos.</>}</>
+              : <>Salen todos los productos vendidos del <b>{r.desde || "—"}</b> al <b>{r.hasta || "—"}</b> ({miles(r.unidades)} uds. en {miles(r.pedidos)} pedidos).</>}
             {r.anulados > 0 && <> No cuento {miles(r.anulados)} líneas canceladas o devueltas.</>}
           </p>
 
@@ -125,6 +130,16 @@ export default function PedidosMarcasPage() {
               <option value={1}>Stock 1 o menos</option>
               <option value={2}>Stock 2 o menos</option>
             </select>
+            <label className="rf-check">
+              <input type="checkbox" checked={soloSinEnviar} onChange={e => setSoloSinEnviar(e.target.checked)} />
+              Solo pedidos sin enviar
+            </label>
+            {soloSinEnviar && (
+              <label className="rf-check">
+                desde el
+                <input type="date" className="pm-fecha" value={r.sinEnviarDesde} onChange={e => setSinEnviarDesde(e.target.value)} />
+              </label>
+            )}
             <label className="rf-check">
               <input type="checkbox" checked={descatalogados} onChange={e => setDescatalogados(e.target.checked)} />
               Incluir descatalogados{r.descatalogados > 0 && !descatalogados ? ` (${r.descatalogados})` : ""}
@@ -136,7 +151,7 @@ export default function PedidosMarcasPage() {
             </button>
           </div>
 
-          {r.marcas.length === 0 && <p className="rf-suave">No hay nada vendido en este periodo que esté sin stock.</p>}
+          {r.marcas.length === 0 && <p className="rf-suave">{soloSinEnviar ? "En los pedidos sin enviar no hay nada que esté sin stock." : "No hay nada vendido en este periodo que esté sin stock."}</p>}
 
           <div className="pm-marcas">
             {marcas.map(m => (
@@ -179,7 +194,7 @@ export default function PedidosMarcasPage() {
           )}
 
           <p className="rf-suave mp-nota">
-            Entran los productos que se han vendido en el periodo del informe y tienen ahora un stock igual o menor que el elegido (STOCK ACTUAL del control de stocks).
+            Entran los productos {soloSinEnviar ? "de los pedidos sin enviar" : "vendidos en el periodo del informe"} que tienen ahora un stock igual o menor que el elegido (STOCK ACTUAL del control de stocks).
             Se cruzan por EAN; los que no tienen EAN (packs, kits), por nombre y formato. Los de stock 0 que no se han vendido no salen.
             {r.enPacks > 0 && <> Los packs Dúo y Trío de un mismo producto cuentan como 2 y 3 unidades de ese producto ({miles(r.enPacks)} uds. en total).</>}
             {" "}Si un producto tiene pedidos sin enviar y sin pagar, sale con «{AVISO_SIN_PAGAR}»: su stock negativo puede deberse a una compra que no se ha completado.

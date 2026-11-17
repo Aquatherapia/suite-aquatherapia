@@ -1,14 +1,14 @@
 // Cruce de ventas (informe COMPRAS_….xls) y stock (control_stocks-….csv) para el pedido a cada marca.
 
-export type FilaPedido = { producto: string; propiedad: string; ean: string; stock: number; ventas: number; sinPagar: number };
+export type FilaPedido = { producto: string; propiedad: string; ean: string; stock: number; ventas: number; sinPagar: number; pendientes: number };
 export type MarcaPedido = { marca: string; grupos: { stock: number; filas: FilaPedido[] }[]; total: number };
 export type Resultado = {
   marcas: MarcaPedido[];
-  desde: string; hasta: string; pedidos: number; lineasVenta: number; unidades: number;
-  sinCruzar: { marca: string; producto: string; propiedad: string; ean: string; ventas: number }[];
+  desde: string; hasta: string; pendDesde: string; pedidosPendientes: number; sinEnviarDesde: string; antiguosSinEnviar: number; pedidos: number; lineasVenta: number; unidades: number;
+  sinCruzar: { marca: string; producto: string; propiedad: string; ean: string; ventas: number; pendientes: number }[];
   sinControl: number; descatalogados: number; anulados: number; enPacks: number;
 };
-export type Opciones = { stockMax: number; incluirDescatalogados: boolean };
+export type Opciones = { stockMax: number; incluirDescatalogados: boolean; soloSinEnviar: boolean; /** AAAA-MM-DD; vacío = desde el día anterior al último pedido */ sinEnviarDesde: string };
 
 // Quita espacios raros, caracteres invisibles (el programa mete alguno en los EAN) y dobles espacios
 const limpiar = (s: string) => (s ?? "").replace(/[​-‏⁠﻿]/g, "").replace(/ /g, " ").replace(/\s+/g, " ").trim();
@@ -87,14 +87,14 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     marca: ["MARCA"], producto: ["PRODUCTO"], propiedad: ["PROPIEDAD"], ean: ["EAN"], stock: ["STOCK ACTUAL"], descatalogado: ["DESCATALOGADO"],
   }, "stock");
 
-  type Prod = { marca: string; producto: string; propiedad: string; ean: string; stock: number | null; descatalogado: boolean; ventas: number; sinPagar: number };
+  type Prod = { marca: string; producto: string; propiedad: string; ean: string; stock: number | null; descatalogado: boolean; ventas: number; sinPagar: number; pendientes: number };
   const porEan = new Map<string, Prod[]>();
   const porNombre = new Map<string, Prod>();
   const porSoloNombre = new Map<string, Prod[]>();
   for (const f of stockFilas.slice(is + 1)) {
     const p: Prod = {
       marca: limpiar(f[cs.marca]), producto: limpiar(f[cs.producto]), propiedad: limpiar(f[cs.propiedad]), ean: limpiarEan(f[cs.ean]),
-      stock: entero(f[cs.stock]), descatalogado: /^s[ií]/i.test(limpiar(f[cs.descatalogado])), ventas: 0, sinPagar: 0,
+      stock: entero(f[cs.stock]), descatalogado: /^s[ií]/i.test(limpiar(f[cs.descatalogado])), ventas: 0, sinPagar: 0, pendientes: 0,
     };
     if (!p.producto) continue;
     if (eanValido(p.ean)) porEan.set(p.ean, [...(porEan.get(p.ean) ?? []), p]);
@@ -104,6 +104,20 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   }
 
   const pedidos = new Set<string>();
+  // Pedidos sin enviar que cuentan: desde la fecha elegida (por defecto, desde ayer). Los más antiguos suelen ser
+  // pedidos atascados (sin pagar desde hace semanas) y no deben sacar productos en el pedido del día.
+  let ultimo = 0;
+  for (const f of ventasFilas.slice(iv + 1)) ultimo = Math.max(ultimo, ordenFecha(f[cv.fecha] ?? ""));
+  let corte = op.sinEnviarDesde;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(corte) && ultimo) {
+    const t = String(ultimo);
+    const d = new Date(Date.UTC(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8) - 1));
+    corte = d.toISOString().slice(0, 10);
+  }
+  const corteNum = corte ? Number(corte.replace(/-/g, "") + "0000") : 0;
+  const antiguos = new Set<string>();
+  const pedidosPend = new Set<string>();
+  let pendDesde = "";
   let desde = "", hasta = "", lineasVenta = 0, unidades = 0, anulados = 0, enPacks = 0;
   const sinCruzar = new Map<string, Resultado["sinCruzar"][number]>();
   for (const f of ventasFilas.slice(iv + 1)) {
@@ -144,12 +158,20 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
       }
     }
     // Sin pagar: pedido sin enviar y con «Pagado» en No
-    const sinPagar = /^no/i.test(limpiar(f[cv.pagado])) && !/enviad/i.test(limpiar(f[cv.estado]));
-    if (p) { p.ventas += cant * factor; if (sinPagar) p.sinPagar += cant * factor; }
+    // Sin enviar: el pedido aún no ha salido (lo de ayer por la tarde y hoy). Sin pagar: además, «Pagado» en No
+    const sinEnviar = !/enviad/i.test(limpiar(f[cv.estado])) && ordenFecha(fe) >= corteNum;
+    if (!/enviad/i.test(limpiar(f[cv.estado])) && !sinEnviar) antiguos.add(limpiar(f[cv.id]));
+    const sinPagar = sinEnviar && /^no/i.test(limpiar(f[cv.pagado]));
+    if (sinEnviar) {
+      pedidosPend.add(limpiar(f[cv.id]));
+      if (fe && (!pendDesde || ordenFecha(fe) < ordenFecha(pendDesde))) pendDesde = fe;
+    }
+    if (p) { p.ventas += cant * factor; if (sinPagar) p.sinPagar += cant * factor; if (sinEnviar) p.pendientes += cant * factor; }
     else {
       const k = `${ean}|${clave(producto, propiedad)}`;
-      const s = sinCruzar.get(k) ?? { marca, producto, propiedad, ean, ventas: 0 };
+      const s = sinCruzar.get(k) ?? { marca, producto, propiedad, ean, ventas: 0, pendientes: 0 };
       s.ventas += cant;
+      if (sinEnviar) s.pendientes += cant;
       sinCruzar.set(k, s);
     }
   }
@@ -159,13 +181,13 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   const porMarca = new Map<string, Map<number, FilaPedido[]>>();
   const todos = new Set<Prod>([...porNombre.values(), ...[...porEan.values()].flat()]);
   for (const p of todos) {
-    if (p.ventas <= 0) continue;
+    if (p.ventas <= 0 || (op.soloSinEnviar && p.pendientes <= 0)) continue;
     if (p.stock === null || p.stock === SIN_CONTROL) { sinControl++; continue; }
     if (p.stock > op.stockMax) continue;
     if (p.descatalogado && !op.incluirDescatalogados) { descatalogados++; continue; }
     const marca = p.marca.toLowerCase() || "sin marca";
     const g = porMarca.get(marca) ?? new Map<number, FilaPedido[]>();
-    g.set(p.stock, [...(g.get(p.stock) ?? []), { producto: p.producto, propiedad: p.propiedad, ean: p.ean, stock: p.stock, ventas: p.ventas, sinPagar: p.sinPagar }]);
+    g.set(p.stock, [...(g.get(p.stock) ?? []), { producto: p.producto, propiedad: p.propiedad, ean: p.ean, stock: p.stock, ventas: p.ventas, sinPagar: p.sinPagar, pendientes: p.pendientes }]);
     porMarca.set(marca, g);
   }
 
@@ -177,8 +199,8 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   }).sort((a, b) => a.marca.localeCompare(b.marca, "es"));
 
   return {
-    marcas, desde, hasta, pedidos: pedidos.size, lineasVenta, unidades,
-    sinCruzar: [...sinCruzar.values()].sort((a, b) => a.marca.localeCompare(b.marca, "es") || b.ventas - a.ventas),
+    marcas, desde, hasta, pendDesde, pedidosPendientes: pedidosPend.size, sinEnviarDesde: corte, antiguosSinEnviar: antiguos.size, pedidos: pedidos.size, lineasVenta, unidades,
+    sinCruzar: [...sinCruzar.values()].filter(x => !op.soloSinEnviar || x.pendientes > 0).sort((a, b) => a.marca.localeCompare(b.marca, "es") || b.ventas - a.ventas),
     sinControl, descatalogados, anulados, enPacks,
   };
 }
