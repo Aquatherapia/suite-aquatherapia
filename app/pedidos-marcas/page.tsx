@@ -227,7 +227,23 @@ export default function PedidosMarcasPage() {
       const n = nuevas(f);
       return n.length ? { ...f, pedir: Math.max(1, Math.ceil(n.reduce((t, c) => t + c.q, 0))) } : f;
     }) })).filter(g => g.filas.length);
-    return { ...m, grupos, total: grupos.reduce((t, g) => t + g.filas.length, 0) };
+    let total = grupos.reduce((t, g) => t + g.filas.length, 0);
+    // Si hay algo en negativo, el pedido se hace sí o sí: se completa hasta el mínimo con otros productos de la marca
+    // que tienen ventas, de menos a más stock (2, 3, 4…)
+    if (total > 0 && total < MIN_PRODUCTOS_MARCA && grupos.some(g => g.stock < 0)) {
+      const ya = new Set(grupos.flatMap(g => g.filas.map(f => f.id)));
+      for (const f of m.relleno) {
+        if (total >= MIN_PRODUCTOS_MARCA) break;
+        if (ya.has(f.id) || enPedido[f.id]?.estado === "esperando") continue;
+        ya.add(f.id);
+        const g = grupos.find(x => x.stock === f.stock);
+        const nueva = { ...f, relleno: true };
+        if (g) g.filas.push(nueva); else grupos.push({ stock: f.stock, filas: [nueva] });
+        total++;
+      }
+      grupos.sort((a, b) => a.stock - b.stock);
+    }
+    return { ...m, grupos, total };
   }).filter(m => m.total > 0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [marcas, enPedido, estados]);
@@ -235,10 +251,12 @@ export default function PedidosMarcasPage() {
     const q = buscar.trim().toLowerCase();
     return q ? marcasPend.filter(m => m.marca.includes(q)) : marcasPend;
   }, [marcasPend, buscar]);
-  // Pedido mínimo: una marca sale para pedir cuando junta al menos 5 productos; las demás esperan en una lista aparte
-  const listas = marcasVista.filter(m => m.total >= MIN_PRODUCTOS_MARCA);
-  const pocas = marcasVista.filter(m => m.total < MIN_PRODUCTOS_MARCA);
-  const nListas = marcasPend.filter(m => m.total >= MIN_PRODUCTOS_MARCA).length;
+  // Pedido mínimo: una marca sale para pedir cuando junta al menos 5 productos, o si tiene algo en negativo (aunque no
+  // llegue a 5 con lo que tiene); las demás esperan en una lista aparte
+  const sePide = (m: MarcaPedido) => m.total >= MIN_PRODUCTOS_MARCA || m.grupos.some(g => g.stock < 0);
+  const listas = marcasVista.filter(sePide);
+  const pocas = marcasVista.filter(m => !sePide(m));
+  const nListas = marcasPend.filter(sePide).length;
   const aPedido = (f: FilaPedido) => ({ id: f.id, producto: f.producto, propiedad: f.propiedad, ean: f.ean, compras: f.compras.map(c => c.id), stock: f.stock, ventas: f.ventas, pedir: f.pedir });
 
   async function copiarTexto(id: string, texto: string) {
@@ -312,6 +330,7 @@ export default function PedidosMarcasPage() {
                               ))}
                             </span>
                           )}
+                          {"relleno" in f && <span className="pm-tag pm-relleno">Para llegar al pedido mínimo de {MIN_PRODUCTOS_MARCA}</span>}
                           {f.sinPagar > 0 && <span className="pm-sinpagar">{AVISO_SIN_PAGAR} ({f.sinPagar} ud{f.sinPagar !== 1 ? "s" : ""}.)</span>}
                           {enPedido[f.id] && (
                             <span className={`pm-tag pm-estado-${enPedido[f.id].estado}`}>
@@ -447,7 +466,7 @@ export default function PedidosMarcasPage() {
       {r && (
         <>
           <div className="mp-cifras">
-            <div><b>{miles(nListas)}</b><span>marcas para pedir (con {MIN_PRODUCTOS_MARCA} productos o más)</span></div>
+            <div><b>{miles(nListas)}</b><span>marcas para pedir ({MIN_PRODUCTOS_MARCA} productos o más, o algo en negativo)</span></div>
             <div><b>{miles(lineas)}</b><span>productos en la lista</span></div>
             <div><b>{miles(r.pedidosPendientes)}</b><span>pedidos sin enviar{r.pendDesde ? ` (el primero, del ${r.pendDesde.slice(0, 16)})` : ""}</span></div>
           </div>
@@ -497,7 +516,7 @@ export default function PedidosMarcasPage() {
 
           {pocas.length > 0 && (
             <details className="pm-aviso pm-pocas">
-              <summary>Marcas que aún no llegan al pedido mínimo de {MIN_PRODUCTOS_MARCA} productos ({pocas.length})</summary>
+              <summary>Marcas que aún no llegan al pedido mínimo de {MIN_PRODUCTOS_MARCA} productos y no tienen nada en negativo ({pocas.length})</summary>
               <p className="rf-suave">Se quedan aquí hasta que junten {MIN_PRODUCTOS_MARCA} productos que pedir. Si alguna corre prisa, puedes pedirla igual desde aquí.</p>
               <div className="pm-marcas">{pocas.map(tarjeta)}</div>
             </details>
@@ -536,7 +555,7 @@ export default function PedidosMarcasPage() {
             {" "}Si un producto tiene pedidos sin enviar y sin pagar, sale con «{AVISO_SIN_PAGAR}»: su stock negativo puede deberse a una compra que no se ha completado.
             {r.sinControl > 0 && <> {r.sinControl} vendidos no tienen control de stock y no salen.</>}
             {" "}No salen los descatalogados{r.descatalogados > 0 ? ` (${r.descatalogados})` : ""} ni los que tienen una sola venta y aún les queda stock{r.unaVenta > 0 ? ` (${r.unaVenta})` : ""}.
-            {" "}Una marca sale para pedir cuando junta {MIN_PRODUCTOS_MARCA} productos o más (pedido mínimo); las demás esperan en la lista plegada.
+            {" "}Una marca sale para pedir cuando junta {MIN_PRODUCTOS_MARCA} productos o más (pedido mínimo). Si tiene algo en negativo se pide siempre: si no llega a {MIN_PRODUCTOS_MARCA}, se completa con otros productos suyos con ventas, de menos a más stock. Las demás esperan en la lista plegada.
             {" "}«Pedir» = lo que falta para cubrir el stock negativo más la venta media de {cobertura} días ({r.diasPeriodo} días de ventas), y como mínimo 1.
             {" "}Al mandar el pedido por email o WhatsApp desde aquí, se marca como pedido solo.
             {" "}Los pedidos sin pagar de más de {DIAS_SIN_PAGAR} días se dan por anulados: no cuentan como venta. Las ventas son unidades.
