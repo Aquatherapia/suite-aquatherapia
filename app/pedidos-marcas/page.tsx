@@ -257,7 +257,7 @@ export default function PedidosMarcasPage() {
 
       <Segmentos
         opciones={[
-          { valor: "pedir" as const, nombre: "Para pedir" },
+          { valor: "pedir" as const, nombre: `Para pedir${r ? ` (${marcasPend.length})` : ""}` },
           { valor: "recibir" as const, nombre: `Sin recibir${pedidos ? ` (${Object.keys(pedidos).length})` : ""}` },
           { valor: "historico" as const, nombre: "Histórico de ventas" },
         ]}
