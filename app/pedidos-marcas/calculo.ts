@@ -149,15 +149,18 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   const cs = indices(stockFilas[is], {
     marca: ["MARCA"], producto: ["PRODUCTO"], propiedad: ["PROPIEDAD"], ean: ["EAN"], stock: ["STOCK ACTUAL"], descatalogado: ["DESCATALOGADO"],
   }, "stock");
+  // «ESTADO PROD.» (Activo / Inactivo): opcional, los archivos guardados antes no la tenían
+  const cEstado = stockFilas[is].findIndex(c => sinTildes(limpiar(c).replace(/\*/g, "")) === "estado prod.");
 
-  type Prod = { marca: string; producto: string; propiedad: string; ean: string; stock: number | null; descatalogado: boolean; ventas: number; sinPagar: number; pendientes: number; sinEnviarTotal: number; compras: Map<string, Compra> };
+  type Prod = { marca: string; producto: string; propiedad: string; ean: string; stock: number | null; descatalogado: boolean; activo: boolean; ventas: number; sinPagar: number; pendientes: number; sinEnviarTotal: number; compras: Map<string, Compra> };
   const porEan = new Map<string, Prod[]>();
   const porNombre = new Map<string, Prod>();
   const porSoloNombre = new Map<string, Prod[]>();
   for (const f of stockFilas.slice(is + 1)) {
     const p: Prod = {
       marca: limpiar(f[cs.marca]), producto: limpiar(f[cs.producto]), propiedad: limpiar(f[cs.propiedad]), ean: limpiarEan(f[cs.ean]),
-      stock: entero(f[cs.stock]), descatalogado: /^s[ií]/i.test(limpiar(f[cs.descatalogado])), ventas: 0, sinPagar: 0, pendientes: 0, sinEnviarTotal: 0, compras: new Map(),
+      stock: entero(f[cs.stock]), descatalogado: /^s[ií]/i.test(limpiar(f[cs.descatalogado])),
+      activo: cEstado < 0 || !/^inactiv/i.test(limpiar(f[cEstado] ?? "")), ventas: 0, sinPagar: 0, pendientes: 0, sinEnviarTotal: 0, compras: new Map(),
     };
     if (!p.producto) continue;
     if (eanValido(p.ean)) porEan.set(p.ean, [...(porEan.get(p.ean) ?? []), p]);
@@ -302,9 +305,9 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   for (const p of todos) {
     const marcaP = p.marca.toLowerCase() || "sin marca";
     // Candidato para completar el pedido mínimo: más de una venta, stock 1 o más (lo que está a 0 o en negativo y no tiene
-    // pedidos sin enviar ya se pidió) y no descatalogado
+    // pedidos sin enviar ya se pidió), no descatalogado y con el producto Activo (packs y kits incluidos)
     const candidato = () => {
-      if (p.ventas > 1 && p.stock !== null && p.stock !== SIN_CONTROL && p.stock >= 1 && !p.descatalogado) relleno.set(marcaP, [...(relleno.get(marcaP) ?? []), fila(p)]);
+      if (p.ventas > 1 && p.stock !== null && p.stock !== SIN_CONTROL && p.stock >= 1 && !p.descatalogado && p.activo) relleno.set(marcaP, [...(relleno.get(marcaP) ?? []), fila(p)]);
     };
     if (p.ventas <= 0 && p.pendientes <= 0) continue;
     if (op.soloSinEnviar && p.pendientes <= 0 && !(op.seguidos?.has(idProducto(p)) && p.sinEnviarTotal > 0)) { candidato(); continue; }
@@ -375,7 +378,7 @@ function recortar(filas: string[][], cab: number, quedan: string[]) {
 export function recortarStock(filas: string[][]): string[][] {
   const is = filas.findIndex(f => f.some(c => sinTildes(limpiar(c).replace(/\*/g, "")) === "stock actual"));
   if (is < 0) return filas;
-  return recortar(filas, is, ["marca", "producto", "propiedad", "ean", "stock actual", "descatalogado"]).filas;
+  return recortar(filas, is, ["estado prod.", "marca", "producto", "propiedad", "ean", "stock actual", "descatalogado"]).filas;
 }
 /** Ventas: solo las columnas que se usan y las líneas sin enviar o de los últimos 4 días (lo de antes ya está en el histórico) */
 export function recortarVentas(filas: string[][]): string[][] {
