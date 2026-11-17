@@ -274,6 +274,9 @@ const VERDE_MARCA = "15803D"; // PVP de la web oficial de la marca
 // Celda de diferencia con signo «+»: ese precio está por encima del de la marca y va en negrita
 const porEncima = (v: unknown) => typeof v === "string" && v.includes("\n+");
 
+// Aviso de arriba cuando la marca tiene web oficial
+const avisoMarca = (marca: string) => `Todos los precios están comparados con la web oficial de ${marca} (su precio actual, con descuento si lo tiene)`;
+
 // Diferencia de un precio con el PVP de referencia, en la misma celda: el % arriba y los € debajo («-40 %» / «-25,78 €»); «=» si es el mismo
 const difTexto = (precio: number, base: number) => {
   const d = Math.round((precio - base) * 100) / 100;
@@ -347,6 +350,7 @@ function hojaParaMarca(ws: ExcelJS.Worksheet, marca: string, t: TablaParaMarca, 
   const total = 2 + nOf + nNos + t.comps.length * 2 + 2;
   ws.mergeCells(1, 1, 1, total); ws.getCell("A1").value = `${marca} · precios de la competencia por debajo de ${descuento > 0 ? "lo autorizado" : "PVP"}`; ws.getCell("A1").font = { name: "Calibri", size: 15, bold: true, color: { argb: "FF" + AZUL } };
   ws.mergeCells(2, 1, 2, total); ws.getCell("A2").value = `Tiendas online que venden por debajo ${que.startsWith("el ") ? "del " + que.slice(3) : "de " + que} · ${fechaCorta(fecha)} · Pulsa un precio o un producto para abrir su ficha`; ws.getCell("A2").font = { name: "Calibri", size: 10, color: { argb: "FF" + SUAVE } };
+  if (t.oficial) { ws.mergeCells(3, 1, 3, total); ws.getCell("A3").value = avisoMarca(marca); ws.getCell("A3").font = { name: "Calibri", size: 11, bold: true, color: { argb: "FF" + VERDE_MARCA } }; }
   const relleno = (c: ExcelJS.Cell, color: string) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + hex(color) } }; };
   // Fila 4: bloques; fila 5: columnas
   const grupos: { titulo: string; n: number; color: string; fondo: string }[] = [
@@ -438,6 +442,7 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
   doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...rgb(AZUL)); doc.text(titulo, M, 14);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...rgb(SUAVE));
   doc.text(`Tiendas online que venden por debajo ${que.startsWith("el ") ? "del " + que.slice(3) : "de " + que} · ${fechaCorta(fecha)} · Pulsa un precio o un producto para abrir su ficha`, M, 19.5);
+  if (t.oficial) { doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(...rgb(VERDE_MARCA)); doc.text(avisoMarca(marca), M, 25); }
   const nOf = t.oficial ? 1 : 0, nNos = t.oficial ? 2 : (descuento > 0 ? 3 : 2); // con web oficial: nuestro precio y su diferencia con la marca
   const iNos = 2 + nOf, iComp = iNos + nNos, iFin = iComp + t.comps.length * 2;
   const cabC = (txt: string, color: string) => ({ content: txt, styles: { fillColor: rgb(color) } });
@@ -463,7 +468,7 @@ export async function descargarParaMarca(marca: string, filas: FilaComp[], descu
   for (let k = iNos; k < iComp; k++) columnStyles[k] = { cellWidth: t.oficial && k === iComp - 1 ? 18 : 14, textColor: rgb(AZUL), fontStyle: k === iComp - 1 - nOf ? "bold" : "normal" };
   t.comps.forEach((c, j) => { columnStyles[iComp + j * 2] = { cellWidth: ancho, textColor: rgb(c.color), fontStyle: "bold" }; columnStyles[iComp + j * 2 + 1] = { cellWidth: ancho * 1.6, textColor: rgb(c.color) }; });
   autoTable(doc, {
-    startY: 24, margin: { left: M, right: M }, theme: "plain",
+    startY: t.oficial ? 29 : 24, margin: { left: M, right: M }, theme: "plain",
     styles: { font: "helvetica", fontSize: 6.8, textColor: rgb(TEXTO), cellPadding: { top: 1.5, bottom: 1.5, left: 1, right: 1 }, valign: "middle", halign: "right", lineColor: rgb(LINEA) },
     headStyles: { fontStyle: "bold", fontSize: 6, textColor: [255, 255, 255], halign: "center", valign: "middle" },
     head: [
