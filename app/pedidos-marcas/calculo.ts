@@ -178,7 +178,11 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     const m = ean.match(/^(.+)-(\d)$/);
     const base = m ? porEan.get(m[1]) : undefined;
     const delFormato = unidadesPack(propiedad);
-    if (base?.length === 1) return { p: base[0], factor: delFormato > 1 ? delFormato : Number(m![2]) + 1 };
+    // Las variantes con «-N» que tienen fila propia en el stock (tonos, tamaños, crema/gel…) son productos distintos y
+    // ya se han encontrado arriba por su EAN exacto. Aquí solo llegan los «-N» sin fila propia, y solo cuentan como pack
+    // si el nombre o el formato lo dicen (Dúo, Trío, 2x…, Pack, Kit, Set, Neceser); si no, quedan sin cruzar para revisarlos.
+    const pareceAPack = delFormato > 1 || /\b(pack|kit|set|neceser|duo|trio)\b/.test(sinTildes(`${producto} ${propiedad}`.toLowerCase()));
+    if (base?.length === 1 && pareceAPack) return { p: base[0], factor: delFormato > 1 ? delFormato : Number(m![2]) + 1 };
     const mismoNombre = porSoloNombre.get(clave(producto, ""));
     if (!eanValido(ean) && delFormato > 1 && mismoNombre?.length === 1) return { p: mismoNombre[0], factor: delFormato };
     return { factor: 1 };
