@@ -203,10 +203,11 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
   const cabC = (t: string, color: string) => ({ content: t, styles: { fillColor: rgb(color) } });
   const fin = 5 + o + cols.length * 2;
   // Diferencia con el precio de la marca (% arriba y € abajo); sin web oficial, el dto. sobre su PVP como antes
-  const conMarca = (f: FilaComp, precio: number, dto: number) => {
+  // Si es igual que el de la marca, solo «=» (sin repetir el precio)
+  const conMarca = (f: FilaComp, precio: number, dto: number, marcaNombre = "") => {
     const of = ofiDe.get(f);
-    if (oficial) return of ? `\n${difTexto(precio, of.precio)}` : "";
-    return dto > 0.0005 ? `\n-${pctTexto(dto)}` : "";
+    if (oficial && of) { const d = difTexto(precio, of.precio); return d === "=" ? "=" + marcaNombre : `${eur(precio)}${marcaNombre}\n${d}`; }
+    return eur(precio) + marcaNombre + (!oficial && dto > 0.0005 ? `\n-${pctTexto(dto)}` : "");
   };
   const cuerpo = filas.map((f, i) => {
     const k = calc[i], of = ofiDe.get(f);
@@ -216,11 +217,11 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
       ...(oficial ? [of ? eur(of.precio) : "-"] : []),
       eur(f.pvp) + (k.revisarPrecio.length ? "\n(revisar precio)" : ""),
       k.limite != null ? eur(k.limite) : "-",
-      eur(f.precio) + conMarca(f, f.precio, k.miDto),
+      conMarca(f, f.precio, k.miDto),
       ...cols.flatMap(c => {
         const p = f.precios[c.id], kc = k.comp[c.id];
         if (!p || !kc) return ["-", "-"];
-        return [eur(kc.suPvp) + (kc.pvpSinActualizar ? "\nsin actualizar" : ""), `${eur(p.precio)}${p.por !== "ean" && p.por !== "manual" ? " ~" : ""}` + conMarca(f, p.precio, kc.dto)];
+        return [eur(kc.suPvp) + (kc.pvpSinActualizar ? "\nsin actualizar" : ""), conMarca(f, p.precio, kc.dto, p.por !== "ean" && p.por !== "manual" ? " ~" : "")];
       }),
       k.masBarato,
       oficial ? (of && k.mb ? difTexto(k.mb.precio, of.precio) : "-") : k.diferencia == null ? "-" : `${k.diferencia > 0.005 ? "+" : ""}${eur(k.diferencia)}`,
