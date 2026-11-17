@@ -1992,3 +1992,8 @@ label { color: #3f3f46; font-weight: 500; font-size: 13px; }
 .pm .gg-seg { margin: 4px 0 18px; }
 .pm-seg-titulo { font-size: 17px; margin: 0 0 6px; }
 .pm-vacio { margin: 16px 0; }
+.pm-ped-prods li { padding: 5px 0; }
+.pm-ped-prods li > span { display: block; }
+.pm-ped-datos { display: flex !important; margin-top: 2px; gap: 10px; font-size: 13px; white-space: nowrap; color: var(--muted); }
+.pm-ped-datos b { color: var(--ink); }
+.pm-ped-datos .neg { color: #b42318; font-weight: 600; }
