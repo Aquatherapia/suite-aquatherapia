@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, leerPedidosPegados, ordenFecha, lineasParaHistorico, textoMarca, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
+import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, ordenFecha, lineasParaHistorico, textoMarca, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
+import { Segmentos } from "../_google/ui";
 
 type Archivo<T> = { nombre: string; filas: T } | null;
 type Contacto = { email: string; whatsapp: string };
@@ -63,8 +64,7 @@ export default function PedidosMarcasPage() {
   const [guardando, setGuardando] = useState(false);
   const [contactos, setContactos] = useState<Record<string, Contacto>>({});
   const [editando, setEditando] = useState("");
-  const [pegado, setPegado] = useState("");
-  const [pegadoMsg, setPegadoMsg] = useState("");
+  const [pestana, setPestana] = usePref<"pedir" | "recibir" | "historico">("pestana", "pedir");
   const [hist, setHist] = useState<Hist | null | undefined>(undefined);
   const [histMsg, setHistMsg] = useState("");
   const [usarHist, setUsarHist] = useState(true);
@@ -112,14 +112,6 @@ export default function PedidosMarcasPage() {
     const r = await fetch("/api/pedidos-marcas/ventas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accion: "borrar" }) });
     const v = await r.json();
     if (v.error) setHistMsg(v.error); else { setHist(v); setHistMsg("Histórico borrado."); }
-  }
-
-  const pegados = useMemo(() => leerPedidosPegados(pegado), [pegado]);
-  async function guardarPegados() {
-    if (!pegados.length) return;
-    await enviar({ accion: "importar", pedidos: pegados });
-    setPegado("");
-    setPegadoMsg(`Guardados ${pegados.length} pedido${pegados.length !== 1 ? "s" : ""} (${pegados.reduce((n, p) => n + p.productos.length, 0)} productos). Ya no saldrán las compras de antes de cada pedido.`);
   }
 
   async function enviar(cuerpo: object) {
@@ -235,71 +227,29 @@ export default function PedidosMarcasPage() {
         </p>
       </header>
 
-      <label
-        className={`pm-subir${encima ? " pm-subir-on" : ""}`}
-        onDragOver={e => { e.preventDefault(); setEncima(true); }}
-        onDragLeave={() => setEncima(false)}
-        onDrop={e => { e.preventDefault(); setEncima(false); cargar(e.dataTransfer.files); }}
-      >
-        <input type="file" multiple accept=".xls,.csv,application/vnd.ms-excel,text/csv" onChange={e => { cargar(e.target.files); e.target.value = ""; }} />
-        <span className="mg-upload-btn">Elegir archivos</span>
-        <span className="rf-suave">o arrástralos aquí. Puedes elegir los dos a la vez.</span>
-      </label>
-
-      <ul className="pm-archivos">
-        <li className={ventas ? "ok" : ""}><b>Ventas:</b> {ventas ? ventas.nombre : "falta el COMPRAS_….xls"}</li>
-        <li className={stock ? "ok" : ""}><b>Stock:</b> {stock ? stock.nombre : "falta el control_stocks-….csv"}</li>
-      </ul>
-
-      <div className="pm-hist">
-        {hist === undefined && <span className="rf-suave">Leyendo el histórico de ventas…</span>}
-        {hist && hist.pedidos > 0 && (
-          <span className="rf-suave">
-            <b>Histórico de ventas guardado:</b> {miles(hist.pedidos)} pedidos del {diaTxt(hist.desde)} al {diaTxt(hist.hasta)}. «-ventas» cuenta los últimos {Math.round(DIAS_HISTORICO / 30.5)} meses.
-          </span>
-        )}
-        {hist && !hist.pedidos && <span className="rf-suave"><b>Aún no hay histórico de ventas.</b> La primera vez, sube un informe de los últimos 6 meses; después basta con el del día.</span>}
-        {histMsg && <span className="rf-suave">{histMsg}</span>}
-        {hist && hist.pedidos > 0 && (
-          <span className="pm-hist-opc">
-            <label className="rf-check"><input type="checkbox" checked={usarHist} onChange={e => setUsarHist(e.target.checked)} /> Usar el histórico</label>
-            <button className="regen-btn" onClick={borrarHistorico}>Borrar histórico</button>
-          </span>
-        )}
-      </div>
+      <Segmentos
+        opciones={[
+          { valor: "pedir" as const, nombre: "Para pedir" },
+          { valor: "recibir" as const, nombre: `Sin recibir${pedidos ? ` (${Object.keys(pedidos).length})` : ""}` },
+          { valor: "historico" as const, nombre: "Histórico de ventas" },
+        ]}
+        valor={pestana}
+        onChange={setPestana}
+      />
 
       {error && <p className="error">{error}</p>}
       {errorSeg && <p className="error">{errorSeg}</p>}
 
-      {pedidos && (
-        <details className="pm-seguimiento pm-pegar">
-          <summary>Pegar pedidos ya hechos (de WhatsApp)</summary>
-          <p className="rf-suave">
-            Pega aquí las listas que ya habéis mandado a las marcas, tal cual salen en WhatsApp (con «[16/11/26, 8:22:21] …» delante) o solo la lista.
-            Cada marca se guarda como pedido «esperando» con la hora del mensaje (o la de ahora), y dejan de salir las compras de clientes de antes de esa hora.
-          </p>
-          <textarea className="pm-pegar-texto" rows={6} value={pegado} onChange={e => { setPegado(e.target.value); setPegadoMsg(""); }} placeholder={"davines\t\t\t\t\n\tstock -1\t\t\t\t\n•  MOMO / Shampoo…\tRefill 500ml\t8004608295914\t-ventas\t1"} aria-label="Pedidos ya hechos" />
-          {pegado.trim() && (
-            <p className="rf-suave">
-              {pegados.length
-                ? <>Se han leído {pegados.length} pedido{pegados.length !== 1 ? "s" : ""}: {pegados.map(p => `${p.marca} (${p.productos.length}, ${diaHora(p.fecha)})`).join(" · ")}</>
-                : "No se ha leído ningún pedido. Hace falta la línea de la marca y las de los productos con su EAN."}
-            </p>
-          )}
-          {pegados.length > 0 && <button className="regen-btn" disabled={guardando} onClick={guardarPegados}>Guardar como pedidos</button>}
-          {pegadoMsg && <p className="rf-suave">{pegadoMsg}</p>}
-        </details>
-      )}
-
-      {pedidos && Object.keys(pedidos).length > 0 && (
-        <details className="pm-seguimiento">
-          <summary>Pedidos a marcas sin recibir ({Object.keys(pedidos).length})
+      {pestana === "recibir" && pedidos && Object.keys(pedidos).length === 0 && <p className="rf-suave pm-vacio">No hay pedidos a marcas pendientes de recibir.</p>}
+      {pestana === "recibir" && pedidos && Object.keys(pedidos).length > 0 && (
+        <section className="pm-seguimiento">
+          <h2 className="pm-seg-titulo">Pedidos a marcas sin recibir ({Object.keys(pedidos).length})
             {(() => { const n = Object.values(pedidos).filter(x => diasDesde(x.fecha) > diasAviso).length; return n > 0 ? <span className="pm-badge pm-estado-mal">{n} con más de {diasAviso} días</span> : null; })()}
             {(["mal", "incorrecto"] as EstadoPedido[]).map(k => {
               const n = Object.values(pedidos).filter(x => x.estado === k).length;
               return n > 0 ? <span key={k} className={`pm-badge pm-estado-${k}`}>{n} {ESTADOS_PEDIDO[k].titulo.toLowerCase()}</span> : null;
             })}
-          </summary>
+          </h2>
           <p className="rf-suave">
             Cuando llegue un pedido, ponlo como «Recibido» y se quita. Se marcan en rojo los que llevan más de
             <input type="number" min={1} max={60} className="pm-dias" value={diasAviso} onChange={e => setDiasAviso(Math.max(1, Number(e.target.value) || 7))} aria-label="Días para avisar" />
@@ -324,8 +274,47 @@ export default function PedidosMarcasPage() {
               </li>
             ))}
           </ul>
-        </details>
+        </section>
       )}
+
+      {pestana === "historico" && (
+        <div className="pm-hist">
+        {hist === undefined && <span className="rf-suave">Leyendo el histórico de ventas…</span>}
+        {hist && hist.pedidos > 0 && (
+          <span className="rf-suave">
+            <b>Histórico de ventas guardado:</b> {miles(hist.pedidos)} pedidos del {diaTxt(hist.desde)} al {diaTxt(hist.hasta)}. «-ventas» cuenta los últimos {Math.round(DIAS_HISTORICO / 30.5)} meses.
+          </span>
+        )}
+        {hist && !hist.pedidos && <span className="rf-suave"><b>Aún no hay histórico de ventas.</b> La primera vez, sube un informe de los últimos 6 meses; después basta con el del día.</span>}
+        {histMsg && <span className="rf-suave">{histMsg}</span>}
+        {hist && hist.pedidos > 0 && (
+          <span className="pm-hist-opc">
+            <label className="rf-check"><input type="checkbox" checked={usarHist} onChange={e => setUsarHist(e.target.checked)} /> Usar el histórico</label>
+            <button className="regen-btn" onClick={borrarHistorico}>Borrar histórico</button>
+          </span>
+        )}
+      </div>
+
+      )}
+
+      {pestana === "pedir" && <>
+      <label
+        className={`pm-subir${encima ? " pm-subir-on" : ""}`}
+        onDragOver={e => { e.preventDefault(); setEncima(true); }}
+        onDragLeave={() => setEncima(false)}
+        onDrop={e => { e.preventDefault(); setEncima(false); cargar(e.dataTransfer.files); }}
+      >
+        <input type="file" multiple accept=".xls,.csv,application/vnd.ms-excel,text/csv" onChange={e => { cargar(e.target.files); e.target.value = ""; }} />
+        <span className="mg-upload-btn">Elegir archivos</span>
+        <span className="rf-suave">o arrástralos aquí. Puedes elegir los dos a la vez.</span>
+      </label>
+
+      <ul className="pm-archivos">
+        <li className={ventas ? "ok" : ""}><b>Ventas:</b> {ventas ? ventas.nombre : "falta el COMPRAS_….xls"}</li>
+        <li className={stock ? "ok" : ""}><b>Stock:</b> {stock ? stock.nombre : "falta el control_stocks-….csv"}</li>
+      </ul>
+
+      {histMsg && <p className="rf-suave">{histMsg}</p>}
       {resultado && "error" in resultado && <p className="error">{resultado.error}</p>}
 
       {r && (
@@ -501,6 +490,7 @@ export default function PedidosMarcasPage() {
           </p>
         </>
       )}
+      </>}
     </div>
   );
 }
