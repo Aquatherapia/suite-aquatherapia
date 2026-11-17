@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 // no enviaron el correcto). Al marcarlo como recibido se borra. Se guarda en Vercel KV, en un hash: id → pedido.
 const CLAVE = "pedidos-marcas-pedidos";
 const ESTADOS = ["esperando", "mal", "incorrecto"];
+// Email y WhatsApp de cada marca, para mandarle el pedido desde la Suite
+const CONTACTOS = "pedidos-marcas-contactos";
+type Contacto = { email: string; whatsapp: string };
 
 type Producto = { id: string; producto: string; propiedad: string; ean: string };
 export type Pedido = { marca: string; fecha: string; estado: string; productos: Producto[] };
@@ -13,20 +16,23 @@ async function kv() {
 }
 
 async function todos() {
-  return ((await (await kv()).hgetall<Record<string, Pedido>>(CLAVE)) ?? {}) as Record<string, Pedido>;
+  const db = await kv();
+  const [pedidos, contactos] = await Promise.all([db.hgetall<Record<string, Pedido>>(CLAVE), db.hgetall<Record<string, Contacto>>(CONTACTOS)]);
+  return { pedidos: (pedidos ?? {}) as Record<string, Pedido>, contactos: (contactos ?? {}) as Record<string, Contacto> };
 }
 
 const txt = (v: unknown, n: number) => String(v ?? "").slice(0, n);
 
 export async function GET() {
   try {
-    return NextResponse.json({ pedidos: await todos() });
+    return NextResponse.json(await todos());
   } catch (e) {
     return NextResponse.json({ error: `No se pudo leer el seguimiento: ${e instanceof Error ? e.message : String(e)}` }, { status: 502 });
   }
 }
 
 // POST { accion: "crear", marca, productos: [{id, producto, propiedad, ean}] }
+// POST { accion: "contacto", marca, email, whatsapp }  (los dos vacíos = se borra)
 // POST { accion: "estado", id, estado: "esperando"|"mal"|"incorrecto"|"recibido" }  (recibido = se borra)
 export async function POST(req: NextRequest) {
   const b = await req.json().catch(() => ({}));
@@ -46,8 +52,15 @@ export async function POST(req: NextRequest) {
         const p = await db.hget<Pedido>(CLAVE, id);
         if (p) await db.hset(CLAVE, { [id]: { ...p, estado: b.estado } });
       } else return NextResponse.json({ error: "Estado desconocido" }, { status: 400 });
+    } else if (b.accion === "contacto") {
+      const marca = txt(b.marca, 120);
+      if (!marca) return NextResponse.json({ error: "Falta la marca" }, { status: 400 });
+      const email = txt(b.email, 200).trim();
+      const whatsapp = txt(b.whatsapp, 30).replace(/[^\d+]/g, "");
+      if (!email && !whatsapp) await db.hdel(CONTACTOS, marca);
+      else await db.hset(CONTACTOS, { [marca]: { email, whatsapp } satisfies Contacto });
     } else return NextResponse.json({ error: "Acción desconocida" }, { status: 400 });
-    return NextResponse.json({ pedidos: await todos() });
+    return NextResponse.json(await todos());
   } catch (e) {
     return NextResponse.json({ error: `No se pudo guardar: ${e instanceof Error ? e.message : String(e)}` }, { status: 502 });
   }

@@ -2,13 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AVISO_SIN_PAGAR, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, textoMarca, type EstadoPedido, type MarcaPedido } from "./calculo";
+import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, lineasParaHistorico, textoMarca, type EstadoPedido, type Historico, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
 
 type Archivo<T> = { nombre: string; filas: T } | null;
+type Contacto = { email: string; whatsapp: string };
+type Hist = Historico & { ids: string[] };
 type Pedido = { marca: string; fecha: string; estado: EstadoPedido; productos: { id: string; producto: string; propiedad: string; ean: string }[] };
 
 const miles = (n: number) => n.toLocaleString("es-ES");
+const diaTxt = (d: string) => d ? `${d.slice(6, 8)}/${d.slice(4, 6)}/${d.slice(0, 4)}` : "—";
+const diasDesde = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 864e5);
+
+// Preferencias de esta pantalla que se recuerdan en este navegador
+function usePref<T>(clave: string, inicial: T): [T, (v: T) => void] {
+  const [v, setV] = useState<T>(inicial);
+  useEffect(() => {
+    try { const g = localStorage.getItem(`pm-${clave}`); if (g !== null) setV(JSON.parse(g)); } catch { /* sin almacenamiento */ }
+  }, [clave]);
+  return [v, (n: T) => { setV(n); try { localStorage.setItem(`pm-${clave}`, JSON.stringify(n)); } catch { /* sin almacenamiento */ } }];
+}
+
 const diaHora = (iso: string) => new Date(iso).toLocaleString("es-ES", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
 
 // El CSV de la tienda viene en UTF-8; si no, en Windows-1252
@@ -44,12 +58,56 @@ export default function PedidosMarcasPage() {
   const [pedidos, setPedidos] = useState<Record<string, Pedido> | null>(null);
   const [errorSeg, setErrorSeg] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [contactos, setContactos] = useState<Record<string, Contacto>>({});
+  const [editando, setEditando] = useState("");
+  const [hist, setHist] = useState<Hist | null | undefined>(undefined);
+  const [histMsg, setHistMsg] = useState("");
+  const [usarHist, setUsarHist] = useState(true);
+  const [cobertura, setCobertura] = usePref("cobertura", 14);
+  const [conCantidad, setConCantidad] = usePref("con-cantidad", true);
+  const [diasAviso, setDiasAviso] = usePref("dias-aviso", 7);
 
   useEffect(() => {
     fetch("/api/pedidos-marcas", { cache: "no-store" }).then(r => r.json()).then(v => {
-      if (v.error) setErrorSeg(v.error); else setPedidos(v.pedidos ?? {});
+      if (v.error) setErrorSeg(v.error); else { setPedidos(v.pedidos ?? {}); setContactos(v.contactos ?? {}); }
     }).catch(() => setErrorSeg("No se pudo cargar el seguimiento de pedidos."));
+    fetch("/api/pedidos-marcas/ventas", { cache: "no-store" }).then(r => r.json()).then(v => {
+      if (v.error) { setHist(null); setHistMsg(v.error); } else setHist(v);
+    }).catch(() => { setHist(null); setHistMsg("No se pudo leer el histórico de ventas guardado."); });
   }, []);
+
+  // Suma al histórico guardado los pedidos del informe que aún no estaban (en tandas, para no mandar demasiado de golpe)
+  async function guardarHistorico(filas: string[][], conocido: Hist | null | undefined) {
+    const todos = lineasParaHistorico(filas);
+    const ya = new Set(conocido?.ids ?? []);
+    const nuevos = Object.entries(todos).filter(([id]) => !ya.has(id));
+    if (!nuevos.length) { setHistMsg("Este informe no trae pedidos nuevos: ya estaban guardados."); return; }
+    setHistMsg(`Guardando ${miles(nuevos.length)} pedidos nuevos en el histórico…`);
+    let ultimo: Hist | null = null;
+    let añadidos = 0;
+    try {
+      for (let i = 0; i < nuevos.length; i += 1500) {
+        const r = await fetch("/api/pedidos-marcas/ventas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pedidos: Object.fromEntries(nuevos.slice(i, i + 1500)) }) });
+        const v = await r.json();
+        if (v.error) throw new Error(v.error);
+        ultimo = v;
+        añadidos += v.añadidos ?? 0;
+        setHistMsg(`Guardando en el histórico… ${miles(Math.min(i + 1500, nuevos.length))} de ${miles(nuevos.length)} pedidos`);
+      }
+      if (ultimo) setHist(ultimo);
+      setHistMsg(`Añadidos ${miles(añadidos)} pedidos nuevos al histórico.`);
+    } catch (e) {
+      if (ultimo) setHist(ultimo);
+      setHistMsg(`No se pudo guardar todo en el histórico: ${e instanceof Error ? e.message : String(e)}. Vuelve a subir el informe.`);
+    }
+  }
+
+  async function borrarHistorico() {
+    if (!window.confirm("¿Borrar todo el histórico de ventas guardado? Tendrás que volver a subir un informe largo.")) return;
+    const r = await fetch("/api/pedidos-marcas/ventas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accion: "borrar" }) });
+    const v = await r.json();
+    if (v.error) setHistMsg(v.error); else { setHist(v); setHistMsg("Histórico borrado."); }
+  }
 
   async function enviar(cuerpo: object) {
     setGuardando(true);
@@ -57,7 +115,7 @@ export default function PedidosMarcasPage() {
     try {
       const r = await fetch("/api/pedidos-marcas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
       const v = await r.json();
-      if (v.error) setErrorSeg(v.error); else setPedidos(v.pedidos ?? {});
+      if (v.error) setErrorSeg(v.error); else { setPedidos(v.pedidos ?? {}); setContactos(v.contactos ?? {}); }
     } catch {
       setErrorSeg("No se pudo guardar. Vuelve a intentarlo.");
     } finally {
@@ -82,7 +140,9 @@ export default function PedidosMarcasPage() {
       try {
         if (n.endsWith(".xls") || n.endsWith(".xlsx")) {
           if (n.endsWith(".xlsx")) throw new Error("El informe de ventas tiene que ser el .xls tal cual lo descarga la tienda (no un .xlsx guardado de nuevo).");
-          setVentas({ nombre: f.name, filas: leerXls(await f.arrayBuffer()) });
+          const filas = leerXls(await f.arrayBuffer());
+          setVentas({ nombre: f.name, filas });
+          if (hist !== null) guardarHistorico(filas, hist);
         } else if (n.endsWith(".csv") || n.endsWith(".txt")) {
           setStock({ nombre: f.name, filas: leerCsv(await textoDe(f)) });
         } else throw new Error(`«${f.name}»: sube el informe de ventas (.xls) y el control de stocks (.csv).`);
@@ -94,9 +154,12 @@ export default function PedidosMarcasPage() {
 
   const resultado = useMemo(() => {
     if (!ventas || !stock) return null;
-    try { return cruzar(ventas.filas, stock.filas, { stockMax, incluirDescatalogados: descatalogados, soloSinEnviar, sinEnviarDesde, seguidos }); }
+    try { return cruzar(ventas.filas, stock.filas, {
+      stockMax, incluirDescatalogados: descatalogados, soloSinEnviar, sinEnviarDesde, seguidos, diasCobertura: cobertura,
+      historico: usarHist && hist && hist.pedidos ? hist : undefined,
+    }); }
     catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
-  }, [ventas, stock, stockMax, descatalogados, soloSinEnviar, sinEnviarDesde, seguidos]);
+  }, [ventas, stock, stockMax, descatalogados, soloSinEnviar, sinEnviarDesde, seguidos, cobertura, usarHist, hist]);
 
   const marcas: MarcaPedido[] = useMemo(() => {
     if (!resultado || "error" in resultado) return [];
@@ -118,9 +181,9 @@ export default function PedidosMarcasPage() {
       <header>
         <h1>Pedidos a las marcas</h1>
         <p className="subtitle">
-          Sube el informe de ventas (COMPRAS_….xls) y el control de stocks (control_stocks-….csv) de la tienda.
-          Sale, marca por marca, lo vendido que se ha quedado sin stock, listo para copiar y mandar.
-          Los archivos se leen en tu navegador: no se suben a ningún sitio.
+          Cada día, sube el informe de ventas del día (COMPRAS_….xls) y el control de stocks (control_stocks-….csv) de la tienda.
+          Sale, marca por marca, lo que se ha quedado sin stock en los pedidos sin enviar, con lo que hay que pedir, listo para mandar.
+          De las ventas solo se guarda en la Suite cuánto se vende de cada producto y cada día (sin datos de clientes); el stock no se guarda.
         </p>
       </header>
 
@@ -140,24 +203,46 @@ export default function PedidosMarcasPage() {
         <li className={stock ? "ok" : ""}><b>Stock:</b> {stock ? stock.nombre : "falta el control_stocks-….csv"}</li>
       </ul>
 
+      <div className="pm-hist">
+        {hist === undefined && <span className="rf-suave">Leyendo el histórico de ventas…</span>}
+        {hist && hist.pedidos > 0 && (
+          <span className="rf-suave">
+            <b>Histórico de ventas guardado:</b> {miles(hist.pedidos)} pedidos del {diaTxt(hist.desde)} al {diaTxt(hist.hasta)}. «-ventas» cuenta los últimos {Math.round(DIAS_HISTORICO / 30.5)} meses.
+          </span>
+        )}
+        {hist && !hist.pedidos && <span className="rf-suave"><b>Aún no hay histórico de ventas.</b> La primera vez, sube un informe de los últimos 6 meses; después basta con el del día.</span>}
+        {histMsg && <span className="rf-suave">{histMsg}</span>}
+        {hist && hist.pedidos > 0 && (
+          <span className="pm-hist-opc">
+            <label className="rf-check"><input type="checkbox" checked={usarHist} onChange={e => setUsarHist(e.target.checked)} /> Usar el histórico</label>
+            <button className="regen-btn" onClick={borrarHistorico}>Borrar histórico</button>
+          </span>
+        )}
+      </div>
+
       {error && <p className="error">{error}</p>}
       {errorSeg && <p className="error">{errorSeg}</p>}
 
       {pedidos && Object.keys(pedidos).length > 0 && (
         <details className="pm-seguimiento">
           <summary>Pedidos a marcas sin recibir ({Object.keys(pedidos).length})
+            {(() => { const n = Object.values(pedidos).filter(x => diasDesde(x.fecha) > diasAviso).length; return n > 0 ? <span className="pm-badge pm-estado-mal">{n} con más de {diasAviso} días</span> : null; })()}
             {(["mal", "incorrecto"] as EstadoPedido[]).map(k => {
               const n = Object.values(pedidos).filter(x => x.estado === k).length;
               return n > 0 ? <span key={k} className={`pm-badge pm-estado-${k}`}>{n} {ESTADOS_PEDIDO[k].titulo.toLowerCase()}</span> : null;
             })}
           </summary>
-          <p className="rf-suave">Cuando llegue un pedido, ponlo como «Recibido» y se quita.</p>
+          <p className="rf-suave">
+            Cuando llegue un pedido, ponlo como «Recibido» y se quita. Se marcan en rojo los que llevan más de
+            <input type="number" min={1} max={60} className="pm-dias" value={diasAviso} onChange={e => setDiasAviso(Math.max(1, Number(e.target.value) || 7))} aria-label="Días para avisar" />
+            días sin llegar.
+          </p>
           <ul className="pm-pedidos">
             {Object.entries(pedidos).sort((a, b) => a[1].fecha.localeCompare(b[1].fecha)).map(([id, p]) => (
               <li key={id}>
                 <div className="pm-pedido-cab">
                   <b>{p.marca}</b>
-                  <span className="rf-suave">pedido el {diaHora(p.fecha)}</span>
+                  <span className={diasDesde(p.fecha) > diasAviso ? "pm-tarde" : "rf-suave"}>pedido el {diaHora(p.fecha)}{diasDesde(p.fecha) > diasAviso ? ` · lleva ${diasDesde(p.fecha)} días: reclámalo` : ""}</span>
                   <select className={`rc-select pm-estado pm-estado-${p.estado}`} value={p.estado} disabled={guardando}
                     onChange={e => enviar({ accion: "estado", id, estado: e.target.value })} aria-label={`Estado del pedido a ${p.marca}`}>
                     {(Object.keys(ESTADOS_PEDIDO) as EstadoPedido[]).map(k => <option key={k} value={k}>{ESTADOS_PEDIDO[k].titulo}</option>)}
@@ -184,7 +269,7 @@ export default function PedidosMarcasPage() {
           </div>
           <p className="rf-suave pm-periodo">
             {soloSinEnviar
-              ? <>Salen los productos de los pedidos que aún no se han enviado. El número de «-ventas» es lo vendido del <b>{r.desde || "—"}</b> al <b>{r.hasta || "—"}</b> ({miles(r.unidades)} uds. en {miles(r.pedidos)} pedidos): cuanto más largo el informe, más real.
+              ? <>Salen los productos de los pedidos que aún no se han enviado. El número de «-ventas» es lo vendido del <b>{r.desde || "—"}</b> al <b>{r.hasta || "—"}</b> ({miles(r.unidades)} uds.{r.usaHistorico ? ", del histórico guardado" : `, de este informe: cuanto más largo, más real`}).
                 {r.antiguosSinEnviar > 0 && <> Hay {miles(r.antiguosSinEnviar)} pedidos sin enviar de antes del {r.sinEnviarDesde.split("-").reverse().join("/")} que no entran (suelen ser compras atascadas): cambia la fecha si quieres incluirlos.</>}</>
               : <>Salen todos los productos vendidos del <b>{r.desde || "—"}</b> al <b>{r.hasta || "—"}</b> ({miles(r.unidades)} uds. en {miles(r.pedidos)} pedidos).</>}
             {r.anulados > 0 && <> No cuento {miles(r.anulados)} líneas canceladas o devueltas.</>}
@@ -210,9 +295,16 @@ export default function PedidosMarcasPage() {
               <input type="checkbox" checked={descatalogados} onChange={e => setDescatalogados(e.target.checked)} />
               Incluir descatalogados{r.descatalogados > 0 && !descatalogados ? ` (${r.descatalogados})` : ""}
             </label>
+            <select className="rc-select" value={cobertura} onChange={e => setCobertura(Number(e.target.value))} aria-label="Días de venta que cubre el pedido">
+              {[7, 14, 21, 30, 45].map(d => <option key={d} value={d}>Pedir para {d} días</option>)}
+            </select>
+            <label className="rf-check">
+              <input type="checkbox" checked={conCantidad} onChange={e => setConCantidad(e.target.checked)} />
+              Cantidad al copiar
+            </label>
             <input type="search" placeholder="Buscar marca…" value={buscar} onChange={e => setBuscar(e.target.value)} />
             <button className="vp-revisar-btn pm-todo" disabled={!marcas.length}
-              onClick={() => copiarTexto("*", marcas.map(m => textoMarca(m, estados)).filter(Boolean).join("\n\n"))}>
+              onClick={() => copiarTexto("*", marcas.map(m => textoMarca(m, estados, conCantidad)).filter(Boolean).join("\n\n"))}>
               {copiado === "*" ? "Copiado ✓" : "Copiar todas"}
             </button>
           </div>
@@ -226,7 +318,7 @@ export default function PedidosMarcasPage() {
                   <h2>{m.marca}</h2>
                   <span className="rf-suave">{m.total} producto{m.total !== 1 ? "s" : ""}</span>
                   {(() => {
-                    const texto = textoMarca(m, estados);
+                    const texto = textoMarca(m, estados, conCantidad);
                     const sinPedir = m.grupos.flatMap(g => g.filas).filter(f => !estados[f.id]);
                     return <>
                       {sinPedir.length > 0 && pedidos && (
@@ -238,9 +330,33 @@ export default function PedidosMarcasPage() {
                       <button className="copy-btn" disabled={!texto} onClick={() => copiarTexto(m.marca, texto)}>
                         {copiado === m.marca ? "Copiado ✓" : texto ? "Copiar" : "Todo pedido"}
                       </button>
+                      {texto && (contactos[m.marca]?.email || contactos[m.marca]?.whatsapp) ? (() => {
+                        const c = contactos[m.marca];
+                        const marcar = () => { if (sinPedir.length) enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(f => ({ id: f.id, producto: f.producto, propiedad: f.propiedad, ean: f.ean })) }); };
+                        const asunto = `Pedido La Tienda de Cosméticos ${new Date().toLocaleDateString("es-ES")}`;
+                        return <>
+                          {c.email && <a className="copy-btn pm-enviar" href={`mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`} onClick={marcar}>Email</a>}
+                          {c.whatsapp && <a className="copy-btn pm-enviar" href={`https://wa.me/${c.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`} target="_blank" rel="noreferrer" onClick={marcar}>WhatsApp</a>}
+                        </>;
+                      })() : null}
+                      {pedidos && <button className="regen-btn" onClick={() => setEditando(editando === m.marca ? "" : m.marca)} title="Email y WhatsApp de la marca">
+                        {contactos[m.marca] ? "✎" : "+ contacto"}
+                      </button>}
                     </>;
                   })()}
                 </div>
+                {editando === m.marca && (
+                  <form className="pm-contacto" onSubmit={e => {
+                    e.preventDefault();
+                    const d = new FormData(e.currentTarget);
+                    enviar({ accion: "contacto", marca: m.marca, email: d.get("email"), whatsapp: d.get("whatsapp") });
+                    setEditando("");
+                  }}>
+                    <input name="email" type="email" placeholder="Email de pedidos de la marca" defaultValue={contactos[m.marca]?.email ?? ""} />
+                    <input name="whatsapp" type="tel" placeholder="WhatsApp (con prefijo, p. ej. 34600111222)" defaultValue={contactos[m.marca]?.whatsapp ?? ""} />
+                    <button type="submit" className="vp-revisar-btn" disabled={guardando}>Guardar</button>
+                  </form>
+                )}
                 {m.grupos.map(g => (
                   <div key={g.stock} className="pm-grupo">
                     <h3 className={g.stock < 0 ? "neg" : ""}>stock {g.stock}</h3>
@@ -250,7 +366,7 @@ export default function PedidosMarcasPage() {
                           <span className="pm-prod">{f.producto}</span>
                           <span className="pm-dato">{f.propiedad}</span>
                           <span className="pm-dato pm-ean">{f.ean}</span>
-                          <span className="pm-ventas">−ventas <b>{f.ventas}</b></span>
+                          <span className="pm-ventas">−ventas <b>{f.ventas}</b> · pedir <b className="pm-pedir">{f.pedir}</b></span>
                           {f.sinPagar > 0 && <span className="pm-sinpagar">{AVISO_SIN_PAGAR} ({f.sinPagar} ud{f.sinPagar !== 1 ? "s" : ""}.)</span>}
                           {enPedido[f.id] && (
                             <span className={`pm-tag pm-estado-${enPedido[f.id].estado}`}>
@@ -298,7 +414,9 @@ export default function PedidosMarcasPage() {
             Si el pedido llega mal o no es el correcto, sus productos vuelven a salir al copiar con la nota. Al ponerlo como «Recibido» se quita; si con lo recibido el stock sigue sin cubrir los pedidos, el producto volverá a salir para pedir.
             {" "}Si un producto tiene pedidos sin enviar y sin pagar, sale con «{AVISO_SIN_PAGAR}»: su stock negativo puede deberse a una compra que no se ha completado.
             {r.sinControl > 0 && <> {r.sinControl} vendidos no tienen control de stock y no salen.</>}
-            {" "}Las ventas son unidades e incluyen los pedidos pendientes de pago o envío.
+            {" "}«Pedir» = lo que falta para cubrir el stock negativo más la venta media de {cobertura} días ({r.diasPeriodo} días de ventas), y como mínimo 1.
+            {" "}Al mandar el pedido por email o WhatsApp desde aquí, se marca como pedido solo.
+            {" "}Los pedidos sin pagar de más de {DIAS_SIN_PAGAR} días se dan por anulados: no cuentan como venta. Las ventas son unidades.
           </p>
         </>
       )}
