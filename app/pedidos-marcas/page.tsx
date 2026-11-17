@@ -1,11 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AVISO_SIN_PAGAR, cruzar, leerCsv, textoMarca, type MarcaPedido } from "./calculo";
+import { AVISO_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, textoMarca, type EstadoPedido, type FilaPedido, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
 
 type Archivo<T> = { nombre: string; filas: T } | null;
+type Seguimiento = { estado: EstadoPedido; fecha: string; marca: string; producto: string; propiedad: string; ean: string };
+type Cambio = { id: string; estado: EstadoPedido | "recibido" | null; marca: string; producto: string; propiedad: string; ean: string };
+
+const diaHora = (iso: string) => new Date(iso).toLocaleString("es-ES", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// Desplegable de estado de un producto en el seguimiento
+function SelectorEstado({ valor, onCambio, deshabilitado }: { valor?: EstadoPedido; onCambio: (e: EstadoPedido | "recibido" | null) => void; deshabilitado?: boolean }) {
+  return (
+    <select className={`rc-select pm-estado${valor ? ` pm-estado-${valor}` : ""}`} value={valor ?? ""} disabled={deshabilitado}
+      onChange={e => onCambio((e.target.value || null) as EstadoPedido | "recibido" | null)} aria-label="Estado del pedido a la marca">
+      <option value="">Sin pedir</option>
+      {(Object.keys(ESTADOS_PEDIDO) as EstadoPedido[]).map(k => <option key={k} value={k}>{ESTADOS_PEDIDO[k].titulo}</option>)}
+      {valor && <option value="recibido">Recibido (se quita)</option>}
+    </select>
+  );
+}
 
 const miles = (n: number) => n.toLocaleString("es-ES");
 
@@ -39,6 +55,35 @@ export default function PedidosMarcasPage() {
   const [buscar, setBuscar] = useState("");
   const [copiado, setCopiado] = useState("");
   const [encima, setEncima] = useState(false);
+  const [seguimiento, setSeguimiento] = useState<Record<string, Seguimiento> | null>(null);
+  const [errorSeg, setErrorSeg] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/pedidos-marcas", { cache: "no-store" }).then(r => r.json()).then(v => {
+      if (v.error) setErrorSeg(v.error); else setSeguimiento(v.seguimiento ?? {});
+    }).catch(() => setErrorSeg("No se pudo cargar el seguimiento de pedidos."));
+  }, []);
+
+  async function guardar(cambios: Cambio[]) {
+    if (!cambios.length) return;
+    setGuardando(true);
+    setErrorSeg("");
+    try {
+      const r = await fetch("/api/pedidos-marcas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cambios }) });
+      const v = await r.json();
+      if (v.error) setErrorSeg(v.error); else setSeguimiento(v.seguimiento ?? {});
+    } catch {
+      setErrorSeg("No se pudo guardar el estado. Vuelve a intentarlo.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+  const cambio = (f: FilaPedido, marca: string, estado: Cambio["estado"]): Cambio =>
+    ({ id: f.id, estado, marca, producto: f.producto, propiedad: f.propiedad, ean: f.ean });
+
+  const estados = useMemo(() => Object.fromEntries(Object.entries(seguimiento ?? {}).map(([k, v]) => [k, v.estado])) as Record<string, EstadoPedido>, [seguimiento]);
+  const seguidos = useMemo(() => new Set(Object.keys(seguimiento ?? {})), [seguimiento]);
 
   async function cargar(files: FileList | File[] | null) {
     if (!files) return;
@@ -60,9 +105,9 @@ export default function PedidosMarcasPage() {
 
   const resultado = useMemo(() => {
     if (!ventas || !stock) return null;
-    try { return cruzar(ventas.filas, stock.filas, { stockMax, incluirDescatalogados: descatalogados, soloSinEnviar, sinEnviarDesde }); }
+    try { return cruzar(ventas.filas, stock.filas, { stockMax, incluirDescatalogados: descatalogados, soloSinEnviar, sinEnviarDesde, seguidos }); }
     catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
-  }, [ventas, stock, stockMax, descatalogados, soloSinEnviar, sinEnviarDesde]);
+  }, [ventas, stock, stockMax, descatalogados, soloSinEnviar, sinEnviarDesde, seguidos]);
 
   const marcas: MarcaPedido[] = useMemo(() => {
     if (!resultado || "error" in resultado) return [];
@@ -107,6 +152,39 @@ export default function PedidosMarcasPage() {
       </ul>
 
       {error && <p className="error">{error}</p>}
+      {errorSeg && <p className="error">{errorSeg}</p>}
+
+      {seguimiento && Object.keys(seguimiento).length > 0 && (
+        <details className="pm-seguimiento">
+          <summary>Pedidos a marcas en seguimiento ({Object.keys(seguimiento).length})
+            {(["mal", "incorrecto"] as EstadoPedido[]).map(k => {
+              const n = Object.values(seguimiento).filter(x => x.estado === k).length;
+              return n > 0 ? <span key={k} className={`pm-badge pm-estado-${k}`}>{n} {ESTADOS_PEDIDO[k].titulo.toLowerCase()}</span> : null;
+            })}
+          </summary>
+          <p className="rf-suave">Lo pedido a cada marca hasta que llega. Al ponerlo como «Recibido» se quita de aquí.</p>
+          {[...new Set(Object.values(seguimiento).map(x => x.marca))].sort((a, b) => a.localeCompare(b, "es")).map(marca => (
+            <div key={marca} className="pm-grupo">
+              <h3>{marca}</h3>
+              <ul>
+                {Object.entries(seguimiento).filter(([, x]) => x.marca === marca)
+                  .sort((a, b) => a[1].producto.localeCompare(b[1].producto, "es"))
+                  .map(([id, x]) => (
+                    <li key={id} className={`pm-con-estado pm-li-${x.estado}`}>
+                      <span className="pm-prod">{x.producto}</span>
+                      <span className="pm-dato">{x.propiedad}</span>
+                      <span className="pm-dato pm-ean">{x.ean}</span>
+                      <span className="pm-seg">
+                        <SelectorEstado valor={x.estado} deshabilitado={guardando} onCambio={e => guardar([{ id, estado: e, marca: x.marca, producto: x.producto, propiedad: x.propiedad, ean: x.ean }])} />
+                        <span className="rf-suave">desde el {diaHora(x.fecha)}</span>
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
+        </details>
+      )}
       {resultado && "error" in resultado && <p className="error">{resultado.error}</p>}
 
       {r && (
@@ -146,7 +224,7 @@ export default function PedidosMarcasPage() {
             </label>
             <input type="search" placeholder="Buscar marca…" value={buscar} onChange={e => setBuscar(e.target.value)} />
             <button className="vp-revisar-btn pm-todo" disabled={!marcas.length}
-              onClick={() => copiarTexto("*", marcas.map(textoMarca).join("\n\n"))}>
+              onClick={() => copiarTexto("*", marcas.map(m => textoMarca(m, estados)).filter(Boolean).join("\n\n"))}>
               {copiado === "*" ? "Copiado ✓" : "Copiar todas"}
             </button>
           </div>
@@ -159,19 +237,37 @@ export default function PedidosMarcasPage() {
                 <div className="pm-cab">
                   <h2>{m.marca}</h2>
                   <span className="rf-suave">{m.total} producto{m.total !== 1 ? "s" : ""}</span>
-                  <button className="copy-btn" onClick={() => copiarTexto(m.marca, textoMarca(m))}>{copiado === m.marca ? "Copiado ✓" : "Copiar"}</button>
+                  {(() => {
+                    const texto = textoMarca(m, estados);
+                    const sinMarcar = m.grupos.flatMap(g => g.filas).filter(f => !estados[f.id]);
+                    return <>
+                      {sinMarcar.length > 0 && seguimiento && (
+                        <button className="regen-btn" disabled={guardando} title="Pone «Pedido, esperando» a los que aún no tienen estado"
+                          onClick={() => guardar(sinMarcar.map(f => cambio(f, m.marca, "esperando")))}>Marcar como pedido</button>
+                      )}
+                      <button className="copy-btn" disabled={!texto} onClick={() => copiarTexto(m.marca, texto)}>
+                        {copiado === m.marca ? "Copiado ✓" : texto ? "Copiar" : "Todo pedido"}
+                      </button>
+                    </>;
+                  })()}
                 </div>
                 {m.grupos.map(g => (
                   <div key={g.stock} className="pm-grupo">
                     <h3 className={g.stock < 0 ? "neg" : ""}>stock {g.stock}</h3>
                     <ul>
                       {g.filas.map(f => (
-                        <li key={`${f.ean}|${f.producto}|${f.propiedad}`}>
+                        <li key={`${f.ean}|${f.producto}|${f.propiedad}`} className={estados[f.id] ? `pm-con-estado pm-li-${estados[f.id]}` : ""}>
                           <span className="pm-prod">{f.producto}</span>
                           <span className="pm-dato">{f.propiedad}</span>
                           <span className="pm-dato pm-ean">{f.ean}</span>
                           <span className="pm-ventas">−ventas <b>{f.ventas}</b></span>
                           {f.sinPagar > 0 && <span className="pm-sinpagar">{AVISO_SIN_PAGAR} ({f.sinPagar} ud{f.sinPagar !== 1 ? "s" : ""}.)</span>}
+                          {seguimiento && (
+                            <span className="pm-seg">
+                              <SelectorEstado valor={estados[f.id]} deshabilitado={guardando} onCambio={e => guardar([cambio(f, m.marca, e)])} />
+                              {seguimiento[f.id] && <span className="rf-suave">desde el {diaHora(seguimiento[f.id].fecha)}</span>}
+                            </span>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -197,6 +293,8 @@ export default function PedidosMarcasPage() {
             Entran los productos {soloSinEnviar ? "de los pedidos sin enviar" : "vendidos en el periodo del informe"} que tienen ahora un stock igual o menor que el elegido (STOCK ACTUAL del control de stocks).
             Se cruzan por EAN; los que no tienen EAN (packs, kits), por nombre y formato. Los de stock 0 que no se han vendido no salen.
             {r.enPacks > 0 && <> Los packs Dúo y Trío de un mismo producto cuentan como 2 y 3 unidades de ese producto ({miles(r.enPacks)} uds. en total).</>}
+            {" "}Lo marcado como «Pedido, esperando» no sale al copiar, para no pedirlo dos veces, y sigue en la lista mientras tenga pedidos sin enviar aunque sean anteriores a la fecha;
+            lo que llegó mal o no era el correcto sale con su nota. Al marcarlo como «Recibido» se quita del seguimiento: si con lo recibido el stock sigue sin cubrir los pedidos, volverá a salir para pedir.
             {" "}Si un producto tiene pedidos sin enviar y sin pagar, sale con «{AVISO_SIN_PAGAR}»: su stock negativo puede deberse a una compra que no se ha completado.
             {r.sinControl > 0 && <> {r.sinControl} vendidos no tienen control de stock y no salen.</>}
             {" "}Las ventas son unidades e incluyen los pedidos pendientes de pago o envío.
