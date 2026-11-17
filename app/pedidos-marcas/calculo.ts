@@ -1,6 +1,8 @@
 // Cruce de ventas (informe COMPRAS_….xls) y stock (control_stocks-….csv) para el pedido a cada marca.
 
-export type FilaPedido = { id: string; producto: string; propiedad: string; ean: string; stock: number; ventas: number; sinPagar: number; pendientes: number; pedir: number };
+export type FilaPedido = { id: string; producto: string; propiedad: string; ean: string; stock: number; ventas: number; sinPagar: number; pendientes: number; pedir: number; compras: Compra[] };
+/** Compra de un cliente aún sin enviar: «17/11/2026 07:21» y si está pagada */
+export type Compra = { fecha: string; pagada: boolean };
 export type MarcaPedido = { marca: string; grupos: { stock: number; filas: FilaPedido[] }[]; total: number };
 export type Resultado = {
   marcas: MarcaPedido[];
@@ -147,14 +149,14 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     marca: ["MARCA"], producto: ["PRODUCTO"], propiedad: ["PROPIEDAD"], ean: ["EAN"], stock: ["STOCK ACTUAL"], descatalogado: ["DESCATALOGADO"],
   }, "stock");
 
-  type Prod = { marca: string; producto: string; propiedad: string; ean: string; stock: number | null; descatalogado: boolean; ventas: number; sinPagar: number; pendientes: number; sinEnviarTotal: number };
+  type Prod = { marca: string; producto: string; propiedad: string; ean: string; stock: number | null; descatalogado: boolean; ventas: number; sinPagar: number; pendientes: number; sinEnviarTotal: number; compras: Map<string, Compra> };
   const porEan = new Map<string, Prod[]>();
   const porNombre = new Map<string, Prod>();
   const porSoloNombre = new Map<string, Prod[]>();
   for (const f of stockFilas.slice(is + 1)) {
     const p: Prod = {
       marca: limpiar(f[cs.marca]), producto: limpiar(f[cs.producto]), propiedad: limpiar(f[cs.propiedad]), ean: limpiarEan(f[cs.ean]),
-      stock: entero(f[cs.stock]), descatalogado: /^s[ií]/i.test(limpiar(f[cs.descatalogado])), ventas: 0, sinPagar: 0, pendientes: 0, sinEnviarTotal: 0,
+      stock: entero(f[cs.stock]), descatalogado: /^s[ií]/i.test(limpiar(f[cs.descatalogado])), ventas: 0, sinPagar: 0, pendientes: 0, sinEnviarTotal: 0, compras: new Map(),
     };
     if (!p.producto) continue;
     if (eanValido(p.ean)) porEan.set(p.ean, [...(porEan.get(p.ean) ?? []), p]);
@@ -253,7 +255,7 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
       pedidosPend.add(limpiar(f[cv.id]));
       if (fe && (!pendDesde || ordenFecha(fe) < ordenFecha(pendDesde))) pendDesde = fe;
     }
-    if (p) { if (!hist) p.ventas += cant * factor; if (sinPagar) p.sinPagar += cant * factor; if (sinEnviar) p.pendientes += cant * factor; if (noEnviado) p.sinEnviarTotal += cant * factor; }
+    if (p) { if (!hist) p.ventas += cant * factor; if (sinPagar) p.sinPagar += cant * factor; if (sinEnviar) { p.pendientes += cant * factor; p.compras.set(limpiar(f[cv.id]), { fecha: fe, pagada: !sinPagar }); } if (noEnviado) p.sinEnviarTotal += cant * factor; }
     else {
       const k = `${ean}|${clave(producto, propiedad)}`;
       const s = sinCruzar.get(k) ?? { marca, producto, propiedad, ean, ventas: 0, pendientes: 0 };
@@ -302,13 +304,15 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     if (p.descatalogado && !op.incluirDescatalogados) { descatalogados++; continue; }
     const marca = p.marca.toLowerCase() || "sin marca";
     const g = porMarca.get(marca) ?? new Map<number, FilaPedido[]>();
-    g.set(p.stock, [...(g.get(p.stock) ?? []), { id: idProducto(p), producto: p.producto, propiedad: p.propiedad, ean: p.ean, stock: p.stock, ventas: p.ventas, sinPagar: p.sinPagar, pendientes: p.pendientes, pedir: Math.max(1, Math.ceil(Math.max(0, -p.stock) + p.ventas / diasPeriodo * cobertura - 0.25)) }]);
+    g.set(p.stock, [...(g.get(p.stock) ?? []), { id: idProducto(p), producto: p.producto, propiedad: p.propiedad, ean: p.ean, stock: p.stock, ventas: p.ventas, sinPagar: p.sinPagar, pendientes: p.pendientes, compras: [...p.compras.values()].sort((a, b) => ordenFecha(a.fecha) - ordenFecha(b.fecha)), pedir: Math.max(1, Math.ceil(Math.max(0, -p.stock) + p.ventas / diasPeriodo * cobertura - 0.25)) }]);
     porMarca.set(marca, g);
   }
 
+  // Primero los que tienen alguna compra pagada; al final los que solo tienen compras sin pagar
+  const soloSinPagar = (f: FilaPedido) => Number(f.sinPagar > 0 && f.sinPagar >= f.pendientes);
   const marcas: MarcaPedido[] = [...porMarca].map(([marca, g]) => {
     const grupos = [...g].sort((a, b) => a[0] - b[0]).map(([stock, filas]) => ({
-      stock, filas: filas.sort((a, b) => b.ventas - a.ventas || a.producto.localeCompare(b.producto, "es") || a.propiedad.localeCompare(b.propiedad, "es", { numeric: true })),
+      stock, filas: filas.sort((a, b) => soloSinPagar(a) - soloSinPagar(b) || b.ventas - a.ventas || a.producto.localeCompare(b.producto, "es") || a.propiedad.localeCompare(b.propiedad, "es", { numeric: true })),
     }));
     return { marca, grupos, total: grupos.reduce((n, x) => n + x.filas.length, 0) };
   }).sort((a, b) => a.marca.localeCompare(b.marca, "es"));
