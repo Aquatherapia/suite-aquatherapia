@@ -178,12 +178,12 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
   // Si la marca tiene web oficial, todo se compara con su precio (con descuento si lo tiene): sale como primer bloque
   // y no cuenta como tienda para «más barato» ni para «¿podemos igualar?»
   const oficial = COMPETIDORES.find(c => c.marca && filasIn.some(f => f.precios[c.id]));
-  const ofiDe = new Map<FilaComp, { precio: number; url: string } | undefined>();
+  const ofiDe = new Map<FilaComp, { precio: number; pvp: number; url: string } | undefined>();
   const filas = ordenar(filasIn.map(f => {
     if (!oficial) return f;
     const { [oficial.id]: o, ...resto } = f.precios;
     const g = { ...f, precios: resto };
-    ofiDe.set(g, o ? { precio: o.precio, url: o.url } : undefined);
+    ofiDe.set(g, o ? { precio: o.precio, pvp: o.pvp ?? o.precio, url: o.url } : undefined);
     return g;
   }));
   const calc = filas.map(f => calcularFila(f, descuento));
@@ -209,19 +209,28 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
     if (oficial && of) { const d = difTexto(precio, of.precio); return d === "=" ? "=" + marcaNombre : `${eur(precio)}${marcaNombre}\n${d}`; }
     return eur(precio) + marcaNombre + (!oficial && dto > 0.0005 ? `\n-${pctTexto(dto)}` : "");
   };
+  // Con web oficial, el PVP (nuestro y de cada tienda) también se compara con el PVP de la marca: «=» o la diferencia
+  const pvpMarca = (f: FilaComp, pvp: number) => { const of = ofiDe.get(f); if (!of) return null; const d = difTexto(pvp, of.pvp); return d === "=" ? "=" : `${eur(pvp)}\n${d}`; };
+  const pvpDistinto = (f: FilaComp, pvp: number) => { const of = ofiDe.get(f); return !!of && Math.abs(pvp - of.pvp) > 0.005; };
+  const avisosPdf = (f: FilaComp, k: CalcFila) => {
+    if (!oficial) return avisos(f, k);
+    if (!ofiDe.get(f)) return [];
+    const distintos = [...(pvpDistinto(f, f.pvp) ? ["nosotros"] : []), ...cols.filter(c => k.comp[c.id] && pvpDistinto(f, k.comp[c.id].suPvp)).map(c => c.corto)];
+    return distintos.length ? [`PVP distinto al de ${marca}: ${distintos.join(", ")}`] : [];
+  };
   const cuerpo = filas.map((f, i) => {
     const k = calc[i], of = ofiDe.get(f);
     return [
       f.ean ?? "",
-      [f.nombre, ...avisos(f, k).map(a => a.toUpperCase())].join("\n"),
+      [f.nombre, ...avisosPdf(f, k).map(a => a.toUpperCase())].join("\n"),
       ...(oficial ? [of ? eur(of.precio) : "-"] : []),
-      eur(f.pvp) + (k.revisarPrecio.length ? "\n(revisar precio)" : ""),
+      oficial ? pvpMarca(f, f.pvp) ?? eur(f.pvp) : eur(f.pvp) + (k.revisarPrecio.length ? "\n(revisar precio)" : ""),
       k.limite != null ? eur(k.limite) : "-",
       conMarca(f, f.precio, k.miDto),
       ...cols.flatMap(c => {
         const p = f.precios[c.id], kc = k.comp[c.id];
         if (!p || !kc) return ["-", "-"];
-        return [eur(kc.suPvp) + (kc.pvpSinActualizar ? "\nsin actualizar" : ""), conMarca(f, p.precio, kc.dto, p.por !== "ean" && p.por !== "manual" ? " ~" : "")];
+        return [oficial ? pvpMarca(f, kc.suPvp) ?? eur(kc.suPvp) : eur(kc.suPvp) + (kc.pvpSinActualizar ? "\nsin actualizar" : ""), conMarca(f, p.precio, kc.dto, p.por !== "ean" && p.por !== "manual" ? " ~" : "")];
       }),
       k.masBarato,
       oficial ? (of && k.mb ? difTexto(k.mb.precio, of.precio) : "-") : k.diferencia == null ? "-" : `${k.diferencia > 0.005 ? "+" : ""}${eur(k.diferencia)}`,
@@ -263,13 +272,13 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
       const s = d.cell.styles;
       s.fillColor = i % 2 ? rgb(CEBRA) : [255, 255, 255];
       s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
-      if (c === 1 && avisos(f, k).length) s.textColor = rgb(TEXTO);
-      if (c === 2 + o && k.revisarPrecio.length) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
+      if (c === 1 && avisosPdf(f, k).length) s.textColor = rgb(TEXTO);
+      if (c === 2 + o && (oficial ? pvpDistinto(f, f.pvp) : k.revisarPrecio.length)) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
       if (c === 4 + o && k.bajoMinimoMio) { s.fillColor = rgb(PASADO_FONDO); s.textColor = rgb(PASADO); }
       if (c >= 5 + o && c < fin) {
         const comp = cols[Math.floor((c - 5 - o) / 2)], kc = k.comp[comp.id];
         if (!kc) { s.textColor = [196, 201, 208]; return; }
-        if ((c - 5 - o) % 2 === 0 && (kc.pvpSinActualizar || kc.pvpMasAlto)) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
+        if ((c - 5 - o) % 2 === 0 && (oficial ? pvpDistinto(f, kc.suPvp) : kc.pvpSinActualizar || kc.pvpMasAlto)) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
         if ((c - 5 - o) % 2 === 1 && kc.bajoMinimo) { s.fillColor = rgb(BAJO_FONDO); s.textColor = rgb(BAJO); }
       }
       if (c === fin) s.textColor = !k.mb || k.masBarato === "Igual" ? rgb(SUAVE) : k.diferencia != null && k.diferencia < -0.005 ? k.empatados.length > 1 ? rgb(TEXTO) : rgb(COMPETIDORES.find(x => x.id === k.mb!.id)!.color) : rgb(AZUL);
