@@ -9,7 +9,7 @@ import { Segmentos } from "../_google/ui";
 type Archivo<T> = { nombre: string; filas: T } | null;
 type Contacto = { email: string; whatsapp: string };
 type Hist = Historico & { ids: string[] };
-type Pedido = { marca: string; fecha: string; estado: EstadoPedido; productos: { id: string; producto: string; propiedad: string; ean: string; compras?: string[] }[]; hasta?: number };
+type Pedido = { marca: string; fecha: string; estado: EstadoPedido; productos: { id: string; producto: string; propiedad: string; ean: string; compras?: string[]; stock?: number; ventas?: number; pedir?: number }[]; hasta?: number };
 
 const miles = (n: number) => n.toLocaleString("es-ES");
 const diaTxt = (d: string) => d ? `${d.slice(6, 8)}/${d.slice(4, 6)}/${d.slice(0, 4)}` : "—";
@@ -205,7 +205,7 @@ export default function PedidosMarcasPage() {
   }) })) })),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [marcas, enPedido]);
-  const aPedido = (f: FilaPedido) => ({ id: f.id, producto: f.producto, propiedad: f.propiedad, ean: f.ean, compras: f.compras.map(c => c.id) });
+  const aPedido = (f: FilaPedido) => ({ id: f.id, producto: f.producto, propiedad: f.propiedad, ean: f.ean, compras: f.compras.map(c => c.id), stock: f.stock, ventas: f.ventas, pedir: f.pedir });
 
   async function copiarTexto(id: string, texto: string) {
     if (await copiar(texto)) { setCopiado(id); setTimeout(() => setCopiado(c => (c === id ? "" : c)), 2000); }
@@ -269,7 +269,18 @@ export default function PedidosMarcasPage() {
                 </div>
                 <details>
                   <summary className="rf-suave">{p.productos.length} producto{p.productos.length !== 1 ? "s" : ""}</summary>
-                  <ul>{p.productos.map(x => <li key={x.id} className="rf-suave">{x.producto} · {x.propiedad} · {x.ean}</li>)}</ul>
+                  <ul className="pm-ped-prods">{p.productos.map(x => (
+                    <li key={x.id}>
+                      <span className="rf-suave">{x.producto} · {x.propiedad} · {x.ean}</span>
+                      {(x.stock !== undefined || x.ventas !== undefined || x.pedir !== undefined) && (
+                        <span className="pm-ped-datos">
+                          {x.stock !== undefined && <span className={x.stock < 0 ? "neg" : ""}>stock {x.stock}</span>}
+                          {x.ventas !== undefined && <span>−ventas <b>{x.ventas}</b></span>}
+                          {x.pedir !== undefined && <span>pedido <b>{x.pedir}</b></span>}
+                        </span>
+                      )}
+                    </li>
+                  ))}</ul>
                 </details>
               </li>
             ))}
