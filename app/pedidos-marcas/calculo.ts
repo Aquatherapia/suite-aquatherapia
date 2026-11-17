@@ -87,6 +87,15 @@ const ordenFecha = (s: string) => {
   return m ? Number(`${m[3]}${m[2].padStart(2, "0")}${m[1].padStart(2, "0")}${(m[4] ?? "0").padStart(2, "0")}${m[5] ?? "00"}`) : 0;
 };
 
+/** Unidades de un pack según su formato: «Pack Dúo» 2, «Pack Trío» 3, «2x500 ml» 2, «3 unidades» 3; si no, 1 */
+export function unidadesPack(propiedad: string): number {
+  const t = sinTildes(limpiar(propiedad));
+  if (/\bduo\b/.test(t)) return 2;
+  if (/\btrio\b/.test(t)) return 3;
+  const x = t.match(/^(\d)\s*x\s*\d/) ?? t.match(/^(\d)\s*unidades\b/);
+  return x ? Number(x[1]) : 1;
+}
+
 // Número AAAAMMDDhhmm → Date (UTC, solo para restar días)
 const aFecha = (n: number) => { const t = String(n).padEnd(12, "0"); return Date.UTC(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8), +t.slice(8, 10), +t.slice(10, 12)); };
 const diaMenos = (dia: string, dias: number) => new Date(aFecha(Number(dia + "0000")) - dias * 864e5).toISOString().slice(0, 10).replace(/-/g, "");
@@ -162,12 +171,16 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     if (candidatos) return { p: candidatos.length === 1 ? candidatos[0] : candidatos.find(c => c.propiedad.toLowerCase() === propiedad.toLowerCase()) ?? candidatos[0], factor: 1 };
     const exacto = porNombre.get(clave(producto, propiedad));
     if (exacto) return { p: exacto, factor: 1 };
+    // Regla de la tienda (José Carlos): si el EAN es el de un producto con «-1» o «-2», es un pack de ese producto
+    // (Dúo, Trío) y gasta su stock; si el pack tiene un EAN distinto (p. ej. el Dúo Synchro de Gernétic), el pack existe
+    // como producto propio y ya se ha encontrado arriba. Unidades: las que diga el formato (Dúo 2, Trío 3, 2x…) o, si no
+    // lo dice, «-1» = 2 y «-2» = 3. Sin EAN, solo si el formato dice que es un pack del mismo producto.
     const m = ean.match(/^(.+)-(\d)$/);
-    const pack = sinTildes(propiedad).match(/\b(duo|trio)\b/);
     const base = m ? porEan.get(m[1]) : undefined;
+    const delFormato = unidadesPack(propiedad);
+    if (base?.length === 1) return { p: base[0], factor: delFormato > 1 ? delFormato : Number(m![2]) + 1 };
     const mismoNombre = porSoloNombre.get(clave(producto, ""));
-    const cand = base?.length === 1 ? base[0] : !m && pack && mismoNombre?.length === 1 ? mismoNombre[0] : undefined;
-    if (cand && (m || pack)) return { p: cand, factor: pack ? (pack[1] === "duo" ? 2 : 3) : Number(m![2]) + 1 };
+    if (!eanValido(ean) && delFormato > 1 && mismoNombre?.length === 1) return { p: mismoNombre[0], factor: delFormato };
     return { factor: 1 };
   }
   const hist = op.historico && Object.keys(op.historico.productos).length ? op.historico : undefined;
