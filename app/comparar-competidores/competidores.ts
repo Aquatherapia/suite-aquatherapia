@@ -4,7 +4,7 @@
 //   presta: PrestaShop (listado de la marca en JSON)
 //   rosi: Estética Rosi (web propia: listado HTML de la marca)
 //   shopify: cualquier otra tienda Shopify añadida desde la app (se lee igual que Cosméticos24h)
-export type TipoCompetidor = "c24" | "woo" | "presta" | "rosi" | "shopify";
+export type TipoCompetidor = "c24" | "woo" | "presta" | "rosi" | "shopify" | "fichas";
 export type Competidor = {
   id: string; nombre: string; corto: string; web: string; tipo: TipoCompetidor; color: string; fondo: string; extra?: boolean; auto?: boolean /* añadida sola desde Google */;
   marca?: string; // web oficial de una marca: solo vende esa marca (su nombre en minúsculas y sin espacios, p. ej. «eberlin»)

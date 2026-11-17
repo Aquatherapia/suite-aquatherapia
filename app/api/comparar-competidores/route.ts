@@ -7,7 +7,7 @@ import { motivoSinPareja } from "./motivo";
 import { BASE, COLORES_EXTRA, COMPETIDORES, letras, ponerCompetidores, vendeLaMarca, type AjustesCompetidores, type Competidor, claveFila, explicarError, type EstadoComp, type FilaComp, type Manual, type PrecioComp, type ResultadoComp } from "../../comparar-competidores/competidores";
 import { competidoresDeGoogle, cuentasMerchant, type Propuesta } from "./merchant";
 import { ErrorGoogle } from "../../_google/cliente";
-import { buscarListado, detectarPlataforma, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, misProductosPorEan, normalizarEan, webDeTienda, fichaPorEan, enLotes, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
+import { buscarListado, detectarPlataforma, sePuedenLeerFichas, nombreDeTienda, leerCompetidor, leerMarcasWeb, leerMisProductos, misProductosPorEan, normalizarEan, webDeTienda, fichaPorEan, enLotes, type MarcaWeb, type MiProducto, type SuProducto } from "./leer";
 
 // Leer varias webs a la vez cabe de sobra, pero alguna puede ir lenta: Vercel Hobby permite hasta 300 s
 export const maxDuration = 300;
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
   if (body.action === "probar-webs") {
     const webs: string[] = (Array.isArray(body.webs) ? body.webs as unknown[] : []).map(String).slice(0, 200);
     const out: Record<string, string | null> = {};
-    await enLotes(webs, 12, async w => { try { out[w] = await detectarPlataforma(w); } catch { out[w] = null; } });
+    await enLotes(webs, 12, async w => { try { out[w] = await detectarPlataforma(w) ?? (body.fichas && await sePuedenLeerFichas(w) ? "fichas" : null); } catch { out[w] = null; } });
     return NextResponse.json({ webs: out });
   }
 
@@ -228,8 +228,10 @@ export async function POST(req: NextRequest) {
       try { web = new URL(/^https?:\/\//.test(texto) ? texto : `https://${texto}`).origin; }
       catch { return NextResponse.json({ error: "Esa dirección no es válida. Pon algo como https://marca.com" }); }
       if (BASE.some(c => c.marca && vendeLaMarca(c, nombre))) return NextResponse.json({ error: `${nombre} ya tiene su web oficial puesta` });
-      const tipo = await detectarPlataforma(web);
-      if (tipo !== "shopify" && tipo !== "woo") return NextResponse.json({ error: `No puedo leer los precios de ${dominioDe(web)}: su tienda no es Shopify ni WooCommerce (o no vende online).` });
+      // Shopify y WooCommerce dan el catálogo entero; las demás (PrestaShop, Magento…) se leen ficha a ficha
+      const plataforma = await detectarPlataforma(web);
+      const tipo = plataforma === "shopify" || plataforma === "woo" ? plataforma : (await sePuedenLeerFichas(web)) ? "fichas" as const : null;
+      if (!tipo) return NextResponse.json({ error: `No puedo leer los precios de ${dominioDe(web)}: no encuentro fichas de producto con precio en su web (o no vende online).` });
       ajustes.extra!.push({ id, nombre: `${nombre} (web oficial)`, corto: `${nombre} oficial`, web, tipo, color: "#15803d", fondo: "#e6f4ea", extra: true, marca: letras(nombre) });
     }
     config.competidores = ajustes;
