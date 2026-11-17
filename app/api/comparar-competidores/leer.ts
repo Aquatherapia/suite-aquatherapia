@@ -1,6 +1,6 @@
 // Lectura de precios de nuestra web (feed) y de cada competidor, y búsqueda del listado de una marca en sus webs.
 import { parse } from "node-html-parser";
-import { normalizar, TAMANO } from "../comparar-precios/emparejar";
+import { normalizar, TAMANO, tamano } from "../comparar-precios/emparejar";
 import type { Competidor } from "../../comparar-competidores/competidores";
 
 const UA = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" };
@@ -136,6 +136,7 @@ async function categoriasWoo(c: Competidor): Promise<CategoriaWoo[]> {
 type ProductoWoo = {
   id: number; name: string; permalink: string; sku?: string; type: string; is_purchasable?: boolean; is_in_stock?: boolean;
   prices: { price: string; regular_price: string; currency_minor_unit: number };
+  short_description?: string; description?: string;
   variations?: { id: number; attributes: { name: string; value: string }[] }[];
 };
 
@@ -183,7 +184,10 @@ async function leerWooProductos(c: Competidor, todos: ProductoWoo[], limite: num
   const productos = todos.filter(sePuede);
   return enLotes(productos, 6, async p => {
     const d = p.prices.currency_minor_unit ?? 2;
-    const base: Variante = { titulo: "", precio: precioWoo(p.prices.price, d), pvp: precioWoo(p.prices.regular_price, d) || undefined, ean: eanDeSku(p.sku) };
+    // Webs oficiales: el nombre no lleva el formato («SÉRUM AGELESS ELIXIR»), pero la descripción sí («30 ml»).
+    // Se usa si la descripción dice un único formato; si dice varios (estuches, kits) no se pone ninguno.
+    const formato = c.marca && !TAMANO.test(p.name) ? formatoDeDescripcion(`${p.short_description ?? ""} ${p.description ?? ""}`) : "";
+    const base: Variante = { titulo: formato, precio: precioWoo(p.prices.price, d), pvp: precioWoo(p.prices.regular_price, d) || undefined, ean: eanDeSku(p.sku) };
     let variantes: Variante[] = [base];
     // Producto con formatos: el precio de cada uno se pide aparte (si queda tiempo)
     if (p.type === "variable" && p.variations?.length && Date.now() < limite) {
@@ -202,6 +206,17 @@ async function leerWooProductos(c: Competidor, todos: ProductoWoo[], limite: num
     }
     return { titulo: decodificar(p.name), url: p.permalink, esPack: esPack(p.name) || p.type === "bundle", variantes: variantes.filter(v => v.precio > 0) };
   });
+}
+
+// El único formato que cita un texto («30 ml»), o "" si no cita ninguno o cita varios
+function formatoDeDescripcion(html: string): string {
+  const texto = decodificar(html.replace(/<[^>]+>/g, " "));
+  const vistos = new Map<string, string>();
+  for (const m of texto.matchAll(new RegExp(TAMANO.source, "gi"))) {
+    if (/^(uds?|unidades|l)$/i.test(m[2])) continue; // «2 unidades», «1 l»: no son el formato del envase
+    vistos.set(tamano(m[0]), m[0].replace(/\s+/g, " ").trim());
+  }
+  return vistos.size === 1 ? [...vistos.values()][0] : "";
 }
 
 type ProductoPresta = { name: string; url: string; price_amount: number; regular_price_amount?: number; ean13?: string; reference?: string };
