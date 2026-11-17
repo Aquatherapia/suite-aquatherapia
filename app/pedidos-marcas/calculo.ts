@@ -4,7 +4,8 @@ export type FilaPedido = { id: string; producto: string; propiedad: string; ean:
 export type MarcaPedido = { marca: string; grupos: { stock: number; filas: FilaPedido[] }[]; total: number };
 export type Resultado = {
   marcas: MarcaPedido[];
-  desde: string; hasta: string; pendDesde: string; pedidosPendientes: number; sinEnviarDesde: string; antiguosSinEnviar: number; pedidos: number; lineasVenta: number; unidades: number;
+  desde: string; hasta: string; pendDesde: string; pedidosPendientes: number; sinEnviarDesde: string; antiguosSinEnviar: number;
+  caducados: { id: string; codigo: string; fecha: string; formaPago: string; total: string }[]; pedidos: number; lineasVenta: number; unidades: number;
   sinCruzar: { marca: string; producto: string; propiedad: string; ean: string; ventas: number; pendientes: number }[];
   sinControl: number; descatalogados: number; anulados: number; enPacks: number;
 };
@@ -19,6 +20,9 @@ const sinTildes = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLo
 
 const ANULADO = /cancel|anulad|devuel|devoluc|rechaz|fallid|error/i;
 const NO_PRODUCTO = /^(gastos de|descuento|cup[oó]n|promoci|vale|cheque|tarjeta regalo)/i;
+
+/** Días que puede estar un pedido sin pagar antes de darlo por anulado */
+export const DIAS_SIN_PAGAR = 3;
 
 // El stock que el programa pone a los productos sin control de stock
 const SIN_CONTROL = -2147483648;
@@ -116,6 +120,18 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   }
   const corteNum = corte ? Number(corte.replace(/-/g, "") + "0000") : 0;
   const antiguos = new Set<string>();
+  // Pedidos sin pagar de más de 3 días (contando desde el último pedido del informe): se dan por anulados.
+  // Contra reembolso no cuenta, porque se cobra al entregar.
+  const cab = ventasFilas[iv].map(c => sinTildes(limpiar(c)));
+  const col = (n: string) => cab.indexOf(n);
+  const cForma = col("forma pago"), cTotal = col("total"), cCod = col("cod. compra");
+  const limite = (() => {
+    if (!ultimo) return 0;
+    const t = String(ultimo);
+    const d = new Date(Date.UTC(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8), +t.slice(8, 10), +t.slice(10, 12)) - DIAS_SIN_PAGAR * 864e5);
+    return Number(d.toISOString().slice(0, 16).replace(/\D/g, ""));
+  })();
+  const caducados = new Map<string, Resultado["caducados"][number]>();
   const pedidosPend = new Set<string>();
   let pendDesde = "";
   let desde = "", hasta = "", lineasVenta = 0, unidades = 0, anulados = 0, enPacks = 0;
@@ -128,6 +144,12 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     const propiedad = limpiar(f[cv.propiedad]);
     if (!eanValido(ean) && propiedad === "-" ) continue; // líneas de gastos, descuentos…
     if (ANULADO.test(limpiar(f[cv.estado]))) { anulados++; continue; }
+    const forma = cForma >= 0 ? limpiar(f[cForma]) : "";
+    if (!/enviad/i.test(limpiar(f[cv.estado])) && /^no/i.test(limpiar(f[cv.pagado])) && !/reembolso/i.test(forma) && ordenFecha(f[cv.fecha] ?? "") < limite) {
+      const id = limpiar(f[cv.id]);
+      if (!caducados.has(id)) caducados.set(id, { id, codigo: cCod >= 0 ? limpiar(f[cCod]) : "", fecha: limpiar(f[cv.fecha]), formaPago: forma, total: cTotal >= 0 ? limpiar(f[cTotal]) : "" });
+      continue;
+    }
     const cant = Number(limpiar(f[cv.cantidad]).replace(",", ".")) || 0;
     if (cant <= 0) continue;
     lineasVenta++;
@@ -201,7 +223,7 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   }).sort((a, b) => a.marca.localeCompare(b.marca, "es"));
 
   return {
-    marcas, desde, hasta, pendDesde, pedidosPendientes: pedidosPend.size, sinEnviarDesde: corte, antiguosSinEnviar: antiguos.size, pedidos: pedidos.size, lineasVenta, unidades,
+    marcas, desde, hasta, pendDesde, pedidosPendientes: pedidosPend.size, sinEnviarDesde: corte, antiguosSinEnviar: antiguos.size, caducados: [...caducados.values()].sort((a, b) => ordenFecha(a.fecha) - ordenFecha(b.fecha)), pedidos: pedidos.size, lineasVenta, unidades,
     sinCruzar: [...sinCruzar.values()].filter(x => !op.soloSinEnviar || x.pendientes > 0).sort((a, b) => a.marca.localeCompare(b.marca, "es") || b.ventas - a.ventas),
     sinControl, descatalogados, anulados, enPacks,
   };

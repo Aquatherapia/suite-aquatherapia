@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AVISO_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, textoMarca, type EstadoPedido, type MarcaPedido } from "./calculo";
+import { AVISO_SIN_PAGAR, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, textoMarca, type EstadoPedido, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
 
 type Archivo<T> = { nombre: string; filas: T } | null;
@@ -265,6 +265,18 @@ export default function PedidosMarcasPage() {
               </section>
             ))}
           </div>
+
+          {r.caducados.length > 0 && (
+            <details className="pm-aviso">
+              <summary>Pedidos sin pagar de más de {DIAS_SIN_PAGAR} días: anúlalos en la tienda ({r.caducados.length})</summary>
+              <p className="rf-suave">Aquí no cuentan como venta ni sacan productos para pedir. En la tienda siguen como pendientes y gastan stock: al anularlos allí, el stock se corrige.</p>
+              <ul>
+                {r.caducados.map(c => (
+                  <li key={c.id}>Pedido {c.id}{c.codigo ? ` (${c.codigo})` : ""} · {c.fecha.slice(0, 16)} · {c.formaPago || "sin forma de pago"} · {c.total}</li>
+                ))}
+              </ul>
+            </details>
+          )}
 
           {r.sinCruzar.length > 0 && (
             <details className="pm-aviso">
