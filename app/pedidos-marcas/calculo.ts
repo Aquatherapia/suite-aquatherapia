@@ -351,3 +351,27 @@ export function textoMarca(m: MarcaPedido, estados: Record<string, EstadoPedido 
   return l.join("\n");
 }
 
+
+// Recorta los archivos a las columnas que usa «cruzar», para guardarlos en la Suite y no tener que volver a subirlos
+function recortar(filas: string[][], cab: number, quedan: string[]) {
+  const h = filas[cab].map(c => sinTildes(limpiar(c).replace(/\*/g, "")));
+  const cols = quedan.map(n => h.indexOf(n)).filter(i => i >= 0);
+  return { cols, h, filas: [cols.map(i => filas[cab][i]), ...filas.slice(cab + 1).map(f => cols.map(i => f[i] ?? ""))] };
+}
+export function recortarStock(filas: string[][]): string[][] {
+  const is = filas.findIndex(f => f.some(c => sinTildes(limpiar(c).replace(/\*/g, "")) === "stock actual"));
+  if (is < 0) return filas;
+  return recortar(filas, is, ["marca", "producto", "propiedad", "ean", "stock actual", "descatalogado"]).filas;
+}
+/** Ventas: solo las columnas que se usan y las líneas sin enviar o de los últimos 4 días (lo de antes ya está en el histórico) */
+export function recortarVentas(filas: string[][]): string[][] {
+  const iv = filas.findIndex(f => f.some(c => sinTildes(limpiar(c)) === "ean") && f.some(c => sinTildes(limpiar(c)) === "cantidad"));
+  if (iv < 0) return filas;
+  const r = recortar(filas, iv, ["id", "cod. compra", "total", "fecha", "estado", "forma pago", "pagado", "marca", "producto", "propiedad", "ean", "cantidad"]);
+  const cab = r.filas[0].map(c => sinTildes(limpiar(c)));
+  const cf = cab.indexOf("fecha"), ce = cab.indexOf("estado");
+  const ultimo = Math.max(0, ...r.filas.slice(1).map(f => ordenFecha(f[cf] ?? "")));
+  const t = String(ultimo).padEnd(12, "0");
+  const desde = Number(new Date(Date.UTC(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8)) - 4 * 864e5).toISOString().slice(0, 10).replace(/-/g, "") + "0000");
+  return [r.filas[0], ...r.filas.slice(1).filter(f => !/enviad/i.test(limpiar(f[ce] ?? "")) || ordenFecha(f[cf] ?? "") >= desde)];
+}

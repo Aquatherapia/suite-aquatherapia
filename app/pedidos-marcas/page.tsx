@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, ordenFecha, lineasParaHistorico, textoMarca, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
+import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, ordenFecha, recortarStock, recortarVentas, lineasParaHistorico, textoMarca, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
 import { Segmentos } from "../_google/ui";
 
@@ -76,6 +76,12 @@ export default function PedidosMarcasPage() {
     fetch("/api/pedidos-marcas", { cache: "no-store" }).then(r => r.json()).then(v => {
       if (v.error) setErrorSeg(v.error); else { setPedidos(v.pedidos ?? {}); setContactos(v.contactos ?? {}); }
     }).catch(() => setErrorSeg("No se pudo cargar el seguimiento de pedidos."));
+    fetch("/api/pedidos-marcas/archivos", { cache: "no-store" }).then(r => r.json()).then(v => {
+      if (v.error) return;
+      const cuando = (iso: string) => new Date(iso).toLocaleString("es-ES", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+      if (v.ventas?.filas?.length) setVentas(a => a ?? { nombre: `${v.ventas.nombre} (subido el ${cuando(v.ventas.fecha)})`, filas: v.ventas.filas });
+      if (v.stock?.filas?.length) setStock(a => a ?? { nombre: `${v.stock.nombre} (subido el ${cuando(v.stock.fecha)})`, filas: v.stock.filas });
+    }).catch(() => {});
     fetch("/api/pedidos-marcas/ventas", { cache: "no-store" }).then(r => r.json()).then(v => {
       if (v.error) { setHist(null); setHistMsg(v.error); } else setHist(v);
     }).catch(() => { setHist(null); setHistMsg("No se pudo leer el histórico de ventas guardado."); });
@@ -145,6 +151,21 @@ export default function PedidosMarcasPage() {
   }, [pedidos]);
   const seguidos = useMemo(() => new Set(Object.keys(enPedido)), [enPedido]);
 
+  // Guarda en la Suite los archivos subidos (recortados), en partes de 1.500 filas
+  async function guardarArchivo(campo: "ventas" | "stock", nombre: string, filas: string[][]) {
+    const partes = Math.max(1, Math.ceil(filas.length / 1500));
+    try {
+      for (let i = 0; i < partes; i++) {
+        const r = await fetch("/api/pedidos-marcas/archivos", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ campo, nombre, parte: i, partes, filas: filas.slice(i * 1500, (i + 1) * 1500) }) });
+        const v = await r.json();
+        if (v.error) throw new Error(v.error);
+      }
+    } catch (e) {
+      setError(`No se pudo guardar «${nombre}» en la Suite (al recargar habrá que subirlo otra vez): ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   async function cargar(files: FileList | File[] | null) {
     if (!files) return;
     setError("");
@@ -156,8 +177,11 @@ export default function PedidosMarcasPage() {
           const filas = leerXls(await f.arrayBuffer());
           setVentas({ nombre: f.name, filas });
           if (hist !== null) guardarHistorico(filas, hist);
+          guardarArchivo("ventas", f.name, recortarVentas(filas));
         } else if (n.endsWith(".csv") || n.endsWith(".txt")) {
-          setStock({ nombre: f.name, filas: leerCsv(await textoDe(f)) });
+          const filas = leerCsv(await textoDe(f));
+          setStock({ nombre: f.name, filas });
+          guardarArchivo("stock", f.name, recortarStock(filas));
         } else throw new Error(`«${f.name}»: sube el informe de ventas (.xls) y el control de stocks (.csv).`);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -174,11 +198,7 @@ export default function PedidosMarcasPage() {
     catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
   }, [ventas, stock, stockMax, descatalogados, soloSinEnviar, sinEnviarDesde, seguidos, cobertura, usarHist, hist]);
 
-  const marcas: MarcaPedido[] = useMemo(() => {
-    if (!resultado || "error" in resultado) return [];
-    const q = buscar.trim().toLowerCase();
-    return q ? resultado.marcas.filter(m => m.marca.includes(q)) : resultado.marcas;
-  }, [resultado, buscar]);
+  const marcas: MarcaPedido[] = useMemo(() => (!resultado || "error" in resultado ? [] : resultado.marcas), [resultado]);
 
   // Compras de clientes que han llegado después de pedir el producto a la marca: el producto vuelve a salir para pedirlo
   const nuevas = (f: FilaPedido): Compra[] => {
@@ -196,15 +216,23 @@ export default function PedidosMarcasPage() {
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marcas, enPedido]);
-  // Si ya se pidió y vuelve a salir por compras nuevas, se piden solo las unidades nuevas
-  const marcasVista: MarcaPedido[] = useMemo(() => marcas.map(m => ({ ...m, grupos: m.grupos.map(g => ({ ...g, filas: g.filas.map(f => {
-    const e = enPedido[f.id];
-    if (!e || e.estado !== "esperando") return f;
-    const n = nuevas(f);
-    return n.length ? { ...f, pedir: Math.max(1, Math.ceil(n.reduce((t, c) => t + c.q, 0))) } : f;
-  }) })) })),
+  // Lo ya pedido (y esperando) pasa a «Sin recibir» y deja de salir aquí. Si vuelve a salir por compras nuevas,
+  // se piden solo las unidades nuevas.
+  const marcasPend: MarcaPedido[] = useMemo(() => marcas.map(m => {
+    const grupos = m.grupos.map(g => ({ ...g, filas: g.filas.filter(f => estados[f.id] !== "esperando").map(f => {
+      const e = enPedido[f.id];
+      if (!e || e.estado !== "esperando") return f;
+      const n = nuevas(f);
+      return n.length ? { ...f, pedir: Math.max(1, Math.ceil(n.reduce((t, c) => t + c.q, 0))) } : f;
+    }) })).filter(g => g.filas.length);
+    return { ...m, grupos, total: grupos.reduce((t, g) => t + g.filas.length, 0) };
+  }).filter(m => m.total > 0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  [marcas, enPedido]);
+  [marcas, enPedido, estados]);
+  const marcasVista = useMemo(() => {
+    const q = buscar.trim().toLowerCase();
+    return q ? marcasPend.filter(m => m.marca.includes(q)) : marcasPend;
+  }, [marcasPend, buscar]);
   const aPedido = (f: FilaPedido) => ({ id: f.id, producto: f.producto, propiedad: f.propiedad, ean: f.ean, compras: f.compras.map(c => c.id), stock: f.stock, ventas: f.ventas, pedir: f.pedir });
 
   async function copiarTexto(id: string, texto: string) {
@@ -213,7 +241,7 @@ export default function PedidosMarcasPage() {
   }
 
   const r = resultado && !("error" in resultado) ? resultado : null;
-  const lineas = r ? r.marcas.reduce((n, m) => n + m.total, 0) : 0;
+  const lineas = marcasPend.reduce((n, m) => n + m.total, 0);
 
   return (
     <div className="wrap rf pm">
@@ -331,7 +359,7 @@ export default function PedidosMarcasPage() {
       {r && (
         <>
           <div className="mp-cifras">
-            <div><b>{miles(r.marcas.length)}</b><span>marcas con algo que pedir</span></div>
+            <div><b>{miles(marcasPend.length)}</b><span>marcas con algo que pedir</span></div>
             <div><b>{miles(lineas)}</b><span>productos en la lista</span></div>
             <div><b>{miles(r.pedidosPendientes)}</b><span>pedidos sin enviar{r.pendDesde ? ` (el primero, del ${r.pendDesde.slice(0, 16)})` : ""}</span></div>
           </div>
@@ -371,13 +399,13 @@ export default function PedidosMarcasPage() {
               Cantidad al copiar
             </label>
             <input type="search" placeholder="Buscar marca…" value={buscar} onChange={e => setBuscar(e.target.value)} />
-            <button className="vp-revisar-btn pm-todo" disabled={!marcas.length}
+            <button className="vp-revisar-btn pm-todo" disabled={!marcasVista.length}
               onClick={() => copiarTexto("*", marcasVista.map(m => textoMarca(m, estados, conCantidad)).filter(Boolean).join("\n\n"))}>
               {copiado === "*" ? "Copiado ✓" : "Copiar todas"}
             </button>
           </div>
 
-          {r.marcas.length === 0 && <p className="rf-suave">{soloSinEnviar ? "En los pedidos sin enviar no hay nada que esté sin stock." : "No hay nada vendido en este periodo que esté sin stock."}</p>}
+          {marcasPend.length === 0 && <p className="rf-suave">{r.marcas.length ? "Todo lo que hay que pedir ya está pedido: lo tienes en «Sin recibir»." : soloSinEnviar ? "En los pedidos sin enviar no hay nada que esté sin stock." : "No hay nada vendido en este periodo que esté sin stock."}</p>}
 
           <div className="pm-marcas">
             {marcasVista.map(m => (
@@ -491,7 +519,7 @@ export default function PedidosMarcasPage() {
             Entran los productos {soloSinEnviar ? "de los pedidos sin enviar" : "vendidos en el periodo del informe"} que tienen ahora un stock igual o menor que el elegido (STOCK ACTUAL del control de stocks).
             Se cruzan por EAN; los que no tienen EAN (packs, kits), por nombre y formato. Los de stock 0 que no se han vendido no salen.
             {r.enPacks > 0 && <> Los packs Dúo y Trío de un mismo producto cuentan como 2 y 3 unidades de ese producto ({miles(r.enPacks)} uds. en total).</>}
-            {" "}Tras mandar el pedido a una marca, pulsa «Marcar como pedido»: esos productos ya no salen al copiar (para no pedirlos dos veces) y siguen en la lista con la etiqueta «Pedido» mientras tengan pedidos sin enviar.
+            {" "}Tras mandar el pedido a una marca, pulsa «Marcar como pedido»: esos productos pasan a «Sin recibir» y dejan de salir aquí, salvo que entre una compra nueva después. Los archivos subidos se quedan guardados: al recargar no hace falta volver a subirlos.
             Si el pedido llega mal o no es el correcto, sus productos vuelven a salir al copiar con la nota. Al ponerlo como «Recibido» se quita; si con lo recibido el stock sigue sin cubrir los pedidos, el producto volverá a salir para pedir.
             {" "}Si un producto tiene pedidos sin enviar y sin pagar, sale con «{AVISO_SIN_PAGAR}»: su stock negativo puede deberse a una compra que no se ha completado.
             {r.sinControl > 0 && <> {r.sinControl} vendidos no tienen control de stock y no salen.</>}
