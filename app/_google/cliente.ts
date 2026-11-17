@@ -150,11 +150,18 @@ function explicarError(api: string, status: number, data: unknown): string {
   const err = (data as { error?: { message?: string; status?: string; details?: unknown[] } })?.error;
   const msg = err?.message ?? "";
   const NOMBRES: Record<string, string> = { sc: "Search Console", ga: "Google Analytics", merchant: "Merchant Center", ficha: "Perfil de Empresa" };
-  if (api === "ficha" && (status === 429 || /quota|Quota/.test(msg) || /has not been used|is disabled/.test(msg))) {
-    return "Google todavía no ha dado acceso a la API de Perfil de Empresa (o falta activarla en Google Cloud). En cuanto aprueben la solicitud, funcionará sin tocar nada.";
-  }
+  // Datos que Google pone en los detalles: qué API y qué proyecto
+  const meta = (err?.details ?? [])
+    .map((d) => (d as { metadata?: Record<string, string> })?.metadata)
+    .find((m) => m && (m.service || m.consumer || m.quota_limit_value)) ?? {};
+  const servicio = meta.service ?? (msg.match(/([a-z]+\.googleapis\.com)/)?.[1] ?? "");
+  const proyecto = (meta.consumer ?? "").replace("projects/", "") || (msg.match(/project (\d+)/)?.[1] ?? "");
+  const enProyecto = proyecto ? ` (proyecto ${proyecto})` : "";
   if (/has not been used|is disabled|SERVICE_DISABLED/.test(msg)) {
-    return `La API de ${NOMBRES[api] ?? "Google"} no está activada en el proyecto de Google Cloud. Actívala en «APIs y servicios → Biblioteca».`;
+    return `Falta activar ${servicio ? `«${servicio}»` : `la API de ${NOMBRES[api] ?? "Google"}`} en Google Cloud${enProyecto}.${servicio ? ` Enlace: https://console.cloud.google.com/apis/library/${servicio}${proyecto ? `?project=${proyecto}` : ""}` : ""}`;
+  }
+  if (api === "ficha" && (status === 429 || /quota|Quota/.test(msg))) {
+    return `Google no da cupo a la API de Perfil de Empresa${servicio ? ` «${servicio}»` : ""}${enProyecto}${meta.quota_limit_value ? ` (límite ${meta.quota_limit_value})` : ""}. Suele pasar si el acceso se aprobó para otro proyecto de Google Cloud o aún no se ha aplicado.`;
   }
   if (status === 403) return `La cuenta conectada no tiene permiso para esto en ${NOMBRES[api]}. Si es un permiso nuevo, vuelve a conectar en «Conexión con Google».`;
   // Merchant API: el proyecto de Google Cloud tiene que estar registrado una vez en la cuenta de Merchant Center

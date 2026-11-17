@@ -7,7 +7,8 @@ import { EstadoGoogle, Negocio, NOMBRE, useEstadoGoogle } from "../_google/ui";
 
 type Opcion = { id: string; nombre: string; cuenta?: string };
 type Lista = { lista?: Opcion[]; error?: string };
-type Opciones = { fichas: Lista; sitios: Lista; propiedades: Lista };
+type Diagnostico = { proyecto: string | null; cuentas: { nombre: string; tipo: string; fichas: number; error?: string }[]; errorCuentas?: string };
+type Opciones = { fichas: Lista & { diagnostico?: Diagnostico }; sitios: Lista; propiedades: Lista };
 type Ajustes = EstadoGoogle["ajustes"];
 
 const ERRORES: Record<string, string> = {
@@ -187,6 +188,27 @@ function Contenido() {
               </div>
             ))}
           </div>
+          {opciones?.fichas?.diagnostico && (opciones.fichas.error || !(opciones.fichas.lista ?? []).length) && (
+            <div className="gg-aviso" style={{ marginTop: 14, fontSize: 13 }}>
+              <p style={{ margin: "0 0 4px", fontWeight: 600 }}>Diagnóstico de fichas</p>
+              <p style={{ margin: "0 0 4px" }}>
+                Proyecto de Google Cloud de las claves: <b>{opciones.fichas.diagnostico.proyecto ?? "no se sabe"}</b>
+              </p>
+              {opciones.fichas.diagnostico.errorCuentas ? (
+                <p style={{ margin: 0 }}>Al pedir las cuentas de Perfil de Empresa: {opciones.fichas.diagnostico.errorCuentas}</p>
+              ) : opciones.fichas.diagnostico.cuentas.length === 0 ? (
+                <p style={{ margin: 0 }}>La cuenta conectada no gestiona ninguna cuenta de Perfil de Empresa.</p>
+              ) : (
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {opciones.fichas.diagnostico.cuentas.map((c, i) => (
+                    <li key={i}>
+                      {c.nombre} {c.tipo && <span className="gg-gris">({c.tipo})</span>}: {c.error ? c.error : `${c.fichas} fichas`}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           <div className="gg-botones" style={{ marginTop: 18 }}>
             <button onClick={guardar} disabled={guardado === "guardando"}>
               {guardado === "guardando" ? "Guardando…" : "Guardar"}
