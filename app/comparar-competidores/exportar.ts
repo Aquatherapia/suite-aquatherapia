@@ -175,61 +175,83 @@ export async function descargarExcel(marca: string, filasIn: FilaComp[], _estado
 export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados: Record<string, EstadoComp>, descuento: number | null, cupon: CuponComp, fecha = new Date()) {
   const { jsPDF } = await import("jspdf");
   const { default: autoTable } = await import("jspdf-autotable");
-  const filas = ordenar(filasIn);
+  // Si la marca tiene web oficial, todo se compara con su precio (con descuento si lo tiene): sale como primer bloque
+  // y no cuenta como tienda para «más barato» ni para «¿podemos igualar?»
+  const oficial = COMPETIDORES.find(c => c.marca && filasIn.some(f => f.precios[c.id]));
+  const ofiDe = new Map<FilaComp, { precio: number; url: string } | undefined>();
+  const filas = ordenar(filasIn.map(f => {
+    if (!oficial) return f;
+    const { [oficial.id]: o, ...resto } = f.precios;
+    const g = { ...f, precios: resto };
+    ofiDe.set(g, o ? { precio: o.precio, url: o.url } : undefined);
+    return g;
+  }));
   const calc = filas.map(f => calcularFila(f, descuento));
   const cols = COMPETIDORES.filter(c => filas.some(f => f.precios[c.id]));
+  const o = oficial ? 1 : 0; // columnas que mete la web oficial delante de las nuestras
+  const MARCA = marca.toUpperCase();
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const M = 8;
   doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(...rgb(AZUL));
   doc.text(`Comparativa de precios con la competencia · ${marca}`, M, 14);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(...rgb(SUAVE));
   doc.text(`La Tienda de Cosméticos frente a ${cols.map(c => c.nombre).join(", ")} · ${fechaCorta(fecha)}` + (cupon ? ` · Cosméticos24h con su cupón de carrito del ${num(cupon.pct)} %` : "") + " · ~ = emparejado por nombre", M, 19.5);
+  if (oficial) { doc.setFont("helvetica", "bold"); doc.setFontSize(9.5); doc.setTextColor(...rgb(VERDE_MARCA)); doc.text(avisoMarca(marca), M, 25); doc.setFontSize(8.5); }
   doc.setFont("helvetica", "bold"); doc.setTextColor(...rgb(TEXTO));
-  doc.text(resumen(filas, calc, descuento).replace(/−/g, "-"), M, 25);
+  doc.text(resumen(filas, calc, descuento).replace(/−/g, "-"), M, oficial ? 30 : 25);
 
   const cabC = (t: string, color: string) => ({ content: t, styles: { fillColor: rgb(color) } });
-  const fin = 5 + cols.length * 2;
+  const fin = 5 + o + cols.length * 2;
+  // Diferencia con el precio de la marca (% arriba y € abajo); sin web oficial, el dto. sobre su PVP como antes
+  const conMarca = (f: FilaComp, precio: number, dto: number) => {
+    const of = ofiDe.get(f);
+    if (oficial) return of ? `\n${difTexto(precio, of.precio)}` : "";
+    return dto > 0.0005 ? `\n-${pctTexto(dto)}` : "";
+  };
   const cuerpo = filas.map((f, i) => {
-    const k = calc[i];
+    const k = calc[i], of = ofiDe.get(f);
     return [
       f.ean ?? "",
       [f.nombre, ...avisos(f, k).map(a => a.toUpperCase())].join("\n"),
+      ...(oficial ? [of ? eur(of.precio) : "-"] : []),
       eur(f.pvp) + (k.revisarPrecio.length ? "\n(revisar precio)" : ""),
       k.limite != null ? eur(k.limite) : "-",
-      k.miDto > 0.0005 ? `${eur(f.precio)}\n-${pctTexto(k.miDto)}` : eur(f.precio),
+      eur(f.precio) + conMarca(f, f.precio, k.miDto),
       ...cols.flatMap(c => {
         const p = f.precios[c.id], kc = k.comp[c.id];
         if (!p || !kc) return ["-", "-"];
-        return [eur(kc.suPvp) + (kc.pvpSinActualizar ? "\nsin actualizar" : ""), `${eur(p.precio)}${p.por !== "ean" && p.por !== "manual" ? " ~" : ""}` + (kc.dto > 0.0005 ? `\n-${pctTexto(kc.dto)}` : "")];
+        return [eur(kc.suPvp) + (kc.pvpSinActualizar ? "\nsin actualizar" : ""), `${eur(p.precio)}${p.por !== "ean" && p.por !== "manual" ? " ~" : ""}` + conMarca(f, p.precio, kc.dto)];
       }),
       k.masBarato,
-      k.diferencia == null ? "-" : `${k.diferencia > 0.005 ? "+" : ""}${eur(k.diferencia)}`,
+      oficial ? (of && k.mb ? difTexto(k.mb.precio, of.precio) : "-") : k.diferencia == null ? "-" : `${k.diferencia > 0.005 ? "+" : ""}${eur(k.diferencia)}`,
       k.bajoAutorizado != null ? eur(k.bajoAutorizado) : "-",
       k.igualar.replace(/−/g, "-"),
     ];
   });
   const anchoComp = Math.max(11, Math.min(15, 110 / Math.max(cols.length * 2, 1)));
   const columnStyles: Record<number, object> = {
-    0: { cellWidth: 17, halign: "left", textColor: rgb(SUAVE) }, 1: { cellWidth: 52, halign: "left" },
-    2: { cellWidth: 13, textColor: rgb(AZUL) }, 3: { cellWidth: 13, textColor: [106, 155, 208] }, 4: { cellWidth: 14, textColor: rgb(AZUL), fontStyle: "bold" },
-    [fin]: { cellWidth: 18, halign: "left", fontStyle: "bold" }, [fin + 1]: { cellWidth: 14, fontStyle: "bold" }, [fin + 2]: { cellWidth: 14 }, [fin + 3]: { halign: "left" },
+    0: { cellWidth: oficial ? 19 : 17, halign: "left", textColor: rgb(SUAVE) }, 1: { cellWidth: oficial ? 40 : 50, halign: "left" },
+    [2 + o]: { cellWidth: 13, textColor: rgb(AZUL) }, [3 + o]: { cellWidth: 13, textColor: [106, 155, 208] }, [4 + o]: { cellWidth: 14, textColor: rgb(AZUL), fontStyle: "bold" },
+    [fin]: { cellWidth: 18, halign: "left", fontStyle: "bold" }, [fin + 1]: { cellWidth: 14, fontStyle: "bold" }, [fin + 2]: { cellWidth: 17 }, [fin + 3]: { halign: "left" },
   };
-  cols.forEach((c, j) => { columnStyles[5 + j * 2] = { cellWidth: anchoComp, textColor: rgb(c.color) }; columnStyles[6 + j * 2] = { cellWidth: anchoComp, textColor: rgb(c.color), fontStyle: "bold" }; });
+  if (oficial) columnStyles[2] = { cellWidth: 14, textColor: rgb(VERDE_MARCA), fontStyle: "bold" };
+  cols.forEach((c, j) => { columnStyles[5 + o + j * 2] = { cellWidth: anchoComp, textColor: rgb(c.color) }; columnStyles[6 + o + j * 2] = { cellWidth: anchoComp, textColor: rgb(c.color), fontStyle: "bold" }; });
   autoTable(doc, {
-    startY: 29, margin: { left: M, right: M }, theme: "plain",
+    startY: oficial ? 34 : 29, margin: { left: M, right: M }, theme: "plain",
     styles: { font: "helvetica", fontSize: 6.3, textColor: rgb(TEXTO), cellPadding: { top: 1.4, bottom: 1.4, left: 1, right: 1 }, valign: "middle", halign: "right", lineColor: rgb(LINEA) },
     headStyles: { fontStyle: "bold", fontSize: 5.8, textColor: [255, 255, 255], halign: "center", valign: "middle" },
     head: [
       [
         { content: "", colSpan: 2, styles: { fillColor: [255, 255, 255] } },
+        ...(oficial ? [{ content: `${MARCA}\nWEB OFICIAL`, colSpan: 1, styles: { fillColor: rgb("E6F4EA"), textColor: rgb(VERDE_MARCA) } }] : []),
         { content: "LA TIENDA DE COSMÉTICOS", colSpan: 3, styles: { fillColor: rgb(FONDO_NOS), textColor: rgb(AZUL) } },
         ...cols.map(c => ({ content: c.nombre.toUpperCase(), colSpan: 2, styles: { fillColor: rgb(c.fondo), textColor: rgb(c.color) } })),
         { content: "COMPARACIÓN", colSpan: 4, styles: { fillColor: [243, 244, 246], textColor: [55, 65, 81] } },
       ],
       [
-        cabC("EAN", AZUL), cabC("PRODUCTO", AZUL), cabC("PVP", AZUL), cabC(descuento != null ? `CON DTO. AUT.\n(-${num(descuento)} %)` : "CON DTO. AUT.", AZUL), cabC("PRECIO FINAL", AZUL),
+        cabC("EAN", AZUL), cabC("PRODUCTO", AZUL), ...(oficial ? [cabC("PRECIO", VERDE_MARCA)] : []), cabC("PVP", AZUL), cabC(descuento != null ? `CON DTO. AUT.\n(-${num(descuento)} %)` : "CON DTO. AUT.", AZUL), cabC("PRECIO FINAL", AZUL),
         ...cols.flatMap(c => [cabC("PVP", c.color), cabC(cabeceraCupon(c, cupon), c.color)]),
-        cabC("MÁS BARATO", "374151"), cabC("DIFERENCIA", "374151"), cabC("BAJO DTO. AUTORIZADO", "374151"), cabC("¿PODEMOS IGUALAR?", "374151"),
+        cabC("MÁS BARATO", "374151"), cabC(oficial ? `DIF. CON\n${MARCA}` : "DIFERENCIA", "374151"), cabC("BAJO DTO.\nAUTORIZADO", "374151"), cabC("¿PODEMOS IGUALAR?", "374151"),
       ],
     ],
     body: cuerpo, columnStyles,
@@ -241,16 +263,17 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
       s.fillColor = i % 2 ? rgb(CEBRA) : [255, 255, 255];
       s.lineWidth = { bottom: 0.2, top: 0, left: 0, right: 0 };
       if (c === 1 && avisos(f, k).length) s.textColor = rgb(TEXTO);
-      if (c === 2 && k.revisarPrecio.length) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
-      if (c === 4 && k.bajoMinimoMio) { s.fillColor = rgb(PASADO_FONDO); s.textColor = rgb(PASADO); }
-      if (c >= 5 && c < fin) {
-        const comp = cols[Math.floor((c - 5) / 2)], kc = k.comp[comp.id];
+      if (c === 2 + o && k.revisarPrecio.length) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
+      if (c === 4 + o && k.bajoMinimoMio) { s.fillColor = rgb(PASADO_FONDO); s.textColor = rgb(PASADO); }
+      if (c >= 5 + o && c < fin) {
+        const comp = cols[Math.floor((c - 5 - o) / 2)], kc = k.comp[comp.id];
         if (!kc) { s.textColor = [196, 201, 208]; return; }
-        if ((c - 5) % 2 === 0 && (kc.pvpSinActualizar || kc.pvpMasAlto)) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
-        if ((c - 5) % 2 === 1 && kc.bajoMinimo) { s.fillColor = rgb(BAJO_FONDO); s.textColor = rgb(BAJO); }
+        if ((c - 5 - o) % 2 === 0 && (kc.pvpSinActualizar || kc.pvpMasAlto)) { s.fillColor = rgb(AMBAR_FONDO); s.textColor = rgb(AMBAR); s.fontStyle = "bold"; }
+        if ((c - 5 - o) % 2 === 1 && kc.bajoMinimo) { s.fillColor = rgb(BAJO_FONDO); s.textColor = rgb(BAJO); }
       }
       if (c === fin) s.textColor = !k.mb || k.masBarato === "Igual" ? rgb(SUAVE) : k.diferencia != null && k.diferencia < -0.005 ? k.empatados.length > 1 ? rgb(TEXTO) : rgb(COMPETIDORES.find(x => x.id === k.mb!.id)!.color) : rgb(AZUL);
-      if (c === fin + 1) s.textColor = k.diferencia == null ? rgb(SUAVE) : k.diferencia < -0.005 ? rgb(ROJO) : k.diferencia > 0.005 ? rgb(VERDE) : rgb(TEXTO);
+      if (c === fin + 1 && oficial) { const of = ofiDe.get(f); s.textColor = !of || !k.mb ? rgb(SUAVE) : k.mb.precio < of.precio - 0.005 ? rgb(ROJO) : rgb(TEXTO); }
+      else if (c === fin + 1) s.textColor = k.diferencia == null ? rgb(SUAVE) : k.diferencia < -0.005 ? rgb(ROJO) : k.diferencia > 0.005 ? rgb(VERDE) : rgb(TEXTO);
       if (c === fin + 2 && k.bajoAutorizado != null) { s.fillColor = rgb(BAJO_FONDO); s.textColor = rgb(BAJO); s.fontStyle = "bold"; }
       if (c === fin + 3) { s.textColor = k.igualar.startsWith("No") ? rgb(ROJO) : rgb(VERDE); s.fontStyle = k.igualar.startsWith("No") ? "bold" : "normal"; }
     },
@@ -260,8 +283,9 @@ export async function descargarPdf(marca: string, filasIn: FilaComp[], _estados:
       if (!f) return;
       if (d.column.index === 1) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: f.url });
       const c = d.column.index;
-      if (c >= 5 && c < fin && (c - 5) % 2 === 1) {
-        const p = f.precios[cols[Math.floor((c - 5) / 2)].id];
+      if (oficial && c === 2) { const of = ofiDe.get(f); if (of) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: of.url }); }
+      if (c >= 5 + o && c < fin && (c - 5 - o) % 2 === 1) {
+        const p = f.precios[cols[Math.floor((c - 5 - o) / 2)].id];
         if (p) doc.link(d.cell.x, d.cell.y, d.cell.width, d.cell.height, { url: p.url });
       }
     },
