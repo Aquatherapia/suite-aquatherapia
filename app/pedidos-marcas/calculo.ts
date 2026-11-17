@@ -9,7 +9,7 @@ export type Resultado = {
   desde: string; hasta: string; pendDesde: string; pedidosPendientes: number; sinEnviarDesde: string; antiguosSinEnviar: number;
   caducados: { id: string; codigo: string; fecha: string; formaPago: string; total: string }[]; pedidos: number; lineasVenta: number; unidades: number;
   sinCruzar: { marca: string; producto: string; propiedad: string; ean: string; ventas: number; pendientes: number }[];
-  sinControl: number; descatalogados: number; anulados: number; enPacks: number;
+  sinControl: number; descatalogados: number; unaVenta: number; anulados: number; enPacks: number;
   diasPeriodo: number; usaHistorico: boolean;
 };
 export type Opciones = { stockMax: number; incluirDescatalogados: boolean; soloSinEnviar: boolean; /** AAAA-MM-DD; vacío = desde el día anterior al último pedido */ sinEnviarDesde: string; /** Productos con un pedido a la marca en seguimiento: salen aunque su pedido sea anterior a la fecha */ seguidos?: Set<string>;
@@ -293,7 +293,7 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   const cobertura = op.diasCobertura ?? 14;
 
   // Lista: vendidos en el periodo con stock ≤ stockMax
-  let sinControl = 0, descatalogados = 0;
+  let sinControl = 0, descatalogados = 0, unaVenta = 0;
   const porMarca = new Map<string, Map<number, FilaPedido[]>>();
   const todos = new Set<Prod>([...porNombre.values(), ...[...porEan.values()].flat()]);
   for (const p of todos) {
@@ -302,6 +302,8 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     if (p.stock === null || p.stock === SIN_CONTROL) { sinControl++; continue; }
     if (p.stock > op.stockMax) continue;
     if (p.descatalogado && !op.incluirDescatalogados) { descatalogados++; continue; }
+    // Una sola venta y aún queda stock: no hace falta pedirlo todavía
+    if (p.ventas <= 1 && p.stock >= 1) { unaVenta++; continue; }
     const marca = p.marca.toLowerCase() || "sin marca";
     const g = porMarca.get(marca) ?? new Map<number, FilaPedido[]>();
     g.set(p.stock, [...(g.get(p.stock) ?? []), { id: idProducto(p), producto: p.producto, propiedad: p.propiedad, ean: p.ean, stock: p.stock, ventas: p.ventas, sinPagar: p.sinPagar, pendientes: p.pendientes, compras: [...p.compras.values()].sort((a, b) => ordenFecha(a.fecha) - ordenFecha(b.fecha)), pedir: Math.max(1, Math.ceil(Math.max(0, -p.stock) + p.ventas / diasPeriodo * cobertura - 0.25)) }]);
@@ -322,7 +324,7 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
   return {
     marcas, desde, hasta, pendDesde, pedidosPendientes: pedidosPend.size, sinEnviarDesde: corte, antiguosSinEnviar: antiguos.size, caducados: [...caducados.values()].sort((a, b) => ordenFecha(a.fecha) - ordenFecha(b.fecha)), pedidos: hist ? hist.pedidos : pedidos.size, lineasVenta, unidades, diasPeriodo: Math.round(diasPeriodo), usaHistorico: !!hist,
     sinCruzar: [...sinCruzar.values()].filter(x => !op.soloSinEnviar || x.pendientes > 0).sort((a, b) => a.marca.localeCompare(b.marca, "es") || b.ventas - a.ventas),
-    sinControl, descatalogados, anulados, enPacks,
+    sinControl, descatalogados, unaVenta, anulados, enPacks,
   };
 }
 
