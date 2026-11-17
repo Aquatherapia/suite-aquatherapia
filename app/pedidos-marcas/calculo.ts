@@ -84,7 +84,7 @@ const entero = (s: string) => {
 };
 
 // «17/11/2026 07:21:56» → número ordenable
-const ordenFecha = (s: string) => {
+export const ordenFecha = (s: string) => {
   const m = limpiar(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
   return m ? Number(`${m[3]}${m[2].padStart(2, "0")}${m[1].padStart(2, "0")}${(m[4] ?? "0").padStart(2, "0")}${m[5] ?? "00"}`) : 0;
 };
@@ -349,4 +349,46 @@ export function textoMarca(m: MarcaPedido, estados: Record<string, EstadoPedido 
     for (const f of g.filas) l.push(`•  ${f.producto}\t${f.propiedad}\t${f.ean}\t-ventas\t${f.ventas}${conCantidad ? `\tpedir\t${f.pedir}` : ""}${f.sinPagar > 0 ? `\t${AVISO_SIN_PAGAR}` : ""}${estados[f.id] && estados[f.id] !== "esperando" ? `\t${ESTADOS_PEDIDO[estados[f.id]!].nota}` : ""}`);
   });
   return l.join("\n");
+}
+
+/** Pedido ya hecho a una marca, leído de un texto pegado (p. ej. los mensajes de WhatsApp con el formato de la lista) */
+export type PedidoPegado = { marca: string; fecha: string; hasta: number; productos: { id: string; producto: string; propiedad: string; ean: string }[] };
+
+/**
+ * Lee pedidos pegados: cada cabecera de marca («davines» con tabuladores) empieza un pedido y cada «•  producto\tformato\tEAN…»
+ * es un producto. Si la línea empieza como un mensaje de WhatsApp («[16/11/26, 8:22:21] Nombre: …»), el pedido lleva esa fecha y
+ * hora; si no, la de ahora. El pedido cubre las compras de clientes hechas hasta esa hora.
+ */
+export function leerPedidosPegados(texto: string, ahora = new Date()): PedidoPegado[] {
+  const out: PedidoPegado[] = [];
+  const two = (n: number) => String(n).padStart(2, "0");
+  const deAhora = { iso: ahora.toISOString(), num: Number(`${ahora.getFullYear()}${two(ahora.getMonth() + 1)}${two(ahora.getDate())}${two(ahora.getHours())}${two(ahora.getMinutes())}`) };
+  let cuando = deAhora;
+  let actual: PedidoPegado | null = null;
+  for (const bruta of texto.replace(/\r/g, "").split("\n")) {
+    let linea = bruta.replace(/[\u200b-\u200f\u2060\ufeff\ufe0f]/g, "");
+    const w = linea.match(/^\s*\[(\d{1,2})\/(\d{1,2})\/(\d{2,4}),?\s*(\d{1,2}):(\d{2})(?::\d{2})?\]\s*[^:]*:\s*/);
+    if (w) {
+      const y = w[3].length === 2 ? 2000 + Number(w[3]) : Number(w[3]);
+      const d = new Date(y, Number(w[2]) - 1, Number(w[1]), Number(w[4]), Number(w[5]));
+      cuando = { iso: d.toISOString(), num: Number(`${y}${two(+w[2])}${two(+w[1])}${two(+w[4])}${w[5]}`) };
+      linea = linea.slice(w[0].length);
+      actual = null;
+    }
+    const t = linea.trim();
+    if (!t) continue;
+    if (/^[•·*-]/.test(t)) {
+      const c = t.replace(/^[•·*-]\s*/, "").split("\t");
+      const ean = limpiarEan(c[2] ?? "");
+      if (!actual || c.length < 3 || !eanValido(ean) || !/^\d{8,14}(-\d)?$/.test(ean)) continue;
+      const p = { producto: limpiar(c[0]), propiedad: limpiar(c[1]), ean };
+      if (!actual.productos.some(x => x.ean === ean)) actual.productos.push({ id: idProducto(p), ...p });
+    } else if (linea.includes("\t")) {
+      const marca = limpiar(linea.split("\t")[0].split(": ").pop() ?? "").toLowerCase();
+      if (!marca || /^stock\s/.test(marca)) continue;
+      actual = { marca, fecha: cuando.iso, hasta: cuando.num, productos: [] };
+      out.push(actual);
+    }
+  }
+  return out.filter(p => p.productos.length);
 }

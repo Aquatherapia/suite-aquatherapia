@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, lineasParaHistorico, textoMarca, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
+import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, leerPedidosPegados, ordenFecha, lineasParaHistorico, textoMarca, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
 
 type Archivo<T> = { nombre: string; filas: T } | null;
 type Contacto = { email: string; whatsapp: string };
 type Hist = Historico & { ids: string[] };
-type Pedido = { marca: string; fecha: string; estado: EstadoPedido; productos: { id: string; producto: string; propiedad: string; ean: string; compras?: string[] }[] };
+type Pedido = { marca: string; fecha: string; estado: EstadoPedido; productos: { id: string; producto: string; propiedad: string; ean: string; compras?: string[] }[]; hasta?: number };
 
 const miles = (n: number) => n.toLocaleString("es-ES");
 const diaTxt = (d: string) => d ? `${d.slice(6, 8)}/${d.slice(4, 6)}/${d.slice(0, 4)}` : "—";
@@ -63,6 +63,8 @@ export default function PedidosMarcasPage() {
   const [guardando, setGuardando] = useState(false);
   const [contactos, setContactos] = useState<Record<string, Contacto>>({});
   const [editando, setEditando] = useState("");
+  const [pegado, setPegado] = useState("");
+  const [pegadoMsg, setPegadoMsg] = useState("");
   const [hist, setHist] = useState<Hist | null | undefined>(undefined);
   const [histMsg, setHistMsg] = useState("");
   const [usarHist, setUsarHist] = useState(true);
@@ -112,6 +114,14 @@ export default function PedidosMarcasPage() {
     if (v.error) setHistMsg(v.error); else { setHist(v); setHistMsg("Histórico borrado."); }
   }
 
+  const pegados = useMemo(() => leerPedidosPegados(pegado), [pegado]);
+  async function guardarPegados() {
+    if (!pegados.length) return;
+    await enviar({ accion: "importar", pedidos: pegados });
+    setPegado("");
+    setPegadoMsg(`Guardados ${pegados.length} pedido${pegados.length !== 1 ? "s" : ""} (${pegados.reduce((n, p) => n + p.productos.length, 0)} productos). Ya no saldrán las compras de antes de cada pedido.`);
+  }
+
   async function enviar(cuerpo: object) {
     setGuardando(true);
     setErrorSeg("");
@@ -128,12 +138,16 @@ export default function PedidosMarcasPage() {
 
   // Cada producto que está en un pedido abierto, con el estado de ese pedido y su fecha
   const enPedido = useMemo(() => {
-  // y las compras de clientes que ya cubre (null: pedido antiguo, sin compras apuntadas, que lo cubre todo)
-    const m: Record<string, { estado: EstadoPedido; fecha: string; compras: Set<string> | null }> = {};
+  // y las compras de clientes que ya cubre: por ID (marcado en la Suite), por hora (pedido pegado de WhatsApp: las de
+  // hasta esa hora) o todas (pedido antiguo, sin compras apuntadas)
+    const m: Record<string, { estado: EstadoPedido; fecha: string; ids: Set<string>; hasta: number; todo: boolean }> = {};
     for (const p of Object.values(pedidos ?? {}).sort((a, b) => a.fecha.localeCompare(b.fecha))) for (const x of p.productos) {
-      const antes = m[x.id];
-      const compras = !x.compras || (antes && antes.compras === null) ? null : new Set([...(antes?.compras ?? []), ...x.compras]);
-      m[x.id] = { estado: p.estado, fecha: p.fecha, compras };
+      const e = m[x.id] ?? { estado: p.estado, fecha: p.fecha, ids: new Set<string>(), hasta: 0, todo: false };
+      e.estado = p.estado; e.fecha = p.fecha;
+      if (p.hasta) e.hasta = Math.max(e.hasta, p.hasta);
+      else if (x.compras) x.compras.forEach(c => e.ids.add(c));
+      else e.todo = true;
+      m[x.id] = e;
     }
     return m;
   }, [pedidos]);
@@ -178,7 +192,7 @@ export default function PedidosMarcasPage() {
   const nuevas = (f: FilaPedido): Compra[] => {
     const e = enPedido[f.id];
     if (!e) return f.compras;
-    return e.compras === null ? [] : f.compras.filter(c => !e.compras!.has(c.id));
+    return e.todo ? [] : f.compras.filter(c => !e.ids.has(c.id) && !(e.hasta && ordenFecha(c.fecha) <= e.hasta));
   };
   // Estado de cada producto a la vista: «esperando» solo si el pedido cubre todas sus compras pendientes
   const estados = useMemo(() => {
@@ -256,6 +270,26 @@ export default function PedidosMarcasPage() {
 
       {error && <p className="error">{error}</p>}
       {errorSeg && <p className="error">{errorSeg}</p>}
+
+      {pedidos && (
+        <details className="pm-seguimiento pm-pegar">
+          <summary>Pegar pedidos ya hechos (de WhatsApp)</summary>
+          <p className="rf-suave">
+            Pega aquí las listas que ya habéis mandado a las marcas, tal cual salen en WhatsApp (con «[16/11/26, 8:22:21] …» delante) o solo la lista.
+            Cada marca se guarda como pedido «esperando» con la hora del mensaje (o la de ahora), y dejan de salir las compras de clientes de antes de esa hora.
+          </p>
+          <textarea className="pm-pegar-texto" rows={6} value={pegado} onChange={e => { setPegado(e.target.value); setPegadoMsg(""); }} placeholder={"davines\t\t\t\t\n\tstock -1\t\t\t\t\n•  MOMO / Shampoo…\tRefill 500ml\t8004608295914\t-ventas\t1"} aria-label="Pedidos ya hechos" />
+          {pegado.trim() && (
+            <p className="rf-suave">
+              {pegados.length
+                ? <>Se han leído {pegados.length} pedido{pegados.length !== 1 ? "s" : ""}: {pegados.map(p => `${p.marca} (${p.productos.length}, ${diaHora(p.fecha)})`).join(" · ")}</>
+                : "No se ha leído ningún pedido. Hace falta la línea de la marca y las de los productos con su EAN."}
+            </p>
+          )}
+          {pegados.length > 0 && <button className="regen-btn" disabled={guardando} onClick={guardarPegados}>Guardar como pedidos</button>}
+          {pegadoMsg && <p className="rf-suave">{pegadoMsg}</p>}
+        </details>
+      )}
 
       {pedidos && Object.keys(pedidos).length > 0 && (
         <details className="pm-seguimiento">
