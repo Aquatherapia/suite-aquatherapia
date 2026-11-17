@@ -2,6 +2,7 @@
 import { parse } from "node-html-parser";
 import { normalizar, TAMANO, tamano } from "../comparar-precios/emparejar";
 import type { Competidor } from "../../comparar-competidores/competidores";
+import { EAN_POR_REFERENCIA } from "./eans-marcas";
 
 const UA = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" };
 const MI_WEB = "https://www.latiendadecosmeticos.com";
@@ -187,7 +188,7 @@ async function leerWooProductos(c: Competidor, todos: ProductoWoo[], limite: num
     // Webs oficiales: el nombre no lleva el formato («SÉRUM AGELESS ELIXIR»), pero la descripción sí («30 ml»).
     // Se usa si la descripción dice un único formato; si dice varios (estuches, kits) no se pone ninguno.
     const formato = c.marca && !TAMANO.test(p.name) ? formatoDeDescripcion(`${p.short_description ?? ""} ${p.description ?? ""}`) : "";
-    const base: Variante = { titulo: formato, precio: precioWoo(p.prices.price, d), pvp: precioWoo(p.prices.regular_price, d) || undefined, ean: eanDeSku(p.sku) };
+    const base: Variante = { titulo: formato, precio: precioWoo(p.prices.price, d), pvp: precioWoo(p.prices.regular_price, d) || undefined, ean: eanDeSku(p.sku) ?? eanDeReferencia(c, p.sku) };
     let variantes: Variante[] = [base];
     // Producto con formatos: el precio de cada uno se pide aparte (si queda tiempo)
     if (p.type === "variable" && p.variations?.length && Date.now() < limite) {
@@ -207,6 +208,9 @@ async function leerWooProductos(c: Competidor, todos: ProductoWoo[], limite: num
     return { titulo: decodificar(p.name), url: p.permalink, esPack: esPack(p.name) || p.type === "bundle", variantes: variantes.filter(v => v.precio > 0) };
   });
 }
+
+// Webs oficiales sin EAN: el de su referencia, sacado de la tarifa de la marca
+const eanDeReferencia = (c: Competidor, sku: string | undefined) => (c.marca && sku ? normalizarEan(EAN_POR_REFERENCIA[c.marca]?.[sku.trim()]) : null);
 
 // El único formato que cita un texto («30 ml»), o "" si no cita ninguno o cita varios
 function formatoDeDescripcion(html: string): string {
