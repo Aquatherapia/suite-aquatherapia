@@ -308,14 +308,16 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
     porMarca.set(marca, g);
   }
 
-  // Primero los que tienen alguna compra pagada; al final los que solo tienen compras sin pagar
-  const soloSinPagar = (f: FilaPedido) => Number(f.sinPagar > 0 && f.sinPagar >= f.pendientes);
+  // Primero los pagados; detrás los que tienen alguna compra sin pagar. Las marcas en las que todo está sin pagar, al final.
+  const conSinPagar = (f: FilaPedido) => Number(f.sinPagar > 0);
   const marcas: MarcaPedido[] = [...porMarca].map(([marca, g]) => {
     const grupos = [...g].sort((a, b) => a[0] - b[0]).map(([stock, filas]) => ({
-      stock, filas: filas.sort((a, b) => soloSinPagar(a) - soloSinPagar(b) || b.ventas - a.ventas || a.producto.localeCompare(b.producto, "es") || a.propiedad.localeCompare(b.propiedad, "es", { numeric: true })),
+      stock, filas: filas.sort((a, b) => conSinPagar(a) - conSinPagar(b) || b.ventas - a.ventas || a.producto.localeCompare(b.producto, "es") || a.propiedad.localeCompare(b.propiedad, "es", { numeric: true })),
     }));
     return { marca, grupos, total: grupos.reduce((n, x) => n + x.filas.length, 0) };
-  }).sort((a, b) => a.marca.localeCompare(b.marca, "es"));
+  });
+  const todoSinPagar = (m: MarcaPedido) => Number(m.grupos.every(g => g.filas.every(f => f.sinPagar > 0)));
+  marcas.sort((a, b) => todoSinPagar(a) - todoSinPagar(b) || a.marca.localeCompare(b.marca, "es"));
 
   return {
     marcas, desde, hasta, pendDesde, pedidosPendientes: pedidosPend.size, sinEnviarDesde: corte, antiguosSinEnviar: antiguos.size, caducados: [...caducados.values()].sort((a, b) => ordenFecha(a.fecha) - ordenFecha(b.fecha)), pedidos: hist ? hist.pedidos : pedidos.size, lineasVenta, unidades, diasPeriodo: Math.round(diasPeriodo), usaHistorico: !!hist,
