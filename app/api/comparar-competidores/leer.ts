@@ -344,7 +344,7 @@ export async function leerCompetidor(c: Competidor, enlace: string, limite: numb
 export async function buscarListado(c: Competidor, marca: { nombre: string; slug: string }): Promise<string | null> {
   const clave = soloLetras(marca.nombre);
   // Web oficial de una marca: su tienda entera, y solo para esa marca
-  if (c.marca) return clave.includes(c.marca) ? `${c.web}/` : null;
+  if (c.marca) return clave.includes(c.marca) ? (c.tipo === "shopify" ? `${c.web}/collections/all` : `${c.web}/`) : null;
   try {
     if (c.tipo === "c24" || c.tipo === "shopify") {
       // La colección suele llamarse como la marca en minúsculas y con guiones («germaine-de-capuccini»)

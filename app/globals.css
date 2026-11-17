@@ -1217,6 +1217,8 @@ button:disabled {
 .cp-pill-minimo { background: #f1ebfb; color: #6b3fb5; }
 .cp-dto { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: var(--muted); }
 .cp-dto-input { width: 44px; padding: 2px 4px; font-size: 11px; text-align: right; margin: 0; }
+.cp-web-input { width: 150px; padding: 2px 4px; font-size: 11px; margin: 0; }
+.cp-web-oficial a { color: #15803d; font-size: 11px; }
 .cp-dto-pct { display: block; font-size: 10px; font-weight: 600; color: var(--muted); }
 .cp-dto-fuente { margin-left: 2px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #1b75bb; }
 .cp-sin-ean { color: #b45309; font-weight: 600; }

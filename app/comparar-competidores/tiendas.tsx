@@ -33,13 +33,13 @@ export default function Tiendas({ ajustes, merchantId, propuestas, enviar }: {
   return (
     <div className="ct-panel">
       <button className="ct-cab" onClick={() => setAbierto(v => !v)} aria-expanded={abierto}>
-        <span><b>Tiendas con las que comparamos</b> <span className="cp-suave-txt">({COMPETIDORES.length})</span></span>
+        <span><b>Tiendas con las que comparamos</b> <span className="cp-suave-txt">({COMPETIDORES.filter(c => !c.marca).length})</span></span>
         <span className="cp-suave-txt">{abierto ? "▲ Cerrar" : "▼ Cambiar o buscar más"}</span>
       </button>
       {abierto && (
         <div className="ct-cuerpo">
           <div className="ct-chips">
-            {COMPETIDORES.map(c => (
+            {COMPETIDORES.filter(c => !c.marca).map(c => (
               <span key={c.id} className="ct-chip" style={{ color: c.color, background: c.fondo }}>
                 <a href={c.web} target="_blank" rel="noreferrer" style={{ color: c.color }}>{c.nombre}</a>
                 <button className="ct-x" title={`Quitar ${c.nombre} de la comparación`} disabled={!!ocupado}
