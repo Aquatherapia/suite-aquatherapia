@@ -336,6 +336,7 @@ export async function leerCompetidor(c: Competidor, enlace: string, limite: numb
   if (c.tipo === "woo") return leerWoo(c, enlace, limite, marca);
   if (c.tipo === "presta") return leerPresta(enlace);
   if (c.tipo === "rosi") return leerRosi(c, enlace);
+  if (c.tipo === "fichas") return leerFichas(c, limite);
   return [];
 }
 
@@ -535,4 +536,110 @@ export async function webDeTienda(nombre: string, conocidas: { nombre: string; d
     }
   }
   return null;
+}
+
+// ── Webs oficiales con fichas de producto (PrestaShop, Magento u otras) ──────────
+// No tienen un catálogo que se pueda pedir entero: se sacan las páginas de su sitemap y de cada ficha
+// se lee el producto que la propia web publica para Google (datos estructurados schema.org: nombre, precio, EAN).
+
+async function texto(url: string, ms = 15_000): Promise<string | null> {
+  try { const r = await pedir(url, undefined, ms); return r.ok ? await r.text() : null; } catch { return null; }
+}
+const locs = (xml: string) => [...xml.matchAll(/<loc>\s*(?:<!\[CDATA\[)?\s*([^<\]\s]+)\s*(?:\]\]>)?\s*<\/loc>/gi)].map(m => decodificar(m[1]));
+
+// Páginas de la web según su sitemap (sigue los índices de sitemaps). Si hay idiomas, se quedan las de español.
+export async function paginasDelSitemap(web: string, max = 1500): Promise<string[]> {
+  const robots = await texto(`${web}/robots.txt`, 10_000) ?? "";
+  const pendientes = [...new Set([...robots.matchAll(/^\s*sitemap:\s*(\S+)/gim).map(m => m[1]), `${web}/sitemap.xml`, `${web}/sitemap_index.xml`])];
+  const vistos = new Set<string>(), paginas = new Set<string>();
+  while (pendientes.length && vistos.size < 40 && paginas.size < max * 3) {
+    const url = pendientes.shift()!;
+    if (vistos.has(url)) continue;
+    vistos.add(url);
+    const xml = await texto(url);
+    if (!xml) continue;
+    if (/<sitemapindex/i.test(xml)) { pendientes.push(...locs(xml)); continue; }
+    for (const u of locs(xml)) if (!/\.(jpe?g|png|webp|gif|pdf)(\?|$)/i.test(u)) paginas.add(u.split("#")[0]);
+  }
+  let lista = [...paginas];
+  // Varias lenguas: las de español (/es/, /es-es/), si las hay
+  const es = lista.filter(u => /\/es(-es)?\//i.test(new URL(u).pathname + "/"));
+  if (es.length >= 10) lista = es;
+  // Si la mayoría de las fichas acaban en .html (PrestaShop, Magento), las demás son categorías o páginas
+  const html = lista.filter(u => /\.html?$/i.test(new URL(u).pathname));
+  if (html.length >= 10) lista = html;
+  // Primero las que parecen fichas de producto
+  const pareceFicha = (u: string) => /\/(p|producto?s?|product)\/|\/\d+-[^/]+\.html$/i.test(new URL(u).pathname) ? 0 : 1;
+  return lista.sort((a, b) => pareceFicha(a) - pareceFicha(b)).slice(0, max);
+}
+
+type NodoLd = Record<string, unknown>;
+const tipos = (n: NodoLd) => ([] as unknown[]).concat(n["@type"] ?? []).map(String);
+function productosLd(html: string): NodoLd[] {
+  const out: NodoLd[] = [];
+  const visitar = (n: unknown) => {
+    if (Array.isArray(n)) { n.forEach(visitar); return; }
+    if (!n || typeof n !== "object") return;
+    const o = n as NodoLd;
+    if (tipos(o).some(t => /^(Product|ProductGroup)$/i.test(t))) out.push(o);
+    if (o["@graph"]) visitar(o["@graph"]);
+  };
+  for (const m of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try { visitar(JSON.parse(m[1].trim())); } catch { /* JSON roto: se ignora */ }
+  }
+  return out;
+}
+const num = (v: unknown) => { const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/\s/g, "").replace(/,(\d{1,2})$/, ".$1")); return Number.isFinite(n) ? n : 0; };
+const atributo = (html: string, re: RegExp) => { const m = html.match(re); return m ? decodificar(m[1]).trim() : ""; };
+
+// El producto de una ficha: nombre, precio (en euros) y EAN. null si la página no es una ficha con precio.
+export function fichaDeProducto(html: string, url: string): SuProducto | null {
+  for (const p of productosLd(html)) {
+    const nombre = decodificar(String(p.name ?? "")).trim();
+    const ofertas = ([] as unknown[]).concat(p.offers ?? [], ...(([] as unknown[]).concat(p.hasVariant ?? []) as NodoLd[]).map(v => v.offers ?? []))
+      .flatMap(o => { const x = o as NodoLd; return tipos(x).includes("AggregateOffer") && x.offers ? ([] as unknown[]).concat(x.offers) : [x]; }) as NodoLd[];
+    const variantes: Variante[] = [];
+    for (const o of ofertas) {
+      const moneda = String(o.priceCurrency ?? (o.priceSpecification as NodoLd | undefined)?.priceCurrency ?? "EUR").toUpperCase();
+      if (moneda !== "EUR") continue;
+      if (/OutOfStock|Discontinued/i.test(String(o.availability ?? ""))) continue;
+      const precio = num(o.price ?? o.lowPrice ?? (o.priceSpecification as NodoLd | undefined)?.price);
+      if (!(precio > 0)) continue;
+      const ean = normalizarEan(String(o.gtin13 ?? o.gtin ?? p.gtin13 ?? p.gtin ?? p.ean ?? "")) ?? eanDeSku(String(o.sku ?? p.sku ?? "")) ?? null;
+      const titulo = ofertas.length > 1 ? decodificar(String(o.name ?? "")).replace(nombre, "").trim() : "";
+      variantes.push({ titulo, precio: Math.round(precio * 100) / 100, ean });
+    }
+    if (nombre && variantes.length) return { titulo: nombre, url, esPack: esPack(nombre), variantes };
+  }
+  // Sin datos estructurados válidos: precio en las etiquetas meta o itemprop
+  const precio = num(atributo(html, /<meta[^>]+property=["']product:price:amount["'][^>]+content=["']([^"']+)/i) || atributo(html, /itemprop=["']price["'][^>]*content=["']([^"']+)/i));
+  const moneda = atributo(html, /<meta[^>]+property=["']product:price:currency["'][^>]+content=["']([^"']+)/i) || "EUR";
+  const nombre = atributo(html, /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)/i) || atributo(html, /<h1[^>]*>([^<]+)</i);
+  if (precio > 0 && nombre && moneda.toUpperCase() === "EUR") {
+    const ean = normalizarEan(atributo(html, /itemprop=["']gtin13["'][^>]*content=["']([^"']+)/i)) ?? null;
+    return { titulo: nombre, url, esPack: esPack(nombre), variantes: [{ titulo: "", precio: Math.round(precio * 100) / 100, ean }] };
+  }
+  return null;
+}
+
+// ¿Se pueden leer sus fichas? Se prueban unas cuantas páginas del sitemap
+export async function sePuedenLeerFichas(web: string): Promise<boolean> {
+  const paginas = (await paginasDelSitemap(web, 400)).slice(0, 24);
+  let ok = false;
+  await enLotes(paginas, 8, async u => { if (ok) return; const h = await texto(u, 10_000); if (h && fichaDeProducto(h, u)) ok = true; });
+  return ok;
+}
+
+async function leerFichas(c: Competidor, limite: number): Promise<SuProducto[]> {
+  const paginas = await paginasDelSitemap(c.web);
+  const out: SuProducto[] = [];
+  const vistos = new Set<string>();
+  await enLotes(paginas, 10, async u => {
+    if (Date.now() > limite - 15_000) return;
+    const h = await texto(u, 12_000);
+    const p = h ? fichaDeProducto(h, u) : null;
+    if (p && !vistos.has(p.titulo + p.variantes.map(v => v.precio).join())) { vistos.add(p.titulo + p.variantes.map(v => v.precio).join()); out.push(p); }
+  });
+  if (!out.length) throw new Error("No he encontrado fichas de producto con precio en su web");
+  return out;
 }

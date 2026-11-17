@@ -397,7 +397,7 @@ function MarcaBloque({ marca, r, enlaces, cupon, revisando, ocupado, expandido, 
             %
             {descuento == null && <span className="cp-suave-txt">sin límite</span>}
           </label>
-          <label className="cp-dto cp-web-oficial" title="La tienda online oficial de la marca (Shopify o WooCommerce): sus precios salen en su propia columna y el informe «Para la marca» compara todo con ellos. Vacía si no tiene" onClick={e => e.stopPropagation()}>
+          <label className="cp-dto cp-web-oficial" title="La tienda online oficial de la marca (Shopify, WooCommerce, PrestaShop, Magento…): sus precios salen en su propia columna y el informe «Para la marca» compara todo con ellos. Vacía si no tiene" onClick={e => e.stopPropagation()}>
             Web oficial
             {fija ? <a href={oficial.web} target="_blank" rel="noreferrer">{oficial.web.replace(/^https?:\/\/(www\.)?/, "")}</a> : (
               <input
