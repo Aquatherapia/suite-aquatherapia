@@ -4,7 +4,7 @@ export type FilaPedido = { id: string; producto: string; propiedad: string; ean:
 /** Compra de un cliente aún sin enviar: «17/11/2026 07:21» y si está pagada */
 export type Compra = { id: string; fecha: string; pagada: boolean; q: number };
 /** relleno: otros productos de la marca con ventas (de menos a más stock) para completar el pedido mínimo si hay algo en negativo */
-export type MarcaPedido = { marca: string; grupos: { stock: number; filas: FilaPedido[] }[]; total: number; relleno: FilaPedido[] };
+export type MarcaPedido = { marca: string; grupos: { stock: number; filas: FilaPedido[]; relleno?: boolean }[]; total: number; relleno: FilaPedido[] };
 export type Resultado = {
   marcas: MarcaPedido[];
   desde: string; hasta: string; pendDesde: string; pedidosPendientes: number; sinEnviarDesde: string; antiguosSinEnviar: number;
@@ -353,7 +353,9 @@ export const ESTADOS_PEDIDO: Record<EstadoPedido, { titulo: string; nota: string
 /** Texto para copiar. Los que ya están pedidos y esperando no salen (no se piden dos veces); los que llegaron mal llevan su nota. */
 export function textoMarca(m: MarcaPedido, estados: Record<string, EstadoPedido | undefined> = {}, conCantidad = false): string {
   const l: string[] = [`${m.marca}\t\t\t\t`];
-  const grupos = m.grupos.map(g => ({ ...g, filas: g.filas.filter(f => estados[f.id] !== "esperando") })).filter(g => g.filas.length);
+  const porStock = new Map<number, FilaPedido[]>();
+  for (const g of [...m.grupos].sort((a, b) => a.stock - b.stock)) porStock.set(g.stock, [...(porStock.get(g.stock) ?? []), ...g.filas]);
+  const grupos = [...porStock].map(([stock, filas]) => ({ stock, filas: filas.filter(f => estados[f.id] !== "esperando") })).filter(g => g.filas.length);
   if (!grupos.length) return "";
   grupos.forEach((g, i) => {
     if (i > 0) l.push("\t\t\t\t\t");

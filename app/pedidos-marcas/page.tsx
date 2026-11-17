@@ -221,7 +221,7 @@ export default function PedidosMarcasPage() {
   // Lo ya pedido (y esperando) pasa a «Sin recibir» y deja de salir aquí. Si vuelve a salir por compras nuevas,
   // se piden solo las unidades nuevas.
   const marcasPend: MarcaPedido[] = useMemo(() => marcas.map(m => {
-    const grupos = m.grupos.map(g => ({ ...g, filas: g.filas.filter(f => estados[f.id] !== "esperando").map(f => {
+    const grupos: MarcaPedido["grupos"] = m.grupos.map(g => ({ ...g, filas: g.filas.filter(f => estados[f.id] !== "esperando").map(f => {
       const e = enPedido[f.id];
       if (!e || e.estado !== "esperando") return f;
       const n = nuevas(f);
@@ -236,12 +236,10 @@ export default function PedidosMarcasPage() {
         if (total >= MIN_PRODUCTOS_MARCA) break;
         if (ya.has(f.id) || enPedido[f.id]?.estado === "esperando") continue;
         ya.add(f.id);
-        const g = grupos.find(x => x.stock === f.stock);
-        const nueva = { ...f, relleno: true };
-        if (g) g.filas.push(nueva); else grupos.push({ stock: f.stock, filas: [nueva] });
+        const g = grupos.find(x => x.relleno && x.stock === f.stock);
+        if (g) g.filas.push(f); else grupos.push({ stock: f.stock, filas: [f], relleno: true });
         total++;
       }
-      grupos.sort((a, b) => a.stock - b.stock);
     }
     return { ...m, grupos, total };
   }).filter(m => m.total > 0),
@@ -312,8 +310,9 @@ export default function PedidosMarcasPage() {
                     <button type="submit" className="vp-revisar-btn" disabled={guardando}>Guardar</button>
                   </form>
                 )}
-                {m.grupos.map(g => (
-                  <div key={g.stock} className="pm-grupo">
+                {m.grupos.map((g, i) => (
+                  <div key={`${g.relleno ? "r" : ""}${g.stock}`} className="pm-grupo">
+                    {g.relleno && !m.grupos[i - 1]?.relleno && <p className="pm-relleno-titulo">Para llegar al pedido mínimo de {MIN_PRODUCTOS_MARCA} productos</p>}
                     <h3 className={g.stock < 0 ? "neg" : ""}>stock {g.stock}</h3>
                     <ul>
                       {g.filas.map(f => (
@@ -330,7 +329,6 @@ export default function PedidosMarcasPage() {
                               ))}
                             </span>
                           )}
-                          {"relleno" in f && <span className="pm-tag pm-relleno">Para llegar al pedido mínimo de {MIN_PRODUCTOS_MARCA}</span>}
                           {f.sinPagar > 0 && <span className="pm-sinpagar">{AVISO_SIN_PAGAR} ({f.sinPagar} ud{f.sinPagar !== 1 ? "s" : ""}.)</span>}
                           {enPedido[f.id] && (
                             <span className={`pm-tag pm-estado-${enPedido[f.id].estado}`}>
