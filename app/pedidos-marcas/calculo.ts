@@ -2,7 +2,7 @@
 
 export type FilaPedido = { id: string; producto: string; propiedad: string; ean: string; stock: number; ventas: number; sinPagar: number; pendientes: number; pedir: number; compras: Compra[] };
 /** Compra de un cliente aún sin enviar: «17/11/2026 07:21» y si está pagada */
-export type Compra = { fecha: string; pagada: boolean };
+export type Compra = { id: string; fecha: string; pagada: boolean; q: number };
 export type MarcaPedido = { marca: string; grupos: { stock: number; filas: FilaPedido[] }[]; total: number };
 export type Resultado = {
   marcas: MarcaPedido[];
@@ -255,7 +255,7 @@ export function cruzar(ventasFilas: string[][], stockFilas: string[][], op: Opci
       pedidosPend.add(limpiar(f[cv.id]));
       if (fe && (!pendDesde || ordenFecha(fe) < ordenFecha(pendDesde))) pendDesde = fe;
     }
-    if (p) { if (!hist) p.ventas += cant * factor; if (sinPagar) p.sinPagar += cant * factor; if (sinEnviar) { p.pendientes += cant * factor; p.compras.set(limpiar(f[cv.id]), { fecha: fe, pagada: !sinPagar }); } if (noEnviado) p.sinEnviarTotal += cant * factor; }
+    if (p) { if (!hist) p.ventas += cant * factor; if (sinPagar) p.sinPagar += cant * factor; if (sinEnviar) { p.pendientes += cant * factor; const idc = limpiar(f[cv.id]); const c = p.compras.get(idc); if (c) c.q += cant * factor; else p.compras.set(idc, { id: idc, fecha: fe, pagada: !sinPagar, q: cant * factor }); } if (noEnviado) p.sinEnviarTotal += cant * factor; }
     else {
       const k = `${ean}|${clave(producto, propiedad)}`;
       const s = sinCruzar.get(k) ?? { marca, producto, propiedad, ean, ventas: 0, pendientes: 0 };

@@ -1988,3 +1988,4 @@ label { color: #3f3f46; font-weight: 500; font-size: 13px; }
 
 .pm-compras { flex-basis: 100%; font-size: 12px; color: var(--muted, #666); }
 .pm-compra-sinpagar { color: #b45309; }
+.pm-nuevas { background: #fef3c7; color: #92400e; }

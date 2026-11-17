@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, lineasParaHistorico, textoMarca, type EstadoPedido, type Historico, type MarcaPedido } from "./calculo";
+import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, lineasParaHistorico, textoMarca, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
 
 type Archivo<T> = { nombre: string; filas: T } | null;
 type Contacto = { email: string; whatsapp: string };
 type Hist = Historico & { ids: string[] };
-type Pedido = { marca: string; fecha: string; estado: EstadoPedido; productos: { id: string; producto: string; propiedad: string; ean: string }[] };
+type Pedido = { marca: string; fecha: string; estado: EstadoPedido; productos: { id: string; producto: string; propiedad: string; ean: string; compras?: string[] }[] };
 
 const miles = (n: number) => n.toLocaleString("es-ES");
 const diaTxt = (d: string) => d ? `${d.slice(6, 8)}/${d.slice(4, 6)}/${d.slice(0, 4)}` : "—";
@@ -128,11 +128,15 @@ export default function PedidosMarcasPage() {
 
   // Cada producto que está en un pedido abierto, con el estado de ese pedido y su fecha
   const enPedido = useMemo(() => {
-    const m: Record<string, { estado: EstadoPedido; fecha: string }> = {};
-    for (const p of Object.values(pedidos ?? {})) for (const x of p.productos) m[x.id] = { estado: p.estado, fecha: p.fecha };
+  // y las compras de clientes que ya cubre (null: pedido antiguo, sin compras apuntadas, que lo cubre todo)
+    const m: Record<string, { estado: EstadoPedido; fecha: string; compras: Set<string> | null }> = {};
+    for (const p of Object.values(pedidos ?? {}).sort((a, b) => a.fecha.localeCompare(b.fecha))) for (const x of p.productos) {
+      const antes = m[x.id];
+      const compras = !x.compras || (antes && antes.compras === null) ? null : new Set([...(antes?.compras ?? []), ...x.compras]);
+      m[x.id] = { estado: p.estado, fecha: p.fecha, compras };
+    }
     return m;
   }, [pedidos]);
-  const estados = useMemo(() => Object.fromEntries(Object.entries(enPedido).map(([k, v]) => [k, v.estado])) as Record<string, EstadoPedido>, [enPedido]);
   const seguidos = useMemo(() => new Set(Object.keys(enPedido)), [enPedido]);
 
   async function cargar(files: FileList | File[] | null) {
@@ -169,6 +173,33 @@ export default function PedidosMarcasPage() {
     const q = buscar.trim().toLowerCase();
     return q ? resultado.marcas.filter(m => m.marca.includes(q)) : resultado.marcas;
   }, [resultado, buscar]);
+
+  // Compras de clientes que han llegado después de pedir el producto a la marca: el producto vuelve a salir para pedirlo
+  const nuevas = (f: FilaPedido): Compra[] => {
+    const e = enPedido[f.id];
+    if (!e) return f.compras;
+    return e.compras === null ? [] : f.compras.filter(c => !e.compras!.has(c.id));
+  };
+  // Estado de cada producto a la vista: «esperando» solo si el pedido cubre todas sus compras pendientes
+  const estados = useMemo(() => {
+    const out: Record<string, EstadoPedido> = {};
+    for (const m of marcas) for (const g of m.grupos) for (const f of g.filas) {
+      const e = enPedido[f.id];
+      if (e && !(e.estado === "esperando" && nuevas(f).length)) out[f.id] = e.estado;
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marcas, enPedido]);
+  // Si ya se pidió y vuelve a salir por compras nuevas, se piden solo las unidades nuevas
+  const marcasVista: MarcaPedido[] = useMemo(() => marcas.map(m => ({ ...m, grupos: m.grupos.map(g => ({ ...g, filas: g.filas.map(f => {
+    const e = enPedido[f.id];
+    if (!e || e.estado !== "esperando") return f;
+    const n = nuevas(f);
+    return n.length ? { ...f, pedir: Math.max(1, Math.ceil(n.reduce((t, c) => t + c.q, 0))) } : f;
+  }) })) })),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [marcas, enPedido]);
+  const aPedido = (f: FilaPedido) => ({ id: f.id, producto: f.producto, propiedad: f.propiedad, ean: f.ean, compras: f.compras.map(c => c.id) });
 
   async function copiarTexto(id: string, texto: string) {
     if (await copiar(texto)) { setCopiado(id); setTimeout(() => setCopiado(c => (c === id ? "" : c)), 2000); }
@@ -307,7 +338,7 @@ export default function PedidosMarcasPage() {
             </label>
             <input type="search" placeholder="Buscar marca…" value={buscar} onChange={e => setBuscar(e.target.value)} />
             <button className="vp-revisar-btn pm-todo" disabled={!marcas.length}
-              onClick={() => copiarTexto("*", marcas.map(m => textoMarca(m, estados, conCantidad)).filter(Boolean).join("\n\n"))}>
+              onClick={() => copiarTexto("*", marcasVista.map(m => textoMarca(m, estados, conCantidad)).filter(Boolean).join("\n\n"))}>
               {copiado === "*" ? "Copiado ✓" : "Copiar todas"}
             </button>
           </div>
@@ -315,7 +346,7 @@ export default function PedidosMarcasPage() {
           {r.marcas.length === 0 && <p className="rf-suave">{soloSinEnviar ? "En los pedidos sin enviar no hay nada que esté sin stock." : "No hay nada vendido en este periodo que esté sin stock."}</p>}
 
           <div className="pm-marcas">
-            {marcas.map(m => (
+            {marcasVista.map(m => (
               <section key={m.marca} className="pm-marca">
                 <div className="pm-cab">
                   <h2>{m.marca}</h2>
@@ -326,7 +357,7 @@ export default function PedidosMarcasPage() {
                     return <>
                       {sinPedir.length > 0 && pedidos && (
                         <button className="regen-btn" disabled={guardando} title="Apunta el pedido a esta marca para seguirlo hasta que llegue"
-                          onClick={() => enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(f => ({ id: f.id, producto: f.producto, propiedad: f.propiedad, ean: f.ean })) })}>
+                          onClick={() => enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(aPedido) })}>
                           Marcar como pedido
                         </button>
                       )}
@@ -335,7 +366,7 @@ export default function PedidosMarcasPage() {
                       </button>
                       {texto && (contactos[m.marca]?.email || contactos[m.marca]?.whatsapp) ? (() => {
                         const c = contactos[m.marca];
-                        const marcar = () => { if (sinPedir.length) enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(f => ({ id: f.id, producto: f.producto, propiedad: f.propiedad, ean: f.ean })) }); };
+                        const marcar = () => { if (sinPedir.length) enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(aPedido) }); };
                         const asunto = `Pedido La Tienda de Cosméticos ${new Date().toLocaleDateString("es-ES")}`;
                         return <>
                           {c.email && <a className="copy-btn pm-enviar" href={`mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`} onClick={marcar}>Email</a>}
@@ -382,6 +413,11 @@ export default function PedidosMarcasPage() {
                           {enPedido[f.id] && (
                             <span className={`pm-tag pm-estado-${enPedido[f.id].estado}`}>
                               {enPedido[f.id].estado === "esperando" ? "Pedido" : ESTADOS_PEDIDO[enPedido[f.id].estado].titulo} el {diaHora(enPedido[f.id].fecha)}
+                            </span>
+                          )}
+                          {enPedido[f.id]?.estado === "esperando" && nuevas(f).length > 0 && (
+                            <span className="pm-tag pm-nuevas">
+                              {nuevas(f).length === 1 ? "1 compra nueva" : `${nuevas(f).length} compras nuevas`} después del pedido: hay que pedir{nuevas(f).length === 1 ? "la" : "las"}
                             </span>
                           )}
                         </li>
