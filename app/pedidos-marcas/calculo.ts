@@ -101,7 +101,7 @@ export function unidadesPack(propiedad: string): number {
 
 // Número AAAAMMDDhhmm → Date (UTC, solo para restar días)
 const aFecha = (n: number) => { const t = String(n).padEnd(12, "0"); return Date.UTC(+t.slice(0, 4), +t.slice(4, 6) - 1, +t.slice(6, 8), +t.slice(8, 10), +t.slice(10, 12)); };
-const diaMenos = (dia: string, dias: number) => new Date(aFecha(Number(dia + "0000")) - dias * 864e5).toISOString().slice(0, 10).replace(/-/g, "");
+export const diaMenos = (dia: string, dias: number) => new Date(aFecha(Number(dia + "0000")) - dias * 864e5).toISOString().slice(0, 10).replace(/-/g, "");
 const diaTxt = (dia: string) => dia ? `${dia.slice(6, 8)}/${dia.slice(4, 6)}/${dia.slice(0, 4)}` : "";
 
 /**
