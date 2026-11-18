@@ -2,17 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, ordenFecha, recortarStock, recortarVentas, lineasParaHistorico, textoMarca, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
+import { AVISO_SIN_PAGAR, DIAS_HISTORICO, DIAS_SIN_PAGAR, ESTADOS_PEDIDO, cruzar, leerCsv, ordenFecha, recortarStock, recortarVentas, lineasParaHistorico, textoMarca, diaMenos, type Compra, type EstadoPedido, type FilaPedido, type Historico, type MarcaPedido } from "./calculo";
 import { leerXls } from "./leer-xls";
 
 // Pedido mínimo a una marca: productos que tiene que juntar para salir en la lista
 const MIN_PRODUCTOS_MARCA = 5;
+/** En las marcas que se piden, lo de stock 1 que se vende bien (estas ventas o más en 6 meses) se añade aunque ya se llegue al mínimo */
+const VENTAS_ANADIR_STOCK1 = 5;
+const TEXTO_MUESTRAS = "Si es posible, enviadnos también muestras. ¡Gracias!";
+// Fecha ISO → AAAAMMDDhhmm en hora de Madrid, como «ordenFecha»
+const numMadrid = (iso: string) => Number(new Date(iso).toLocaleString("sv-SE", { timeZone: "Europe/Madrid" }).slice(0, 16).replace(/\D/g, ""));
 import { Segmentos } from "../_google/ui";
 
 type Archivo<T> = { nombre: string; filas: T } | null;
 type Contacto = { email: string; whatsapp: string };
 type Hist = Historico & { ids: string[] };
-type Pedido = { marca: string; fecha: string; estado: EstadoPedido; productos: { id: string; producto: string; propiedad: string; ean: string; compras?: string[]; stock?: number; ventas?: number; pedir?: number }[]; hasta?: number };
+type Pedido = { marca: string; fecha: string; estado: EstadoPedido; muestras?: boolean; productos: { id: string; producto: string; propiedad: string; ean: string; compras?: string[]; stock?: number; ventas?: number; pedir?: number }[]; hasta?: number };
 
 const miles = (n: number) => n.toLocaleString("es-ES");
 const diaTxt = (d: string) => d ? `${d.slice(6, 8)}/${d.slice(4, 6)}/${d.slice(0, 4)}` : "—";
@@ -73,6 +78,8 @@ export default function PedidosMarcasPage() {
   const [cobertura, setCobertura] = usePref("cobertura", 14);
   const [conCantidad, setConCantidad] = usePref("con-cantidad", true);
   const [diasAviso, setDiasAviso] = usePref("dias-aviso", 7);
+  const [muestras, setMuestras] = useState<Record<string, boolean>>({});
+  const [histMarca, setHistMarca] = useState("");
 
   useEffect(() => {
     fetch("/api/pedidos-marcas", { cache: "no-store" }).then(r => r.json()).then(v => {
@@ -138,15 +145,15 @@ export default function PedidosMarcasPage() {
 
   // Cada producto que está en un pedido abierto, con el estado de ese pedido y su fecha
   const enPedido = useMemo(() => {
-  // y las compras de clientes que ya cubre: por ID (marcado en la Suite), por hora (pedido pegado de WhatsApp: las de
-  // hasta esa hora) o todas (pedido antiguo, sin compras apuntadas)
-    const m: Record<string, { estado: EstadoPedido; fecha: string; ids: Set<string>; hasta: number; todo: boolean }> = {};
+  // y las compras de clientes que ya cubre: por ID (marcado en la Suite) o por hora (pedido pegado de WhatsApp, o pedido
+  // antiguo sin compras apuntadas: las de hasta la hora del pedido; las que llegan después vuelven a salir)
+    const m: Record<string, { estado: EstadoPedido; fecha: string; ids: Set<string>; hasta: number }> = {};
     for (const p of Object.values(pedidos ?? {}).sort((a, b) => a.fecha.localeCompare(b.fecha))) for (const x of p.productos) {
-      const e = m[x.id] ?? { estado: p.estado, fecha: p.fecha, ids: new Set<string>(), hasta: 0, todo: false };
+      const e = m[x.id] ?? { estado: p.estado, fecha: p.fecha, ids: new Set<string>(), hasta: 0 };
       e.estado = p.estado; e.fecha = p.fecha;
       if (p.hasta) e.hasta = Math.max(e.hasta, p.hasta);
       else if (x.compras) x.compras.forEach(c => e.ids.add(c));
-      else e.todo = true;
+      else e.hasta = Math.max(e.hasta, numMadrid(p.fecha));
       m[x.id] = e;
     }
     return m;
@@ -206,7 +213,7 @@ export default function PedidosMarcasPage() {
   const nuevas = (f: FilaPedido): Compra[] => {
     const e = enPedido[f.id];
     if (!e) return f.compras;
-    return e.todo ? [] : f.compras.filter(c => !e.ids.has(c.id) && !(e.hasta && ordenFecha(c.fecha) <= e.hasta));
+    return f.compras.filter(c => !e.ids.has(c.id) && !(e.hasta && ordenFecha(c.fecha) <= e.hasta));
   };
   // Estado de cada producto a la vista: «esperando» solo si el pedido cubre todas sus compras pendientes
   const estados = useMemo(() => {
@@ -230,20 +237,28 @@ export default function PedidosMarcasPage() {
     let total = grupos.reduce((t, g) => t + g.filas.length, 0);
     // Si hay algo en negativo, el pedido se hace sí o sí: se completa hasta el mínimo con otros productos de la marca
     // que tienen ventas, de menos a más stock (2, 3, 4…)
-    if (total > 0 && total < MIN_PRODUCTOS_MARCA && grupos.some(g => g.stock < 0)) {
-      const ya = new Set(grupos.flatMap(g => g.filas.map(f => f.id)));
+    const ya = new Set(grupos.flatMap(g => g.filas.map(f => f.id)));
+    const anadir = (f: FilaPedido) => {
+      ya.add(f.id);
+      // Lo de stock 1 es un pedido normal: va con el resto de stock 1. Solo lo de stock 2 o más lleva el título del mínimo
+      const relleno = f.stock >= 2;
+      const g = grupos.find(x => !!x.relleno === relleno && x.stock === f.stock);
+      if (g) g.filas.push(f); else grupos.push(relleno ? { stock: f.stock, filas: [f], relleno } : { stock: f.stock, filas: [f] });
+      total++;
+    };
+    const libre = (f: FilaPedido) => !ya.has(f.id) && enPedido[f.id]?.estado !== "esperando";
+    const negativo = grupos.some(g => g.stock < 0);
+    if (total > 0 && total < MIN_PRODUCTOS_MARCA && negativo) {
       for (const f of m.relleno) {
         if (total >= MIN_PRODUCTOS_MARCA) break;
-        if (ya.has(f.id) || enPedido[f.id]?.estado === "esperando") continue;
-        ya.add(f.id);
-        // Lo de stock 1 es un pedido normal: va con el resto de stock 1. Solo lo de stock 2 o más lleva el título del mínimo
-        const relleno = f.stock >= 2;
-        const g = grupos.find(x => !!x.relleno === relleno && x.stock === f.stock);
-        if (g) g.filas.push(f); else grupos.push(relleno ? { stock: f.stock, filas: [f], relleno } : { stock: f.stock, filas: [f] });
-        total++;
+        if (libre(f)) anadir(f);
       }
-      grupos.sort((a, b) => Number(!!a.relleno) - Number(!!b.relleno) || a.stock - b.stock);
     }
+    // Si la marca se pide, se aprovecha para reponer lo de stock 1 que se vende bien (no siempre sabemos el pedido mínimo)
+    if (total >= MIN_PRODUCTOS_MARCA || (total > 0 && negativo)) {
+      for (const f of m.relleno) if (f.stock === 1 && f.ventas >= VENTAS_ANADIR_STOCK1 && libre(f)) anadir(f);
+    }
+    grupos.sort((a, b) => Number(!!a.relleno) - Number(!!b.relleno) || a.stock - b.stock);
     return { ...m, grupos, total };
   }).filter(m => m.total > 0),
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -265,8 +280,48 @@ export default function PedidosMarcasPage() {
     else setError("No se pudo copiar. Selecciona el texto y cópialo a mano.");
   }
 
+  // Histórico: unidades por marca y productos más vendidos de los últimos 6 meses
+  const histResumen = useMemo(() => {
+    if (!hist || !hist.pedidos) return null;
+    const desde = diaMenos(hist.hasta, DIAS_HISTORICO);
+    const marcasH = new Map<string, { uds: number; productos: number }>();
+    const prods: { n: string; p: string; e: string; m: string; uds: number }[] = [];
+    for (const x of Object.values(hist.productos)) {
+      let uds = 0;
+      for (const [dia, n] of Object.entries(x.d)) if (dia > desde && dia <= hist.hasta) uds += n;
+      if (uds <= 0) continue;
+      const mk = x.m.trim().toLowerCase();
+      const a = marcasH.get(mk) ?? { uds: 0, productos: 0 };
+      a.uds += uds; a.productos++;
+      marcasH.set(mk, a);
+      prods.push({ n: x.n, p: x.p, e: x.e, m: mk, uds });
+    }
+    const total = [...marcasH.values()].reduce((t, a) => t + a.uds, 0);
+    return {
+      desde, total,
+      marcas: [...marcasH].map(([marca, a]) => ({ marca, ...a })).sort((a, b) => b.uds - a.uds),
+      productos: prods.sort((a, b) => b.uds - a.uds),
+    };
+  }, [hist]);
+
+  // Primera compra del informe de ventas subido: las compras sin enviar de antes no están en él
+  const informeDesde = useMemo(() => {
+    if (!ventas) return "";
+    const ih = ventas.filas.findIndex(f => f.some(c => c.trim().toLowerCase() === "fecha"));
+    if (ih < 0) return "";
+    const cf = ventas.filas[ih].findIndex(c => c.trim().toLowerCase() === "fecha");
+    let min = "", minN = Infinity;
+    for (const f of ventas.filas.slice(ih + 1)) { const n = ordenFecha(f[cf] ?? ""); if (n && n < minN) { minN = n; min = f[cf]; } }
+    return min;
+  }, [ventas]);
+
   const r = resultado && !("error" in resultado) ? resultado : null;
   const lineas = marcasPend.reduce((n, m) => n + m.total, 0);
+
+  const textoPedido = (m: MarcaPedido) => {
+    const t = textoMarca(m, estados, conCantidad);
+    return t && muestras[m.marca] ? `${t}\n\n${TEXTO_MUESTRAS}` : t;
+  };
 
   const tarjeta = (m: MarcaPedido) => (
               <section key={m.marca} className="pm-marca">
@@ -274,21 +329,26 @@ export default function PedidosMarcasPage() {
                   <h2>{m.marca}</h2>
                   <span className="rf-suave">{m.total} producto{m.total !== 1 ? "s" : ""}</span>
                   {(() => {
-                    const texto = textoMarca(m, estados, conCantidad);
+                    const texto = textoPedido(m);
                     const sinPedir = m.grupos.flatMap(g => g.filas).filter(f => !estados[f.id]);
                     return <>
                       {sinPedir.length > 0 && pedidos && (
                         <button className="regen-btn" disabled={guardando} title="Apunta el pedido a esta marca para seguirlo hasta que llegue"
-                          onClick={() => enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(aPedido) })}>
+                          onClick={() => enviar({ accion: "crear", marca: m.marca, muestras: !!muestras[m.marca], productos: sinPedir.map(aPedido) })}>
                           Marcar como pedido
                         </button>
+                      )}
+                      {sinPedir.length > 0 && (
+                        <label className="rf-check pm-muestras" title="Añade al pedido una línea pidiendo muestras">
+                          <input type="checkbox" checked={!!muestras[m.marca]} onChange={e => setMuestras(x => ({ ...x, [m.marca]: e.target.checked }))} /> Pedir muestras
+                        </label>
                       )}
                       <button className="copy-btn" disabled={!texto} onClick={() => copiarTexto(m.marca, texto)}>
                         {copiado === m.marca ? "Copiado ✓" : texto ? "Copiar" : "Todo pedido"}
                       </button>
                       {texto && (contactos[m.marca]?.email || contactos[m.marca]?.whatsapp) ? (() => {
                         const c = contactos[m.marca];
-                        const marcar = () => { if (sinPedir.length) enviar({ accion: "crear", marca: m.marca, productos: sinPedir.map(aPedido) }); };
+                        const marcar = () => { if (sinPedir.length) enviar({ accion: "crear", marca: m.marca, muestras: !!muestras[m.marca], productos: sinPedir.map(aPedido) }); };
                         const asunto = `Pedido La Tienda de Cosméticos ${new Date().toLocaleDateString("es-ES")}`;
                         return <>
                           {c.email && <a className="copy-btn pm-enviar" href={`mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`} onClick={marcar}>Email</a>}
@@ -396,6 +456,7 @@ export default function PedidosMarcasPage() {
               <li key={id}>
                 <div className="pm-pedido-cab">
                   <b>{p.marca}</b>
+                  {p.muestras && <span className="pm-badge">con muestras</span>}
                   <span className={diasDesde(p.fecha) > diasAviso ? "pm-tarde" : "rf-suave"}>pedido el {diaHora(p.fecha)}{diasDesde(p.fecha) > diasAviso ? ` · lleva ${diasDesde(p.fecha)} días: reclámalo` : ""}</span>
                   <select className={`rc-select pm-estado pm-estado-${p.estado}`} value={p.estado} disabled={guardando}
                     onChange={e => enviar({ accion: "estado", id, estado: e.target.value })} aria-label={`Estado del pedido a ${p.marca}`}>
@@ -424,7 +485,7 @@ export default function PedidosMarcasPage() {
         </section>
       )}
 
-      {pestana === "historico" && (
+      {pestana === "historico" && (<>
         <div className="pm-hist">
         {hist === undefined && <span className="rf-suave">Leyendo el histórico de ventas…</span>}
         {hist && hist.pedidos > 0 && (
@@ -441,8 +502,37 @@ export default function PedidosMarcasPage() {
           </span>
         )}
       </div>
-
+      {histResumen && (
+        <div className="pm-hist-res">
+          <section className="pm-hist-col">
+            <h2 className="pm-seg-titulo">Ventas por marca</h2>
+            <p className="rf-suave">Unidades vendidas del {diaTxt(histResumen.desde)} al {diaTxt(hist!.hasta)}. Toca una marca para ver sus productos más vendidos.</p>
+            <table className="pm-hist-tabla">
+              <thead><tr><th>Marca</th><th>Uds.</th><th>%</th><th>Productos</th></tr></thead>
+              <tbody>{histResumen.marcas.map(x => (
+                <tr key={x.marca} className={histMarca === x.marca ? "pm-hist-sel" : ""} onClick={() => setHistMarca(histMarca === x.marca ? "" : x.marca)}>
+                  <td>{x.marca}</td><td>{miles(x.uds)}</td><td>{(x.uds / histResumen.total * 100).toLocaleString("es-ES", { maximumFractionDigits: 1 })}</td><td>{miles(x.productos)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </section>
+          <section className="pm-hist-col">
+            <h2 className="pm-seg-titulo">
+              Productos más vendidos{histMarca ? ` de ${histMarca}` : ""}
+              {histMarca && <button className="regen-btn" onClick={() => setHistMarca("")}>Ver todas las marcas</button>}
+            </h2>
+            <table className="pm-hist-tabla">
+              <thead><tr><th>#</th><th>Producto</th>{!histMarca && <th>Marca</th>}<th>Uds.</th></tr></thead>
+              <tbody>{histResumen.productos.filter(x => !histMarca || x.m === histMarca).slice(0, 50).map((x, i) => (
+                <tr key={`${x.e}|${x.n}|${x.p}`}>
+                  <td>{i + 1}</td><td>{x.n}<span className="rf-suave"> · {x.p}</span></td>{!histMarca && <td>{x.m}</td>}<td>{miles(x.uds)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </section>
+        </div>
       )}
+      </>)}
 
       {pestana === "pedir" && <>
       <label
@@ -474,7 +564,8 @@ export default function PedidosMarcasPage() {
           <p className="rf-suave pm-periodo">
             {soloSinEnviar
               ? <>Salen los productos de los pedidos que aún no se han enviado. El número de «-ventas» es lo vendido del <b>{r.desde || "—"}</b> al <b>{r.hasta || "—"}</b> ({miles(r.unidades)} uds.{r.usaHistorico ? ", del histórico guardado" : `, de este informe: cuanto más largo, más real`}).
-                {r.antiguosSinEnviar > 0 && <> Hay {miles(r.antiguosSinEnviar)} pedidos sin enviar de antes del {r.sinEnviarDesde.split("-").reverse().join("/")} que no entran (suelen ser compras atascadas): cambia la fecha si quieres incluirlos.</>}</>
+                {r.antiguosSinEnviar > 0 && <> Hay {miles(r.antiguosSinEnviar)} pedidos sin enviar de antes del {r.sinEnviarDesde.split("-").reverse().join("/")} que no entran (suelen ser compras atascadas): cambia la fecha si quieres incluirlos.</>}
+                {informeDesde && <> El informe de ventas subido empieza el <b>{fechaCorta(informeDesde)}</b>: si falta una compra sin enviar más antigua, descarga el informe desde su fecha.</>}</>
               : <>Salen todos los productos vendidos del <b>{r.desde || "—"}</b> al <b>{r.hasta || "—"}</b> ({miles(r.unidades)} uds. en {miles(r.pedidos)} pedidos).</>}
             {r.anulados > 0 && <> No cuento {miles(r.anulados)} líneas canceladas o devueltas.</>}
           </p>
@@ -504,7 +595,7 @@ export default function PedidosMarcasPage() {
             </label>
             <input type="search" placeholder="Buscar marca…" value={buscar} onChange={e => setBuscar(e.target.value)} />
             <button className="vp-revisar-btn pm-todo" disabled={!listas.length}
-              onClick={() => copiarTexto("*", listas.map(m => textoMarca(m, estados, conCantidad)).filter(Boolean).join("\n\n"))}>
+              onClick={() => copiarTexto("*", listas.map(m => textoPedido(m)).filter(Boolean).join("\n\n"))}>
               {copiado === "*" ? "Copiado ✓" : "Copiar todas"}
             </button>
           </div>
