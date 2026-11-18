@@ -2013,7 +2013,6 @@ label { color: #3f3f46; font-weight: 500; font-size: 13px; }
 .pm-hist-tabla th { text-align: left; font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--border); }
 .pm-hist-tabla td { padding: 4px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .pm-hist-tabla td:not(:nth-child(2)), .pm-hist-tabla th:not(:nth-child(2)) { white-space: nowrap; }
-.pm-hist-tabla tbody tr { cursor: default; }
 .pm-hist-col:first-child .pm-hist-tabla tbody tr { cursor: pointer; }
 .pm-hist-col:first-child .pm-hist-tabla tbody tr:hover, .pm-hist-sel { background: var(--hover, rgba(127,127,127,.08)); }
 .pm-hist-sel td { font-weight: 600; }
