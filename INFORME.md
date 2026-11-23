@@ -506,7 +506,7 @@ Cada mañana (Vercel Cron, 5:00 UTC, ver `vercel.json`) o con el botón **«Revi
 - Desde la segunda revisión completa, lo que aparece por primera vez lleva la etiqueta **Nuevo** y hay un filtro «Solo los nuevos».
 - **Excel**: una hoja con grupo, problema, marca, producto, detalle, si es nuevo y el enlace a la ficha (lo que se ve con el filtro puesto).
 - Se guarda en KV con la clave `revisar-fichas` (en local, `data/revisar-fichas.json`).
-- **Seguridad**: `/api/cron/revisar-fichas` solo acepta a Vercel Cron con `CRON_SECRET` o a la propia app con la clave de la web. **Sin `CRON_SECRET` en Vercel, la revisión de la mañana no arranca** (el botón sí funciona).
+- **Seguridad**: `/api/cron/revisar-fichas` solo acepta a Vercel Cron con `CRON_SECRET` o a la propia app con un token interno firmado (`x-interno`, 15 min). **Sin `CRON_SECRET` en Vercel, la revisión de la mañana no arranca** (el botón sí funciona). Ver «Acceso y seguridad».
 - En local, para que el servidor salga a internet a través de un proxy: `NODE_USE_ENV_PROXY=1 npm run dev`.
 
 ---
@@ -635,3 +635,15 @@ La home usa `export const dynamic = "force-dynamic"` para leer Upstash en cada v
 2. **Marcas guardadas** — Presets con Nombre/Línea/Marca precargados
 3. **Alt text para imágenes** — Generar texto alternativo SEO para fotos del producto
 4. **Programar revisiones automáticas** — Vercel Cron gratuito (dejado sin montar a propósito)
+
+---
+
+## Acceso y seguridad (23/11/2026)
+
+- **Usuarios** (un usuario por persona): se entra con usuario y contraseña. La lista está en KV (`suite-usuarios`, `lib/usuarios.ts`; en local `data/usuarios.json`), con la contraseña cifrada con scrypt. Roles: «admin» (entra en **Administración**, `/admin`) y «equipo». Cada uno cambia su contraseña en **Mi cuenta** (`/cuenta`); «Salir» abajo del menú.
+- **Primera vez**: mientras no haya ningún usuario, se entra con el usuario `admin` y la clave de siempre (`SITE_PASSWORD`). Al crear el primer usuario (siempre administrador) esa entrada deja de funcionar. Tiene que quedar siempre al menos un administrador activo.
+- **Sesión**: la cookie `suite_auth` guarda un **token firmado** (HMAC-SHA256, 30 días) con el usuario y una versión, no la contraseña (`lib/acceso.ts`). Cambiar la contraseña, el rol o dar de baja sube la versión y cierra sus sesiones (en menos de 20 s: el middleware guarda la lista 20 s). La clave de firma es `SESSION_SECRET` o, si no existe, `SITE_PASSWORD` + `KV_REST_API_TOKEN`.
+- **Registro de actividad** (`lib/actividad.ts`, KV `suite-actividad`, últimos 3.000): el middleware apunta cada POST/PUT/PATCH/DELETE a `/api/` con usuario, herramienta y la acción (`action`/`accion`, `slug`, `marca`, `id`, `estado`…; nunca textos ni datos de clientes). También entrar, salir, Mi cuenta y Administración. Se ve en Administración → Actividad. Las rutas reciben quién es en `x-suite-usuario`, `x-suite-rol` y `x-suite-nombre` (`quien(req)`); las que lleguen de fuera se borran.
+- **Límite de intentos** (`lib/intentos.ts`): 5 fallos desde la misma IP bloquean el login 15 minutos (contador en KV, clave `login-fallos:<ip>`; en local, en memoria). Cada fallo además tarda casi 1 s.
+- **Vuelta tras entrar**: `next` solo acepta rutas de la propia web (`rutaInterna`); cualquier otra cosa lleva a la portada.
+- **Rutas `/api/cron/`**: solo con `Authorization: Bearer CRON_SECRET` (Vercel Cron) o con el token interno que pone la propia app al encadenar pasos. Ya no vale el user-agent `vercel-cron/` ni la contraseña en `x-clave`. **`CRON_SECRET` tiene que estar en Vercel** (Settings → Environment Variables) para que arranque la revisión de las 5:00.
