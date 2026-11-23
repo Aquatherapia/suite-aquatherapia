@@ -31,6 +31,20 @@ export async function POST(req: NextRequest) {
   const u = usuarios[id];
   let detalle = "";
 
+  if (body.accion === "cerrar-sesiones") {
+    // Todos (yo también) tienen que volver a entrar; a mí me renuevo la sesión para no echarme
+    if (arranque) return error("Primero crea el usuario administrador: al hacerlo se cierra la entrada de arranque.");
+    for (const x of Object.values(usuarios)) x.version += 1;
+    await guardarUsuarios(usuarios);
+    await registrar({ u: yo.usuario, n: yo.nombre, que: "Administración", det: "cerró todas las sesiones abiertas" });
+    const res = NextResponse.json({ ok: true, usuarios: lista(usuarios) });
+    const n = usuarios[yo.usuario];
+    if (n) res.cookies.set(COOKIE_SESION, await crearToken("sesion", DURACION_SESION, { u: n.usuario, v: n.version, r: n.rol, n: n.nombre }), {
+      httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: DURACION_SESION,
+    });
+    return res;
+  }
+
   if (body.accion === "crear") {
     const nombre = (body.nombre ?? "").trim();
     const rol: Rol = arranque ? "admin" : body.rol === "admin" ? "admin" : "equipo";

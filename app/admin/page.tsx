@@ -90,6 +90,18 @@ function Usuarios() {
         ))}
       </div>
 
+      {!arranque && usuarios && (
+        <div className="card adm-usuario">
+          <b>Cerrar todas las sesiones</b>
+          <div className="adm-gris">Todos los navegadores y móviles donde alguien tenga la Suite abierta tendrán que volver a entrar con usuario y contraseña. Tú sigues dentro en este.</div>
+          <div className="adm-fila">
+            <button className="regen-btn" disabled={ocupado} onClick={() => { if (window.confirm("¿Cerrar las sesiones de todos en todos los dispositivos?")) hacer({ accion: "cerrar-sesiones" }, "Sesiones cerradas: los demás tendrán que volver a entrar (en menos de 20 segundos)."); }}>
+              Cerrar todas las sesiones
+            </button>
+          </div>
+        </div>
+      )}
+
       <form className="card adm-nuevo" onSubmit={crear}>
         <h2>{arranque ? "Crear el usuario administrador" : "Dar de alta a una persona"}</h2>
         <label>Nombre</label>
