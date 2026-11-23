@@ -21,6 +21,7 @@ export type Pasada = {
   hechas: number;  // fichas ya abiertas
   sinComprobar?: number; // fichas que no respondieron: se deja lo que salió la vez anterior
   error?: string;
+  fallo?: string; // un paso falló a medias (la pasada se puede retomar)
 };
 
 export type Estado = {
@@ -35,6 +36,9 @@ export type Estado = {
   // a partir de la segunda: en la primera todo sería nuevo)
   completas?: number;
   nuevosDesde?: string;
+  // Copia de la última pasada que lanzó Vercel Cron, para saber si la de la mañana fue bien
+  // aunque luego se haya hecho otra a mano
+  ultimaCron?: Pasada;
 };
 
 export const claveProblema = (p: Problema) => `${p.tipo}|${p.url}|${p.nombre}`;
@@ -79,3 +83,83 @@ export const GRUPOS: { nombre: string; tipos: { tipo: Tipo; titulo: string; ayud
 export const HACER: Record<Tipo, string> = Object.fromEntries(GRUPOS.flatMap(g => g.tipos.map(t => [t.tipo, t.hacer]))) as Record<Tipo, string>;
 
 export const TITULO: Record<Tipo, string> = Object.fromEntries(GRUPOS.flatMap(g => g.tipos.map(t => [t.tipo, t.titulo]))) as Record<Tipo, string>;
+
+// ── Aviso de la revisión de la mañana ──────────────────────────────────
+// Vercel Cron la lanza a las 05:00 UTC (vercel.json): las 6:00 en invierno y las 7:00 en verano en España.
+// Si no arranca, falla o se corta, nadie se entera hasta abrir la página: este aviso sale en la portada
+// y en «Revisar fichas».
+export const HORA_CRON_UTC = 5;
+// Margen para dar por hecho que la revisión de hoy ya debería haber empezado
+const MARGEN_ARRANQUE_MS = 20 * 60_000;
+// Por encima de esta parte de fichas sin respuesta, la revisión cuenta como incompleta
+const SIN_RESPUESTA_MAX = 0.05;
+
+export type Aviso = { tono: "verde" | "ambar" | "rojo" | "gris"; titulo: string; detalle?: string };
+
+const ZONA = "Europe/Madrid";
+const diaMadrid = (d: Date) => d.toLocaleDateString("es-ES", { timeZone: ZONA });
+const horaMadrid = (d: Date) => d.toLocaleTimeString("es-ES", { timeZone: ZONA, hour: "numeric", minute: "2-digit" });
+
+// «hoy 6:00», «ayer 6:00» o «21/11 6:00»
+export function cuando(iso: string, ahora = new Date()): string {
+  const d = new Date(iso);
+  const ayer = new Date(ahora.getTime() - 86_400_000);
+  const dia = diaMadrid(d) === diaMadrid(ahora) ? "hoy"
+    : diaMadrid(d) === diaMadrid(ayer) ? "ayer"
+    : d.toLocaleDateString("es-ES", { timeZone: ZONA, day: "numeric", month: "numeric" });
+  return `${dia} ${horaMadrid(d)}`;
+}
+
+// Cuándo tendría que haber empezado la última revisión de la mañana
+export function cronEsperado(ahora = new Date()): Date {
+  const d = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate(), HORA_CRON_UTC));
+  if (ahora.getTime() < d.getTime() + MARGEN_ARRANQUE_MS) d.setUTCDate(d.getUTCDate() - 1);
+  return d;
+}
+
+const miles = (n: number) => n.toLocaleString("es-ES");
+
+export function avisoRevision(e: Pick<Estado, "pasada" | "ultimaCron">, enCurso: boolean, ahora = new Date()): Aviso {
+  const c = e.ultimaCron ?? (e.pasada?.origen === "cron" ? e.pasada : undefined);
+  const esperado = cronEsperado(ahora);
+  const actual = e.pasada;
+  // Revisión a mano terminada después de la hora de la mañana: los datos están al día aunque la automática fallara
+  const manualAlDia = actual && actual.origen === "manual" && actual.fin && !actual.error && new Date(actual.inicio) >= esperado
+    ? ` Se revisó a mano ${cuando(actual.fin, ahora)}.` : "";
+
+  // 1) No arrancó: ni rastro de la pasada de esta mañana
+  if (!c || new Date(c.inicio).getTime() < esperado.getTime() - 5 * 60_000) {
+    const dia = cuando(esperado.toISOString(), ahora).split(" ")[0];
+    return {
+      tono: manualAlDia ? "ambar" : "rojo",
+      titulo: `La revisión automática de ${dia === "hoy" || dia === "ayer" ? dia : `el ${dia}`} no arrancó`,
+      detalle: `${c ? `La última automática fue ${cuando(c.inicio, ahora)}.` : "Todavía no consta ninguna revisión automática."}${manualAlDia}`
+        + (manualAlDia ? "" : " Pulsa «Revisar ahora» en Revisar fichas.")
+        + " Si se repite, revisa en Vercel que esté puesta CRON_SECRET.",
+    };
+  }
+
+  const hora = cuando(c.inicio, ahora);
+  // 2) Falló al leer la web
+  if (c.error) return { tono: manualAlDia ? "ambar" : "rojo", titulo: `La revisión de ${hora} falló`, detalle: c.error + manualAlDia };
+
+  // 3) Sin terminar: en marcha o cortada
+  if (!c.fin) {
+    const esLaActual = actual?.id === c.id;
+    const avance = `${miles(c.hechas)} de ${c.total ? miles(c.total) : "…"} fichas`;
+    if (esLaActual && enCurso) return { tono: "gris", titulo: `Revisión de ${hora} en marcha`, detalle: `${avance} abiertas.` };
+    return {
+      tono: manualAlDia ? "ambar" : "rojo",
+      titulo: `La revisión de ${hora} se cortó en ${avance}`,
+      detalle: (c.fallo ? `${c.fallo}. ` : "") + (manualAlDia
+        || (esLaActual ? " Se retoma sola al abrir la Suite (hasta 6 horas después); si no, pulsa «Revisar ahora»." : " Pulsa «Revisar ahora» en Revisar fichas.")).trim(),
+    };
+  }
+
+  // 4) Terminada: ¿respondieron casi todas las fichas?
+  const sin = c.sinComprobar ?? 0;
+  if (c.total && sin / c.total > SIN_RESPUESTA_MAX) {
+    return { tono: "ambar", titulo: `Revisión de ${hora}: ${miles(sin)} de ${miles(c.total)} fichas no respondieron`, detalle: "De esas se enseña lo de la revisión anterior. Si se repite, nuestra web iba lenta o saturada a esa hora." };
+  }
+  return { tono: "verde", titulo: `Última revisión: ${hora} · ${miles(c.total)} fichas revisadas · bien` };
+}

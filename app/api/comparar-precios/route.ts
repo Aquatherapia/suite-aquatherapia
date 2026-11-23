@@ -190,8 +190,13 @@ async function guardarConfig(config: Config) {
 // ── Normalización ──────────────────────────────────────────────────────
 
 // ── Utilidades de red ──────────────────────────────────────────────────
+// Tiempo máximo de cada petición a otra web (Cosméticos24h, la nuestra): si una se queda colgada,
+// se da por fallida y la revisión sigue, en vez de comerse los 300 s que da Vercel.
+const TOPE_PETICION_MS = 20_000;
+const esTiempoAgotado = (err: unknown) => err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+
 async function fetchTexto(url: string): Promise<string> {
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(TOPE_PETICION_MS) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
 }
@@ -280,7 +285,7 @@ async function leerSusEans(urls: string[], cache: Record<string, (string | null)
     if (Date.now() > limiteMs) break;
     await Promise.all(pendientes.slice(i, i + 4).map(async url => {
       try {
-        const res = await fetch(`${url}.json`, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
+        const res = await fetch(`${url}.json`, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(TOPE_PETICION_MS) });
         if (res.status === 429) { cortado = true; return; }
         if (!res.ok) return;
         const data = await res.json();
@@ -371,6 +376,7 @@ async function estadoVariante(url: string, propiedades: string): Promise<{ preci
       headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", "User-Agent": "Mozilla/5.0" },
       body: new URLSearchParams({ id_producto: id, propiedades }),
       cache: "no-store",
+      signal: AbortSignal.timeout(TOPE_PETICION_MS),
     });
     if (!res.ok) return null;
     const j = await res.json() as { descatalogado?: string | number; stock?: string | number; precios?: { precio?: number | string; precio_anterior?: number | string } };
@@ -412,6 +418,7 @@ async function varianteDescatalogada(url: string, propiedades: string): Promise<
       headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest", "User-Agent": "Mozilla/5.0" },
       body: new URLSearchParams({ id_producto: id, propiedades }),
       cache: "no-store",
+      signal: AbortSignal.timeout(TOPE_PETICION_MS),
     });
     if (!res.ok) return null;
     const j = await res.json() as { descatalogado?: string | number; stock?: string | number };
@@ -581,17 +588,24 @@ type SuProducto = { titulo: string; url: string; precio: number; tachado?: numbe
 // Lee los productos de una marca en Cosméticos24h (API Shopify pública)
 async function leerSusProductos(slug: string): Promise<SuProducto[] | { error: string }> {
   const url = `https://cosmeticos24h.com/collections/${slug}/products.json?limit=250`;
-  // Si su web frena por exceso de peticiones (429), se espera y se vuelve a intentar
-  let res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
-  for (const espera of [10_000, 30_000]) {
-    if (res.status !== 429) break;
-    const pide = Number(res.headers.get("retry-after")) * 1000;
-    await esperar(Number.isFinite(pide) && pide > 0 ? Math.min(pide, 60_000) : espera);
-    res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
+  const pedir = () => fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(TOPE_PETICION_MS) });
+  let data: { products?: any[] };
+  try {
+    // Si su web frena por exceso de peticiones (429), se espera y se vuelve a intentar
+    let res = await pedir();
+    for (const espera of [10_000, 30_000]) {
+      if (res.status !== 429) break;
+      const pide = Number(res.headers.get("retry-after")) * 1000;
+      await esperar(Number.isFinite(pide) && pide > 0 ? Math.min(pide, 60_000) : espera);
+      res = await pedir();
+    }
+    if (res.status === 429) return { error: "Cosméticos24h ha frenado la lectura por exceso de peticiones" };
+    if (!res.ok) return { error: `Cosméticos24h HTTP ${res.status}` };
+    data = await res.json();
+  } catch (err) {
+    if (esTiempoAgotado(err)) return { error: `Cosméticos24h no respondió en ${TOPE_PETICION_MS / 1000} s` };
+    throw err;
   }
-  if (res.status === 429) return { error: "Cosméticos24h ha frenado la lectura por exceso de peticiones" };
-  if (!res.ok) return { error: `Cosméticos24h HTTP ${res.status}` };
-  const data = await res.json();
   return (data.products ?? []).map((p: {
     title: string; handle: string;
     variants?: { title?: string; price?: string; compare_at_price?: string }[];
