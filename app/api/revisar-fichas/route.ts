@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { lanzarPaso } from "./autorizar";
 import { guardarEstado, leerEstado, nuevaPasada, pasadaCortada, pasadaEnCurso } from "./revision";
-import { claveProblema, type Estado, type ProblemaVista } from "../../revisar-fichas/tipos";
+import { avisoRevision, claveProblema, type Estado, type ProblemaVista } from "../../revisar-fichas/tipos";
 
 // Lo que ve la página: todos los problemas (los del feed y los de abrir cada ficha) y cómo va la revisión
 async function vista(estado?: Estado) {
@@ -17,6 +17,8 @@ async function vista(estado?: Estado) {
     pasada: e.pasada ?? null,
     enCurso: pasadaEnCurso(e),
     hayNuevos: !!desde,
+    // Cómo fue la revisión automática de la mañana (sale en la portada y arriba de la página)
+    aviso: avisoRevision(e, pasadaEnCurso(e)),
   };
 }
 

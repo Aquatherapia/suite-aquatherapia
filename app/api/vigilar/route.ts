@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
       const prevSlug = config.urlsPrevias[marca.slug] ?? {};
       try {
         const url = `https://cosmeticos24h.com/collections/${marca.slug}/products.json?limit=250`;
-        const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store" });
+        const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
         if (!res.ok) {
           resultados.push({ marca: marca.nombre, slug: marca.slug, error: `HTTP ${res.status}`, descuentos: [] });
           nuevasUrlsPrevias[marca.slug] = prevSlug;

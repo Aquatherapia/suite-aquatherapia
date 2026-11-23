@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { GRUPOS, HACER, TITULO, type Pasada, type ProblemaVista, type Tipo } from "./tipos";
+import { GRUPOS, HACER, TITULO, type Aviso, type Pasada, type ProblemaVista, type Tipo } from "./tipos";
+import AvisoRevision from "./aviso";
 
 type Vista = {
   problemas: ProblemaVista[];
@@ -10,6 +11,7 @@ type Vista = {
   pasada: Pasada | null;
   enCurso: boolean;
   hayNuevos: boolean;
+  aviso?: Aviso;
   error?: string;
 };
 
@@ -85,6 +87,8 @@ export default function RevisarFichasPage() {
           precio, EAN, descripción, meta, y las desactivadas que siguen en Google.
         </p>
       </header>
+
+      {vista?.aviso && vista.aviso.tono !== "verde" && vista.aviso.tono !== "gris" && <AvisoRevision aviso={vista.aviso} />}
 
       <section className="rf-estado">
         <div className="rf-estado-txt">

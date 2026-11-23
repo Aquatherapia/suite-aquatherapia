@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const cookie = await cookieInterna();
 
   after(async () => {
-    const config = await fetch(`${base}/api/comparar-precios`, { headers: { cookie }, cache: "no-store" }).then(r => r.json()) as { marcas: { slug: string }[] };
+    const config = await fetch(`${base}/api/comparar-precios`, { headers: { cookie }, cache: "no-store", signal: AbortSignal.timeout(20_000) }).then(r => r.json()) as { marcas: { slug: string }[] };
     const marca = config.marcas[i];
     if (!marca) return;
     await fetch(`${base}/api/comparar-precios`, {
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       cache: "no-store",
     }).catch(() => { /* si una marca falla, se sigue con la siguiente */ });
     if (i + 1 < config.marcas.length) {
-      await fetch(`${base}/api/cron/comparar-precios?i=${i + 1}`, { headers: await cabeceraInterna(), cache: "no-store" }).catch(() => {});
+      await fetch(`${base}/api/cron/comparar-precios?i=${i + 1}`, { headers: await cabeceraInterna(), cache: "no-store", signal: AbortSignal.timeout(20_000) }).catch(() => {});
     }
   });
   return NextResponse.json({ ok: true, i });

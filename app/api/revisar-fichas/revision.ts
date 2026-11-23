@@ -78,6 +78,8 @@ export async function leerEstado(): Promise<Estado> {
 }
 
 export async function guardarEstado(e: Estado) {
+  // La pasada de la mañana se copia aparte: si luego se lanza otra a mano, se sigue sabiendo cómo fue
+  if (e.pasada?.origen === "cron") e.ultimaCron = { ...e.pasada };
   if (USE_KV) {
     const { kv } = await import("@vercel/kv");
     await kv.set(KV_KEY, e);
@@ -253,7 +255,7 @@ async function revisarFicha(url: string, enSitemap: boolean, enFeed: boolean, to
   return out;
 }
 
-const motivo = (err: unknown) => {
+export const motivo = (err: unknown) => {
   if (!(err instanceof Error)) return String(err);
   const causa = (err as Error & { cause?: { code?: string; message?: string } }).cause;
   return `${err.message}${causa ? ` (${causa.code ?? causa.message})` : ""}`;

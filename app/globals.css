@@ -2048,3 +2048,15 @@ button.crm-salir:hover { color: var(--ink); }
 .adm-actividad { list-style: none; margin: 0; padding: 0; }
 .adm-actividad li { display: grid; grid-template-columns: 140px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--linea); font-size: 14px; }
 @media (max-width: 640px) { .adm-actividad li { grid-template-columns: 1fr; gap: 0; } }
+
+/* Aviso de la revisión automática de la mañana (portada y «Revisar fichas») */
+.aviso-rev { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border); background: #fff; color: var(--ink); text-decoration: none; margin-bottom: 14px; font-size: 13.5px; line-height: 1.4; }
+.aviso-rev-texto { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.aviso-rev-texto b { font-weight: 600; }
+.aviso-rev-texto span { color: var(--muted); font-size: 12.5px; }
+.aviso-rev-icono { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #fff; }
+.a-verde { background: #16a34a; } .a-ambar { background: #d97706; } .a-rojo { background: #c0262d; } .a-gris { background: #a1a1aa; }
+.aviso-rev-rojo { background: #fef2f2; border-color: #fecaca; }
+.aviso-rev-ambar { background: #fffbeb; border-color: #fde68a; }
+.aviso-rev-verde .aviso-rev-texto b { font-weight: 500; }
+a.aviso-rev:hover { border-color: #d4d4d8; }

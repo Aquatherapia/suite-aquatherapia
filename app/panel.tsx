@@ -4,7 +4,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { calcular, resumir, type Datos } from "./margen-productos/tipos";
-import type { Problema, Pasada } from "./revisar-fichas/tipos";
+import type { Aviso, Problema, Pasada } from "./revisar-fichas/tipos";
+import AvisoRevision from "./revisar-fichas/aviso";
 
 type Cifra = { titulo: string; valor: string; detalle: string; href: string; tono?: "rojo" | "ambar" | "verde" };
 
@@ -14,7 +15,7 @@ const fecha = (iso: string) => new Date(iso).toLocaleString("es-ES", { day: "num
 
 export default function Panel() {
   const [margen, setMargen] = useState<Datos | null | undefined>(undefined);
-  const [fichas, setFichas] = useState<{ problemas: Problema[]; pasada: Pasada | null } | null | undefined>(undefined);
+  const [fichas, setFichas] = useState<{ problemas: Problema[]; pasada: Pasada | null; aviso?: Aviso } | null | undefined>(undefined);
 
   useEffect(() => {
     fetch("/api/margen-productos", { cache: "no-store" }).then(r => r.json()).then(v => setMargen(v.datos ?? null)).catch(() => setMargen(null));
@@ -44,6 +45,8 @@ export default function Panel() {
 
   const cargando = margen === undefined || fichas === undefined;
   return (
+    <>
+    {fichas?.aviso && <AvisoRevision aviso={fichas.aviso} enlace />}
     <section className="panel">
       {cargando && !cifras.length && Array.from({ length: 5 }).map((_, i) => <div key={i} className="panel-cifra panel-vacia" />)}
       {cifras.map(c => (
@@ -57,5 +60,6 @@ export default function Panel() {
         <p className="panel-nada">Todavía no hay datos: abre «Margen de cada producto» o pulsa «Revisar ahora» en «Revisar fichas» y aquí saldrán las cifras.</p>
       )}
     </section>
+    </>
   );
 }
