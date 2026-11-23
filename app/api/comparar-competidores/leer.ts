@@ -624,7 +624,13 @@ export function fichaDeProducto(html: string, url: string): SuProducto | null {
 
 // ¿Se pueden leer sus fichas? Se prueban unas cuantas páginas del sitemap
 export async function sePuedenLeerFichas(web: string): Promise<boolean> {
-  const paginas = (await paginasDelSitemap(web, 400)).slice(0, 24);
+  // Se prueban las más profundas (las fichas suelen ir dentro de su categoría, p. ej. grandel.de) y otras repartidas
+  // por todo el sitemap, por si las primeras son solo categorías
+  const todas = await paginasDelSitemap(web, 400);
+  const hondo = (u: string) => new URL(u).pathname.split("/").filter(Boolean).length;
+  const profundas = [...todas].sort((a, b) => hondo(b) - hondo(a)).slice(0, 12);
+  const paso = Math.max(1, Math.floor(todas.length / 12));
+  const paginas = [...new Set([...profundas, ...todas.filter((_, i) => i % paso === 0).slice(0, 12)])];
   let ok = false;
   await enLotes(paginas, 8, async u => { if (ok) return; const h = await texto(u, 10_000); if (h && fichaDeProducto(h, u)) ok = true; });
   return ok;
