@@ -1,11 +1,13 @@
+import { rutaInterna } from "../../lib/acceso";
+
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const params = await searchParams;
-  const next = params.next ?? "/";
-  const hasError = params.error === "1";
+  const next = rutaInterna(params.next);
+  const error = params.error;
 
   return (
     <div className="wrap" style={{ maxWidth: 400, marginTop: "15vh" }}>
@@ -25,7 +27,8 @@ export default async function LoginPage({
           required
         />
         <button type="submit">Entrar</button>
-        {hasError && <p className="error">Clave incorrecta</p>}
+        {error === "1" && <p className="error">Clave incorrecta</p>}
+        {error === "2" && <p className="error">Demasiados intentos fallidos. Espera 15 minutos y vuelve a probar.</p>}
       </form>
     </div>
   );

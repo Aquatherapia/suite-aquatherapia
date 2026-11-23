@@ -8,7 +8,7 @@ import { guardarEstado, leerEstado, nuevaPasada, pasadaCortada, pasadaEnCurso, p
 export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
-  if (!autorizado(req)) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!(await autorizado(req))) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   let id = req.nextUrl.searchParams.get("id");
 
   if (!id) {
