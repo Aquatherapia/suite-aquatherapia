@@ -21,7 +21,13 @@ function Usuarios() {
   const [clave, setClave] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
-  useEffect(() => { fetch("/api/admin/usuarios").then(r => r.json()).then(d => setUsuarios(d.usuarios ?? [])); }, []);
+  useEffect(() => {
+    fetch("/api/admin/usuarios").then(r => r.json()).then(d => {
+      setUsuarios(d.usuarios ?? []);
+      // Primera vez: se propone el usuario «admin» (se puede cambiar)
+      if (!(d.usuarios ?? []).length) setNuevo(n => (n.usuario ? n : { ...n, usuario: "admin", nombre: "Administrador" }));
+    });
+  }, []);
   const arranque = usuarios !== null && usuarios.length === 0;
 
   async function hacer(cuerpo: object, ok: string) {
@@ -44,7 +50,7 @@ function Usuarios() {
     <>
       {arranque && (
         <div className="adm-aviso">
-          Todavía no hay usuarios. Crea primero <b>el tuyo</b> (será administrador): al guardarlo entrarás ya con él y la entrada «admin» con la clave de siempre dejará de funcionar.
+          Todavía no hay usuarios. Crea primero <b>el usuario administrador</b> (puede llamarse «admin»), con su propia contraseña: al guardarlo entrarás ya con él y la entrada de arranque con la clave de siempre dejará de funcionar.
         </div>
       )}
       {aviso && <div className={aviso.ok ? "adm-ok" : "adm-error"}>{aviso.texto}</div>}
@@ -85,7 +91,7 @@ function Usuarios() {
       </div>
 
       <form className="card adm-nuevo" onSubmit={crear}>
-        <h2>{arranque ? "Crear mi usuario" : "Dar de alta a una persona"}</h2>
+        <h2>{arranque ? "Crear el usuario administrador" : "Dar de alta a una persona"}</h2>
         <label>Nombre</label>
         <input value={nuevo.nombre} onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Andrea" required />
         <label>Usuario (para entrar)</label>
@@ -101,7 +107,7 @@ function Usuarios() {
             </select>
           </>
         )}
-        <button type="submit" disabled={ocupado}>{arranque ? "Crear mi usuario y entrar con él" : "Dar de alta"}</button>
+        <button type="submit" disabled={ocupado}>{arranque ? "Crear y entrar con él" : "Dar de alta"}</button>
         <p className="adm-gris">Cada persona puede cambiar su contraseña en «Mi cuenta», abajo del menú.</p>
       </form>
     </>
