@@ -1,7 +1,7 @@
 // Acceso a la Suite: tokens firmados en lugar de guardar la contraseña en la cookie.
 // Funciona igual en el middleware (Edge) y en las rutas (Node): solo usa Web Crypto.
 //
-// Un token es «v1.<propósito>.<caduca en ms>.<firma>», firmado con HMAC-SHA256. La clave de firma sale de
+// Un token es «v1.<propósito>.<caduca en ms>.<datos de la sesión>.<firma>», firmado con HMAC-SHA256. La clave de firma sale de
 // SESSION_SECRET si existe; si no, de SITE_PASSWORD junto con KV_REST_API_TOKEN. Cambiar la contraseña
 // de la web invalida todas las sesiones abiertas.
 
@@ -24,7 +24,7 @@ async function clave(): Promise<CryptoKey | null> {
   return crypto.subtle.importKey("raw", enc.encode(`suite-acceso:${s}`), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
 }
 
-function aBase64url(buf: ArrayBuffer): string {
+function aBase64url(buf: ArrayBuffer | Uint8Array): string {
   let s = "";
   for (const b of new Uint8Array(buf)) s += String.fromCharCode(b);
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -39,26 +39,46 @@ function deBase64url(s: string): Uint8Array | null {
   }
 }
 
+// Quién va en la sesión: usuario, versión (cambia al dar de baja o cambiar la contraseña) y rol
+export type Sesion = { u: string; v: number; r: "admin" | "equipo" | "sistema"; n?: string };
+
 // Crea un token que caduca en «segundos». Sin contraseña configurada (en local) devuelve "".
-export async function crearToken(proposito: Proposito, segundos: number): Promise<string> {
+export async function crearToken(proposito: Proposito, segundos: number, sesion?: Sesion): Promise<string> {
   const k = await clave();
   if (!k) return "";
-  const cuerpo = `v1.${proposito}.${Date.now() + segundos * 1000}`;
+  const datos = sesion ? aBase64url(enc.encode(JSON.stringify(sesion))) : "-";
+  const cuerpo = `v1.${proposito}.${Date.now() + segundos * 1000}.${datos}`;
   const firma = await crypto.subtle.sign("HMAC", k, enc.encode(cuerpo));
   return `${cuerpo}.${aBase64url(firma)}`;
 }
 
-// Comprueba la firma (en tiempo constante), el propósito y la caducidad.
-export async function tokenValido(token: string | null | undefined, proposito: Proposito): Promise<boolean> {
-  if (!token) return false;
+// Comprueba la firma (en tiempo constante), el propósito y la caducidad. Devuelve los datos o null.
+async function leerToken(token: string | null | undefined, proposito: Proposito): Promise<{ sesion: Sesion | null } | null> {
+  if (!token) return null;
   const partes = token.split(".");
-  if (partes.length !== 4 || partes[0] !== "v1" || partes[1] !== proposito) return false;
+  if (partes.length !== 5 || partes[0] !== "v1" || partes[1] !== proposito) return null;
   const caduca = Number(partes[2]);
-  if (!Number.isFinite(caduca) || caduca < Date.now()) return false;
-  const firma = deBase64url(partes[3]);
+  if (!Number.isFinite(caduca) || caduca < Date.now()) return null;
+  const firma = deBase64url(partes[4]);
   const k = await clave();
-  if (!firma || !k) return false;
-  return crypto.subtle.verify("HMAC", k, firma, enc.encode(partes.slice(0, 3).join(".")));
+  if (!firma || !k) return null;
+  if (!(await crypto.subtle.verify("HMAC", k, firma, enc.encode(partes.slice(0, 4).join("."))))) return null;
+  if (partes[3] === "-") return { sesion: null };
+  try {
+    const bytes = deBase64url(partes[3]);
+    const s = bytes && JSON.parse(new TextDecoder().decode(bytes));
+    return s && typeof s.u === "string" && typeof s.v === "number" ? { sesion: s as Sesion } : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function tokenValido(token: string | null | undefined, proposito: Proposito): Promise<boolean> {
+  return (await leerToken(token, proposito)) !== null;
+}
+
+export async function leerSesion(token: string | null | undefined): Promise<Sesion | null> {
+  return (await leerToken(token, "sesion"))?.sesion ?? null;
 }
 
 // Solo rutas de esta misma web al volver del login: nada de «https://otra-web», «//otra-web» ni «/\otra-web».
@@ -104,6 +124,6 @@ export async function cabeceraInterna(): Promise<Record<string, string>> {
 
 // Cookie de sesión para que una ruta del cron llame a otra ruta protegida de la app
 export async function cookieInterna(): Promise<string> {
-  const t = await crearToken("sesion", 15 * 60);
+  const t = await crearToken("sesion", 15 * 60, { u: "sistema", v: 0, r: "sistema" });
   return t ? `${COOKIE_SESION}=${t}` : "";
 }

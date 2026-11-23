@@ -9,7 +9,12 @@ import { GRUPOS, ICONOS } from "./herramientas";
 export default function Navegacion({ children }: { children: ReactNode }) {
   const ruta = usePathname();
   const [abierto, setAbierto] = useState(false);
+  const [yo, setYo] = useState<{ nombre: string; rol: string } | null>(null);
   useEffect(() => { setAbierto(false); }, [ruta]);
+  useEffect(() => {
+    if (ruta.startsWith("/login")) return;
+    fetch("/api/cuenta").then(r => (r.ok ? r.json() : null)).then(d => d?.nombre && setYo(d)).catch(() => {});
+  }, [ruta]);
 
   // El login va sin menú
   if (ruta.startsWith("/login")) return <main className="crm-solo">{children}</main>;
@@ -40,6 +45,16 @@ export default function Navegacion({ children }: { children: ReactNode }) {
             </div>
           ))}
         </nav>
+        {yo && (
+          <div className="crm-usuario">
+            <div className="crm-usuario-nombre">{yo.nombre}</div>
+            <div className="crm-usuario-enlaces">
+              <Link href="/cuenta">Mi cuenta</Link>
+              {yo.rol === "admin" && <Link href="/admin">Administración</Link>}
+              <form method="POST" action="/api/logout"><button className="crm-salir">Salir</button></form>
+            </div>
+          </div>
+        )}
         <div className="crm-pie">La Tienda de Cosméticos · Aquatherapia</div>
       </aside>
       <div className="crm-fondo" onClick={() => setAbierto(false)} />

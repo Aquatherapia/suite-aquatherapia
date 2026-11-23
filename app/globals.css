@@ -2017,3 +2017,34 @@ label { color: #3f3f46; font-weight: 500; font-size: 13px; }
 .pm-hist-col:first-child .pm-hist-tabla tbody tr:hover, .pm-hist-sel { background: var(--hover, rgba(127,127,127,.08)); }
 .pm-hist-sel td { font-weight: 600; }
 .pm-hist-col:first-child .pm-hist-tabla td:first-child { white-space: normal; }
+
+/* Usuarios: pie del menú, Mi cuenta y Administración */
+.login-form input + input { margin-top: 10px; }
+.crm-usuario { padding: 12px 20px; border-top: 1px solid var(--linea); font-size: 13px; }
+.crm-usuario-nombre { font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.crm-usuario-enlaces { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.crm-usuario-enlaces a { color: var(--azul); text-decoration: none; }
+.crm-usuario-enlaces form { margin: 0; display: inline; }
+button.crm-salir { margin: 0; padding: 0; width: auto; background: none; border: none; box-shadow: none; color: var(--muted); font-size: 13px; font-weight: 400; }
+button.crm-salir:hover { color: var(--ink); }
+.adm-pestanas { display: flex; gap: 8px; margin: 18px 0; }
+.adm-pestanas button { margin: 0; width: auto; padding: 8px 16px; background: #fff; color: #3f3f46; border: 1px solid var(--border); }
+.adm-pestanas button.on { background: var(--marino); border-color: var(--marino); color: #fff; }
+.adm-aviso, .adm-ok, .adm-error { border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; font-size: 14px; }
+.adm-aviso { background: var(--cielo-claro); color: var(--marino); }
+.adm-ok { background: #ecfdf3; color: #067647; }
+.adm-error { background: #fef3f2; color: #b42318; }
+.adm-lista { display: grid; gap: 12px; margin-bottom: 18px; }
+.adm-usuario { padding: 16px 18px; }
+.adm-baja { opacity: .65; }
+.adm-gris { color: var(--muted); font-size: 13px; }
+.adm-fila { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.adm-fila button { margin: 0; width: auto; padding: 8px 12px; font-size: 13px; }
+.adm-fila input { flex: 1 1 220px; width: auto; }
+.adm-rojo { color: #b42318 !important; }
+.adm-nuevo h2, .crm-main .card h2 { font-size: 16px; font-weight: 600; margin: 0 0 12px; }
+.adm-filtro { margin: 0 0 12px; }
+.adm-filtro select { max-width: 320px; }
+.adm-actividad { list-style: none; margin: 0; padding: 0; }
+.adm-actividad li { display: grid; grid-template-columns: 140px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--linea); font-size: 14px; }
+@media (max-width: 640px) { .adm-actividad li { grid-template-columns: 1fr; gap: 0; } }
