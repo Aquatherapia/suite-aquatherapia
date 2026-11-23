@@ -46,7 +46,8 @@ export async function comprobar(contrasena: string, hash: string | undefined): P
 
 export const normalizar = (u: string) => u.trim().toLowerCase();
 export const USUARIO_VALIDO = /^[a-z0-9._-]{2,30}$/;
-export const RESERVADOS = new Set(["sistema", "admin"]);
+// «admin» sí se puede crear (la entrada de arranque deja de valer en cuanto existe algún usuario)
+export const RESERVADOS = new Set(["sistema"]);
 export const MIN_CONTRASENA = 8;
 
 export function sinHash(u: Usuario): Omit<Usuario, "hash"> {
